@@ -300,6 +300,76 @@ export class Store {
       .map((row) => parse(row.entry_json));
   }
 
+  getMetrics() {
+    const now = Date.now();
+    const since24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    const since7d = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const rules = this.listRuleSets();
+    const settings = this.getSettings();
+    const auditSummary = this.db
+      .prepare(
+        `SELECT
+          COUNT(*) AS total_requests,
+          SUM(CASE WHEN evaluated_at >= ? THEN 1 ELSE 0 END) AS requests_24h,
+          SUM(CASE WHEN evaluated_at >= ? THEN 1 ELSE 0 END) AS requests_7d,
+          COUNT(DISTINCT profile_key) AS unique_profiles
+         FROM audit_log`
+      )
+      .get(since24h, since7d);
+    const resultDistribution = this.db
+      .prepare("SELECT result, COUNT(*) AS count FROM audit_log GROUP BY result ORDER BY count DESC, result ASC LIMIT 8")
+      .all();
+    const ruleUsage = this.db
+      .prepare(
+        `SELECT
+          decision_key,
+          COUNT(*) AS requests,
+          SUM(CASE WHEN evaluated_at >= ? THEN 1 ELSE 0 END) AS requests_24h,
+          MAX(evaluated_at) AS last_evaluated_at,
+          COUNT(DISTINCT profile_key) AS unique_profiles
+         FROM audit_log
+         GROUP BY decision_key
+         ORDER BY requests DESC, decision_key ASC
+         LIMIT 10`
+      )
+      .all(since24h);
+    return {
+      generated_at: createdAtNow(),
+      requests: {
+        total: Number(auditSummary.total_requests || 0),
+        last_24h: Number(auditSummary.requests_24h || 0),
+        last_7d: Number(auditSummary.requests_7d || 0),
+        unique_profiles: Number(auditSummary.unique_profiles || 0)
+      },
+      rules: {
+        total: rules.length,
+        published: rules.filter((rule) => rule.status === "published").length,
+        draft: rules.filter((rule) => rule.status === "draft").length,
+        archived: rules.filter((rule) => rule.status === "archived").length
+      },
+      lookups: {
+        total: this.listLookupTables().length
+      },
+      schema: {
+        total: this.listSchemaItems().length,
+        attributes: this.listSchemaItems({ kind: "attribute" }).length,
+        segments: this.listSchemaItems({ kind: "segment" }).length,
+        context: this.listSchemaItems({ kind: "context" }).length,
+        last_sync_status: settings.schema_last_sync_status || "never",
+        last_synced_at: settings.schema_last_synced_at || "",
+        last_sync_count: Number(settings.schema_last_sync_count || 0)
+      },
+      result_distribution: resultDistribution.map((row) => ({ result: row.result, count: Number(row.count || 0) })),
+      rule_usage: ruleUsage.map((row) => ({
+        decision_key: row.decision_key,
+        requests: Number(row.requests || 0),
+        requests_24h: Number(row.requests_24h || 0),
+        unique_profiles: Number(row.unique_profiles || 0),
+        last_evaluated_at: row.last_evaluated_at || null
+      }))
+    };
+  }
+
   listSchemaItems(params = {}) {
     const conditions = [];
     const values = [];

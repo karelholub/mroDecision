@@ -8,9 +8,13 @@
   </head>
   <body>
     <aside>
-      <h1>Meiro DEE</h1>
+      <div class="brand">
+        <h1>Meiro DEE</h1>
+        <span>Decision control plane</span>
+      </div>
       <nav>
-        <button data-view="rules" class="active">Rule Sets</button>
+        <button data-view="overview" class="active">Overview</button>
+        <button data-view="rules">Rule Sets</button>
         <button data-view="test">Evaluate</button>
         <button data-view="audit">Audit</button>
         <button data-view="lookups">Lookups</button>
@@ -23,9 +27,43 @@
       </label>
     </aside>
     <main>
-      <section id="rules" class="view active">
+      <section id="overview" class="view active">
         <header>
-          <h2>Rule Sets</h2>
+          <div>
+            <h2>Overview</h2>
+            <p class="page-subtitle">Operational health, rule usage, and service utilization.</p>
+          </div>
+          <button id="refresh-metrics">Refresh</button>
+        </header>
+        <div id="metric-cards" class="metric-grid"></div>
+        <div class="overview-grid">
+          <div class="editor">
+            <div class="editor-title">Rule Usage</div>
+            <div id="metrics-rule-usage" class="table compact-table"></div>
+          </div>
+          <div class="editor">
+            <div class="editor-title">Result Distribution</div>
+            <div id="metrics-result-distribution" class="table compact-table"></div>
+          </div>
+        </div>
+        <div class="overview-grid">
+          <div class="editor">
+            <div class="editor-title">Rules Inventory</div>
+            <div id="metrics-rule-inventory" class="table compact-table"></div>
+          </div>
+          <div class="editor">
+            <div class="editor-title">Schema & Configuration</div>
+            <div id="metrics-schema-health" class="status-panel"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="rules" class="view">
+        <header>
+          <div>
+            <h2>Rule Sets</h2>
+            <p class="page-subtitle">Author, publish, and inspect decision logic.</p>
+          </div>
           <div class="actions">
             <button id="new-rule">New</button>
             <button id="export-config">Export</button>
@@ -225,7 +263,10 @@
 
       <section id="test" class="view">
         <header>
-          <h2>Evaluate</h2>
+          <div>
+            <h2>Evaluate</h2>
+            <p class="page-subtitle">Run profile payloads against published versions or current drafts.</p>
+          </div>
           <div class="actions">
             <button id="load-preset">Load Preset</button>
             <button id="run-eval">Run</button>
@@ -265,7 +306,10 @@
 
       <section id="audit" class="view">
         <header>
-          <h2>Audit</h2>
+          <div>
+            <h2>Audit</h2>
+            <p class="page-subtitle">Inspect decision outcomes, matched rules, and payload summaries.</p>
+          </div>
           <button id="refresh-audit">Refresh</button>
         </header>
         <div class="filter-bar">
@@ -306,7 +350,10 @@
 
       <section id="lookups" class="view">
         <header>
-          <h2>Lookup Tables</h2>
+          <div>
+            <h2>Lookup Tables</h2>
+            <p class="page-subtitle">Manage versioned enrichment tables used by rule outputs.</p>
+          </div>
           <div class="actions">
             <button id="new-lookup">New</button>
             <button id="refresh-lookups">Refresh</button>
@@ -356,7 +403,10 @@
 
       <section id="integration" class="view">
         <header>
-          <h2>Integration</h2>
+          <div>
+            <h2>Integration</h2>
+            <p class="page-subtitle">Generate Pipes request templates from runtime settings.</p>
+          </div>
           <button id="refresh-integration">Refresh</button>
         </header>
         <div class="split">
@@ -386,7 +436,10 @@
 
       <section id="settings" class="view">
         <header>
-          <h2>Settings</h2>
+          <div>
+            <h2>Settings</h2>
+            <p class="page-subtitle">Configure Meiro endpoints, schema sync, tokens, and retention.</p>
+          </div>
           <button id="refresh-settings">Refresh</button>
         </header>
         <div class="split">

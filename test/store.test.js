@@ -85,6 +85,11 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   });
   assert.equal(store.queryAudit({ decision_key: "campaign_suppression" })[0].result, "suppressed");
   assert.equal(store.queryAudit({ from: "2026-05-28T00:00:00.000Z" }).length, 0);
+  const metrics = store.getMetrics();
+  assert.equal(metrics.requests.total, 1);
+  assert.equal(metrics.rules.total, 2);
+  assert.equal(metrics.result_distribution[0].result, "suppressed");
+  assert.equal(metrics.rule_usage[0].decision_key, "campaign_suppression");
 
   const table = store.replaceLookupTable("tiers", { key_column: "country", rows: [{ country: "CZ", tier: "A" }] }, "tester");
   assert.equal(table.version, 1);

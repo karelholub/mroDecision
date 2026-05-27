@@ -12,7 +12,7 @@ This initial implementation is dependency-light and runs on Node.js built-ins on
 - Safe expression evaluation without `eval`
 - Basic rule-builder style branches and advanced graph nodes
 - Lookup table storage
-- Audit log queries
+- Audit log queries and operational metrics
 - Manual schema cache import for attribute, segment, and context definitions
 - Schema-aware rule builder key suggestions and broken-reference warnings
 - Meiro Profile API schema sync from a sample identifier, with optional scheduled refresh
@@ -67,6 +67,7 @@ DEE_DB_PATH=/path/to/dee.sqlite npm start
 - `POST /v1/rule-sets/:key/archive`
 - `POST /v1/rule-sets/:key/duplicate`
 - `POST /v1/rule-sets/:key/test`
+- `GET /v1/metrics`
 - `GET /v1/audit`
 - `GET /v1/audit?format=csv`
 - `GET /v1/lookup-tables`

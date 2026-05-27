@@ -13,6 +13,7 @@ const tokenOutput = document.querySelector("#token-output");
 const schemaOutput = document.querySelector("#schema-output");
 const integrationTemplate = document.querySelector("#integration-template");
 const integrationResponse = document.querySelector("#integration-response");
+const metricCards = document.querySelector("#metric-cards");
 let selectedRuleKey = null;
 let selectedLookupId = null;
 let builderBranches = [];
@@ -25,9 +26,11 @@ document.querySelectorAll("nav button").forEach((button) => {
     document.querySelectorAll("nav button, .view").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
     document.querySelector(`#${button.dataset.view}`).classList.add("active");
+    if (button.dataset.view === "overview") loadMetrics();
   });
 });
 
+document.querySelector("#refresh-metrics").addEventListener("click", loadMetrics);
 document.querySelector("#refresh-rules").addEventListener("click", loadRules);
 document.querySelector("#rule-filter-search").addEventListener("input", renderRuleList);
 document.querySelector("#rule-filter-status").addEventListener("change", renderRuleList);
@@ -73,6 +76,7 @@ document.querySelector("#import-lookup-csv").addEventListener("click", importLoo
 document.querySelector("#settings-form").addEventListener("submit", saveSettings);
 document.querySelector("#token-form").addEventListener("submit", createToken);
 
+loadMetrics();
 loadRules();
 newRule();
 newLookup();
@@ -106,6 +110,75 @@ async function loadRules() {
     target.innerHTML = header(["Name", "Decision key", "Status", "Version", "Actions"]);
     target.innerHTML += row([error.message, "", "", "", ""]);
   }
+}
+
+async function loadMetrics() {
+  try {
+    const body = await api("/v1/metrics");
+    renderMetrics(body.metrics);
+  } catch (error) {
+    metricCards.innerHTML = `<div class="metric-card"><span>Metrics unavailable</span><strong>${escapeHtml(error.message)}</strong></div>`;
+  }
+}
+
+function renderMetrics(metrics) {
+  const requests = metrics.requests || {};
+  const rules = metrics.rules || {};
+  const schema = metrics.schema || {};
+  metricCards.innerHTML = [
+    metricCard("Requests 24h", formatNumber(requests.last_24h), `${formatNumber(requests.total)} total`),
+    metricCard("Unique Profiles", formatNumber(requests.unique_profiles), "Seen in audit log"),
+    metricCard("Published Rules", formatNumber(rules.published), `${formatNumber(rules.draft)} drafts`),
+    metricCard("Schema Items", formatNumber(schema.total), `${schema.last_sync_status || "never"} sync`)
+  ].join("");
+
+  renderTable("#metrics-rule-usage", ["Rule", "Requests", "24h", "Profiles", "Last seen"], (metrics.rule_usage || []).map((item) => [
+    item.decision_key,
+    formatNumber(item.requests),
+    formatNumber(item.requests_24h),
+    formatNumber(item.unique_profiles),
+    item.last_evaluated_at ? formatTime(item.last_evaluated_at) : "-"
+  ]));
+  renderTable("#metrics-result-distribution", ["Result", "Count", "Share", "", ""], resultDistributionRows(metrics));
+  renderTable("#metrics-rule-inventory", ["Status", "Count", "", "", ""], [
+    ["Published", formatNumber(rules.published), "", "", ""],
+    ["Draft", formatNumber(rules.draft), "", "", ""],
+    ["Archived", formatNumber(rules.archived), "", "", ""],
+    ["Total", formatNumber(rules.total), "", "", ""]
+  ]);
+  document.querySelector("#metrics-schema-health").innerHTML = [
+    statusItem("Attributes", formatNumber(schema.attributes || 0)),
+    statusItem("Segments", formatNumber(schema.segments || 0)),
+    statusItem("Context keys", formatNumber(schema.context || 0)),
+    statusItem("Last sync", schema.last_synced_at ? formatTime(schema.last_synced_at) : "never"),
+    statusItem("Imported last sync", formatNumber(schema.last_sync_count || 0)),
+    statusItem("Lookup tables", formatNumber(metrics.lookups?.total || 0))
+  ].join("");
+}
+
+function metricCard(label, value, meta) {
+  return `<div class="metric-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong><small>${escapeHtml(meta)}</small></div>`;
+}
+
+function renderTable(selector, headings, rows) {
+  const target = document.querySelector(selector);
+  target.innerHTML = header(headings);
+  target.innerHTML += rows.length ? rows.map((item) => row(item)).join("") : row(["No data yet", "", "", "", ""]);
+}
+
+function resultDistributionRows(metrics) {
+  const total = Math.max(1, metrics.requests?.total || 0);
+  return (metrics.result_distribution || []).map((item) => [
+    item.result,
+    formatNumber(item.count),
+    `${Math.round((item.count / total) * 100)}%`,
+    "",
+    ""
+  ]);
+}
+
+function statusItem(label, value) {
+  return `<div class="status-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`;
 }
 
 function renderRuleList() {
@@ -462,6 +535,7 @@ async function runEvaluate() {
     });
     evalOutput.textContent = formatDecisionOutput(body);
     loadAudit();
+    loadMetrics();
   } catch (error) {
     evalOutput.textContent = error.message;
   }
@@ -484,6 +558,14 @@ function row(values, options = {}) {
 
 function escapeHtml(value) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+}
+
+function formatTime(value) {
+  return value ? new Date(value).toLocaleString() : "-";
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat().format(Number(value || 0));
 }
 
 function readEditorPayload() {

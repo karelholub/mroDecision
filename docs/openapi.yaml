@@ -159,6 +159,19 @@ paths:
                 properties:
                   rule_set:
                     $ref: "#/components/schemas/RuleSetSummary"
+  /v1/metrics:
+    get:
+      summary: Get operational service and rule usage metrics
+      responses:
+        "200":
+          description: Metrics summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  metrics:
+                    $ref: "#/components/schemas/Metrics"
   /v1/rule-sets/{key}:
     get:
       summary: Get a rule set with draft and latest published version
@@ -1107,6 +1120,81 @@ components:
           type: string
           format: date-time
           nullable: true
+    Metrics:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        requests:
+          type: object
+          properties:
+            total:
+              type: integer
+            last_24h:
+              type: integer
+            last_7d:
+              type: integer
+            unique_profiles:
+              type: integer
+        rules:
+          type: object
+          properties:
+            total:
+              type: integer
+            published:
+              type: integer
+            draft:
+              type: integer
+            archived:
+              type: integer
+        lookups:
+          type: object
+          properties:
+            total:
+              type: integer
+        schema:
+          type: object
+          properties:
+            total:
+              type: integer
+            attributes:
+              type: integer
+            segments:
+              type: integer
+            context:
+              type: integer
+            last_sync_status:
+              type: string
+            last_synced_at:
+              type: string
+            last_sync_count:
+              type: integer
+        result_distribution:
+          type: array
+          items:
+            type: object
+            properties:
+              result:
+                type: string
+              count:
+                type: integer
+        rule_usage:
+          type: array
+          items:
+            type: object
+            properties:
+              decision_key:
+                type: string
+              requests:
+                type: integer
+              requests_24h:
+                type: integer
+              unique_profiles:
+                type: integer
+              last_evaluated_at:
+                type: string
+                nullable: true
     Settings:
       type: object
       properties:
