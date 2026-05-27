@@ -30,9 +30,9 @@ Implemented:
 Important gaps:
 
 - Visual rule graph preview is implemented; a full drag canvas is still pending.
-- No client behavior for `inapp_message` or `experiment` rule-set types yet.
-- No client-facing `/v1/client/*` APIs.
-- No experiment assignment engine.
+- First client behavior exists for experiment evaluation; in-app message operations are still pending.
+- First client-facing endpoint exists: `POST /v1/client/evaluate`.
+- Deterministic experiment assignment exists for configured variants.
 - No in-app message library or impression/exposure feedback.
 - No role model beyond token scopes.
 
@@ -95,7 +95,9 @@ Goal: add the new v2 surface types while keeping them isolated from the server-s
 - Add forced variant and holdout overrides.
 - Add experiment freeze warnings when launched allocations or eligibility change.
 
-Open decision: client calls require profile enrichment. Confirm whether the first version should support Profile API enrichment or allow context-only rules until Profile API latency is benchmarked.
+Status: first-pass client evaluation is implemented with client tokens, allowed decision keys, TTL response hints, deterministic experiment bucketing, forced variants, and allocation validation. Profile enrichment, result caching, richer app/environment scoping, and experiment freeze warnings remain.
+
+Open decision: client calls require profile enrichment. Confirm whether the first production version should support Profile API enrichment or allow context-only rules until Profile API latency is benchmarked.
 
 ## Phase 5: In-App Message and Experiment Operations
 
@@ -127,7 +129,7 @@ Goal: make the service deployable beyond local demo.
 ## Recommended Next Sprint
 
 1. Build first-pass advanced graph editor.
-2. Add client-facing experiment skeleton.
+2. Add in-process result cache and attribute cache with TTL policy.
 3. Add data-retention controls beyond audit logs.
 4. Add CI/deployment hardening for hosted environments.
 5. Add broader Meiro catalog sync if/when segment schema APIs are confirmed.

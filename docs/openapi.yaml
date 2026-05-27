@@ -125,6 +125,45 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/EvaluateResponse"
+  /v1/client/evaluate:
+    post:
+      summary: Evaluate an app-facing decision, in-app message, or experiment
+      description: Requires a token with the `client` scope. Tokens can optionally restrict the allowed `decision_key` values.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientEvaluateRequest"
+            examples:
+              experiment:
+                value:
+                  decision_key: homepage_hero_experiment
+                  profile_key: profile-123
+                  identifiers:
+                    - typeId: email
+                      value: user@example.com
+                  attributes: {}
+                  segments: {}
+                  context:
+                    channel: web
+      responses:
+        "200":
+          description: Client-safe decision response with cache hints
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientEvaluateResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
   /v1/rule-sets:
     get:
       summary: List rule sets
@@ -709,7 +748,12 @@ paths:
                   type: array
                   items:
                     type: string
-                    enum: [viewer, editor, publisher, admin, evaluate]
+                    enum: [viewer, editor, publisher, admin, evaluate, client]
+                decision_keys:
+                  type: array
+                  description: Optional allow-list of decision keys for client tokens. Empty means all decisions.
+                  items:
+                    type: string
       responses:
         "201":
           description: Created token with one-time plaintext value
@@ -889,6 +933,69 @@ components:
           type: array
           items:
             type: string
+    ClientEvaluateRequest:
+      type: object
+      required: [decision_key, profile_key]
+      properties:
+        decision_key:
+          type: string
+        profile_key:
+          type: string
+        identifiers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Identifier"
+        attributes:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/AttributeValue"
+        segments:
+          type: object
+          additionalProperties:
+            type: boolean
+        context:
+          type: object
+          additionalProperties: true
+    ClientEvaluateResponse:
+      type: object
+      required: [decision_key, profile_key, result, outputs, rule_version, ttl_seconds, matched_rules, errors]
+      properties:
+        decision_key:
+          type: string
+        profile_key:
+          type: string
+        result:
+          type: string
+        outputs:
+          type: object
+          additionalProperties: true
+        rule_version:
+          type: integer
+        ttl_seconds:
+          type: integer
+          description: Client-side cache TTL hint from the rule-set cache policy.
+        cache_scope:
+          type: string
+          nullable: true
+        experiment:
+          type: object
+          nullable: true
+          properties:
+            variant_key:
+              type: string
+            bucket:
+              type: number
+              nullable: true
+        matched_rules:
+          type: array
+          items:
+            type: string
+        errors:
+          type: array
+          items:
+            type: string
     RuleSetSummary:
       type: object
       required: [name, decision_key, status]
@@ -913,7 +1020,7 @@ components:
         cache_policy:
           type: object
         metadata:
-          type: object
+          $ref: "#/components/schemas/RuleSetMetadata"
         author:
           type: string
         version:
@@ -960,7 +1067,7 @@ components:
         cache_policy:
           type: object
         metadata:
-          type: object
+          $ref: "#/components/schemas/RuleSetMetadata"
         tags:
           type: array
           items:
@@ -971,6 +1078,30 @@ components:
       type: object
       additionalProperties: true
       description: Basic branch definition or advanced graph definition. See docs/rule-format.md.
+    RuleSetMetadata:
+      type: object
+      additionalProperties: true
+      properties:
+        experiment:
+          type: object
+          properties:
+            unit:
+              type: string
+              enum: [profile, identifier]
+            variants:
+              type: array
+              items:
+                type: object
+                required: [key, weight]
+                properties:
+                  key:
+                    type: string
+                  weight:
+                    type: number
+                    minimum: 0
+                  outputs:
+                    type: object
+                    additionalProperties: true
     RuleVersion:
       type: object
       required: [version, published_at, author, definition]
@@ -1114,13 +1245,17 @@ components:
             $ref: "#/components/schemas/LookupTable"
     ApiToken:
       type: object
-      required: [id, name, scopes, created_at]
+      required: [id, name, scopes, decision_keys, created_at]
       properties:
         id:
           type: string
         name:
           type: string
         scopes:
+          type: array
+          items:
+            type: string
+        decision_keys:
           type: array
           items:
             type: string

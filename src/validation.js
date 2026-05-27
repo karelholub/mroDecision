@@ -46,9 +46,39 @@ export function validateRuleSetPayload(body, { partial = false } = {}) {
   optionalObject(body, "cache_policy");
   optionalObject(body, "metadata");
   if (body.type != null && !allowedRuleSetTypes.has(body.type)) badRequest("type must be decision, inapp_message, or experiment");
+  if (body.metadata?.experiment) validateExperimentMetadata(body.metadata.experiment);
   if (body.priority != null && !Number.isInteger(Number(body.priority))) badRequest("priority must be an integer");
   if (body.surface != null && typeof body.surface !== "string") badRequest("surface must be a string");
   if (body.tags != null && !Array.isArray(body.tags)) badRequest("tags must be an array");
+}
+
+export function validateClientEvaluateRequest(body) {
+  if (!isPlainObject(body)) badRequest("Request body must be an object");
+  requiredString(body, "decision_key");
+  requiredString(body, "profile_key");
+  optionalObject(body, "attributes");
+  optionalObject(body, "segments");
+  optionalObject(body, "context");
+}
+
+function validateExperimentMetadata(experiment) {
+  if (!isPlainObject(experiment)) badRequest("metadata.experiment must be an object");
+  if (experiment.variants == null) return;
+  if (!Array.isArray(experiment.variants) || experiment.variants.length === 0) {
+    badRequest("metadata.experiment.variants must be a non-empty array");
+  }
+  const keys = new Set();
+  const total = experiment.variants.reduce((sum, variant) => {
+    if (!isPlainObject(variant) || typeof variant.key !== "string" || variant.key.trim() === "") {
+      badRequest("Each experiment variant must include a key");
+    }
+    if (keys.has(variant.key)) badRequest("Experiment variant keys must be unique");
+    keys.add(variant.key);
+    const weight = Number(variant.weight);
+    if (!Number.isFinite(weight) || weight < 0) badRequest("Experiment variant weights must be non-negative numbers");
+    return sum + weight;
+  }, 0);
+  if (Math.round(total * 1000) !== 100000) badRequest("Experiment variant weights must sum to 100");
 }
 
 export function validateSchemaImport(body) {

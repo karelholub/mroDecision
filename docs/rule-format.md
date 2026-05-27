@@ -96,3 +96,28 @@ Expression functions:
 - `lookup("table_id", key, "column")`
 
 The expression parser is a small safe parser. It does not use JavaScript `eval`.
+
+## Experiment Metadata
+
+Rule sets with `"type": "experiment"` can define deterministic variant allocation in `metadata.experiment`. Variant weights must sum to 100.
+
+```json
+{
+  "type": "experiment",
+  "cache_policy": {
+    "client_ttl": 300,
+    "scope": "profile"
+  },
+  "metadata": {
+    "experiment": {
+      "unit": "profile",
+      "variants": [
+        { "key": "control", "weight": 50, "outputs": { "banner": "current" } },
+        { "key": "treatment", "weight": 50, "outputs": { "banner": "new" } }
+      ]
+    }
+  }
+}
+```
+
+`POST /v1/client/evaluate` returns the selected variant and merges the variant outputs into the decision outputs. For QA, pass `context.force_variant` to force a configured variant key.

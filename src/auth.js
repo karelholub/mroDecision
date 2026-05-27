@@ -31,7 +31,7 @@ export function requireScope(req, scope) {
     throw error;
   }
 
-  req.auth = { name: token.name, token_id: token.id || null, scopes: token.scopes };
+  req.auth = { name: token.name, token_id: token.id || null, scopes: token.scopes, decision_keys: token.decision_keys || [] };
 }
 
 function scopeAllows(scopes, required) {
@@ -41,7 +41,8 @@ function scopeAllows(scopes, required) {
     viewer: ["editor", "publisher"],
     editor: [],
     publisher: [],
-    evaluate: []
+    evaluate: [],
+    client: []
   };
   return (implied[required] || []).some((scope) => scopes.includes(scope));
 }

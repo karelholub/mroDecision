@@ -507,19 +507,21 @@ export class Store {
 
   listApiTokens() {
     return this.db
-      .prepare("SELECT id, name, scopes_json, created_at, last_used_at, revoked_at FROM api_tokens ORDER BY created_at DESC")
+      .prepare("SELECT id, name, scopes_json, decision_keys_json, created_at, last_used_at, revoked_at FROM api_tokens ORDER BY created_at DESC")
       .all()
       .map(rowToApiToken);
   }
 
   createApiToken(input, author) {
     const scopes = normalizeScopes(input.scopes);
+    const decisionKeys = normalizeDecisionKeys(input.decision_keys);
     const now = createdAtNow();
     const plaintext = `dee_${randomBytes(24).toString("base64url")}`;
     const token = {
       id: randomBytes(12).toString("hex"),
       name: input.name || "API token",
       scopes,
+      decision_keys: decisionKeys,
       created_at: now,
       created_by: author,
       last_used_at: null,
@@ -527,10 +529,10 @@ export class Store {
     };
     this.db
       .prepare(
-        `INSERT INTO api_tokens (id, name, token_hash, scopes_json, created_at, created_by)
-         VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO api_tokens (id, name, token_hash, scopes_json, decision_keys_json, created_at, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(token.id, token.name, hashToken(plaintext), stringify(scopes), token.created_at, token.created_by);
+      .run(token.id, token.name, hashToken(plaintext), stringify(scopes), stringify(decisionKeys), token.created_at, token.created_by);
     return { ...token, token: plaintext };
   }
 
@@ -721,6 +723,7 @@ function migrate(db) {
       name TEXT NOT NULL,
       token_hash TEXT NOT NULL UNIQUE,
       scopes_json TEXT NOT NULL DEFAULT '[]',
+      decision_keys_json TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL,
       created_by TEXT NOT NULL,
       last_used_at TEXT,
@@ -760,6 +763,7 @@ function migrate(db) {
   ensureColumn(db, "rule_sets", "surface", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "rule_sets", "cache_policy_json", "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn(db, "rule_sets", "metadata_json", "TEXT NOT NULL DEFAULT '{}'");
+  ensureColumn(db, "api_tokens", "decision_keys_json", "TEXT NOT NULL DEFAULT '[]'");
   seedLookupHistory(db);
   seedSettings(db);
 }
@@ -1041,6 +1045,7 @@ function rowToApiToken(row) {
     id: row.id,
     name: row.name,
     scopes: parse(row.scopes_json),
+    decision_keys: parse(row.decision_keys_json || "[]"),
     created_at: row.created_at,
     last_used_at: row.last_used_at || null,
     revoked_at: row.revoked_at || null
@@ -1061,9 +1066,13 @@ function rowToSchemaItem(row) {
 }
 
 function normalizeScopes(scopes) {
-  const allowed = new Set(["viewer", "editor", "publisher", "admin", "evaluate"]);
+  const allowed = new Set(["viewer", "editor", "publisher", "admin", "evaluate", "client"]);
   const normalized = Array.isArray(scopes) ? scopes.filter((scope) => allowed.has(scope)) : ["evaluate"];
   return [...new Set(normalized.length ? normalized : ["evaluate"])];
+}
+
+function normalizeDecisionKeys(keys) {
+  return [...new Set((Array.isArray(keys) ? keys : []).map((key) => String(key).trim()).filter(Boolean))];
 }
 
 function normalizeState(state) {

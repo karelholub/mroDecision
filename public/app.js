@@ -1813,7 +1813,7 @@ function renderIntegration() {
 
 async function loadTokens() {
   const target = document.querySelector("#token-list");
-  target.innerHTML = header(["Name", "Scopes", "Created", "Last used", "Status"]);
+  target.innerHTML = header(["Name", "Scopes", "Allowed decisions", "Last used", "Status"]);
   try {
     const body = await api("/v1/tokens");
     target.innerHTML += body.tokens
@@ -1822,7 +1822,7 @@ async function loadTokens() {
           [
             token.name,
             token.scopes.join(", "),
-            token.created_at,
+            token.decision_keys?.length ? token.decision_keys.join(", ") : "All",
             token.last_used_at || "-",
             token.revoked_at ? "revoked" : "active"
           ],
@@ -1845,7 +1845,12 @@ async function createToken(event) {
       method: "POST",
       body: JSON.stringify({
         name: document.querySelector("#token-name").value.trim() || "API token",
-        scopes: document.querySelector("#token-scopes").value.split(",")
+        scopes: document.querySelector("#token-scopes").value.split(","),
+        decision_keys: document
+          .querySelector("#token-decision-keys")
+          .value.split(",")
+          .map((item) => item.trim())
+          .filter(Boolean)
       })
     });
     tokenOutput.textContent = `Copy this token now. It will not be shown again.\n\n${JSON.stringify(body, null, 2)}`;

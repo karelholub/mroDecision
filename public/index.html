@@ -573,6 +573,7 @@
                   Scopes
                   <select id="token-scopes">
                     <option value="evaluate">Evaluate only</option>
+                    <option value="client">Client app</option>
                     <option value="viewer">Viewer</option>
                     <option value="editor,viewer">Editor</option>
                     <option value="publisher,viewer">Publisher</option>
@@ -580,6 +581,10 @@
                   </select>
                 </label>
               </div>
+              <label>
+                Allowed decision keys
+                <input id="token-decision-keys" placeholder="Optional, comma separated" />
+              </label>
               <div class="actions left">
                 <button type="submit">Create Token</button>
               </div>

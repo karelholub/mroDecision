@@ -19,7 +19,8 @@ function parseTokens(raw) {
       {
         name: "development-admin",
         token: "dev-admin-token",
-        scopes: ["admin", "evaluate"]
+        scopes: ["admin", "evaluate", "client"],
+        decision_keys: []
       }
     ];
   }
@@ -30,7 +31,8 @@ function parseTokens(raw) {
     return parsed.map((item) => ({
       name: String(item.name || "token"),
       token: String(item.token || ""),
-      scopes: Array.isArray(item.scopes) ? item.scopes.map(String) : ["evaluate"]
+      scopes: Array.isArray(item.scopes) ? item.scopes.map(String) : ["evaluate"],
+      decision_keys: Array.isArray(item.decision_keys) ? item.decision_keys.map(String) : []
     }));
   } catch (error) {
     throw new Error(`Invalid DEE_TOKENS: ${error.message}`);

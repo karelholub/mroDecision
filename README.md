@@ -9,12 +9,14 @@ This initial implementation is dependency-light and runs on Node.js built-ins on
 - Rule-set types for decisions, in-app messages, and experiments
 - Rule-set search, filtering, duplicate, and archive actions
 - Single and batch evaluation APIs
+- Client evaluation API for app-facing decisions and experiments
 - Safe expression evaluation without `eval`
 - Basic rule-builder style branches and advanced graph nodes
 - Generic reference data table storage for catalogs, matrices, mappings, and suppressions
 - Audit log queries and operational metrics
 - Per-rule usage detail with fallback, branch, and recent decision views
 - Response TTL hints for cache-aware decision clients
+- Client API tokens with optional allowed decision-key restrictions
 - Manual schema cache import for attribute, segment, and context definitions
 - Schema-aware rule builder key suggestions and broken-reference warnings
 - Meiro Profile API schema sync from a sample identifier, with optional scheduled refresh
@@ -57,6 +59,7 @@ DEE_DB_PATH=/path/to/dee.sqlite npm start
 - `GET /v1/health`
 - `POST /v1/evaluate`
 - `POST /v1/evaluate/batch`
+- `POST /v1/client/evaluate`
 - `GET /v1/rule-sets`
 - `GET /v1/rule-sets/:key`
 - `GET /v1/rule-sets/:key/versions`

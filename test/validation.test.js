@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateBundle, validateEvaluateRequest, validateRuleDefinition } from "../src/validation.js";
+import { validateBundle, validateEvaluateRequest, validateRuleDefinition, validateRuleSetPayload } from "../src/validation.js";
 
 test("validates evaluate request shape", () => {
   assert.doesNotThrow(() =>
@@ -79,4 +79,35 @@ test("validates import bundles", () => {
     })
   );
   assert.throws(() => validateBundle({ kind: "other", rule_sets: [] }), /Unsupported bundle/);
+});
+
+test("validates experiment variant allocation", () => {
+  assert.doesNotThrow(() =>
+    validateRuleSetPayload({
+      name: "Hero Experiment",
+      decision_key: "hero_experiment",
+      type: "experiment",
+      metadata: {
+        experiment: {
+          unit: "profile",
+          variants: [
+            { key: "control", weight: 50, outputs: { banner: "A" } },
+            { key: "treatment", weight: 50, outputs: { banner: "B" } }
+          ]
+        }
+      },
+      draft: { fallback: { result: "eligible", outputs: {} }, branches: [] }
+    })
+  );
+  assert.throws(
+    () =>
+      validateRuleSetPayload({
+        name: "Bad Experiment",
+        decision_key: "bad_experiment",
+        type: "experiment",
+        metadata: { experiment: { variants: [{ key: "a", weight: 80 }] } },
+        draft: { fallback: { result: "eligible", outputs: {} }, branches: [] }
+      }),
+    /weights must sum to 100/
+  );
 });

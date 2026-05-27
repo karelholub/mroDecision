@@ -1,5 +1,6 @@
 import http from "node:http";
 import { URL } from "node:url";
+import { createHash } from "node:crypto";
 import { requireScope, setAuthStore } from "./auth.js";
 import { config } from "./config.js";
 import { evaluateDecision } from "./evaluator.js";
@@ -7,6 +8,7 @@ import { notFound, readJson, sendError, sendJson, sendText, serveStatic } from "
 import { Store } from "./store.js";
 import {
   validateBundle,
+  validateClientEvaluateRequest,
   validateEvaluateRequest,
   validateRuleDefinition,
   validateRuleSetPayload,
@@ -76,6 +78,22 @@ async function routeApi(req, res, url) {
     });
     await store.save();
     sendJson(res, 200, { results });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/v1/client/evaluate") {
+    requireScope(req, "client");
+    const body = await readJson(req);
+    validateClientEvaluateRequest(body);
+    if (req.auth.decision_keys?.length && !req.auth.decision_keys.includes(body.decision_key)) {
+      const error = new Error(`Client token is not allowed to evaluate: ${body.decision_key}`);
+      error.statusCode = 403;
+      error.code = "forbidden";
+      throw error;
+    }
+    const result = evaluateClientRequest(body);
+    await store.save();
+    sendJson(res, 200, result);
     return;
   }
 
@@ -643,6 +661,81 @@ function evaluateRequest(body) {
     }
   });
   return result;
+}
+
+function evaluateClientRequest(body) {
+  const ruleSet = store.getRuleSet(body.decision_key);
+  if (!ruleSet) notFoundError(`Rule set not found: ${body.decision_key}`);
+  const version = store.getVersion(body.decision_key, body.rule_version);
+  const request = {
+    identifiers: [],
+    attributes: {},
+    segments: {},
+    context: {},
+    ...body
+  };
+  const evaluated = evaluateDecision({
+    request,
+    version,
+    lookupTables: store.listLookupTables()
+  });
+  const assigned = assignExperimentVariant(ruleSet, request, evaluated);
+  const finalOutputs = assigned ? { ...evaluated.outputs, ...(assigned.outputs || {}) } : evaluated.outputs;
+  const ttlSeconds = Number(ruleSet.cache_policy?.client_ttl || 0);
+  store.addAudit({
+    ...evaluated,
+    outputs: finalOutputs,
+    experiment: assigned ? { key: assigned.key, bucket: assigned.bucket } : undefined,
+    inputs: {
+      identifiers_count: Array.isArray(request.identifiers) ? request.identifiers.length : 0,
+      attribute_keys: Object.keys(request.attributes || {}),
+      segment_keys: Object.keys(request.segments || {}),
+      context_keys: Object.keys(request.context || {}),
+      request_source: "client"
+    }
+  });
+  return {
+    decision_key: evaluated.decision_key,
+    profile_key: evaluated.profile_key,
+    result: evaluated.result,
+    outputs: finalOutputs,
+    rule_version: evaluated.rule_version,
+    ttl_seconds: Number.isFinite(ttlSeconds) && ttlSeconds > 0 ? ttlSeconds : 0,
+    cache_scope: ruleSet.cache_policy?.scope || null,
+    experiment: assigned ? { variant_key: assigned.key, bucket: assigned.bucket } : null,
+    matched_rules: evaluated.matched_rules,
+    errors: evaluated.errors
+  };
+}
+
+function assignExperimentVariant(ruleSet, request, evaluated) {
+  if (ruleSet.type !== "experiment") return null;
+  if (["ineligible", "suppressed"].includes(evaluated.result)) return null;
+  const experiment = ruleSet.metadata?.experiment || {};
+  const variants = Array.isArray(experiment.variants) ? experiment.variants : [];
+  if (!variants.length) return null;
+  const forced = request.context?.force_variant || request.context?.forced_variants?.[ruleSet.decision_key];
+  if (forced) {
+    const variant = variants.find((item) => item.key === forced);
+    if (variant) return { ...variant, bucket: null };
+  }
+  const unit = experiment.unit === "identifier" ? firstIdentifierValue(request) : request.profile_key;
+  const bucket = bucketFor(`${ruleSet.decision_key}:${unit || request.profile_key}`);
+  let cursor = 0;
+  for (const variant of variants) {
+    cursor += Number(variant.weight || 0);
+    if (bucket < cursor) return { ...variant, bucket };
+  }
+  return { ...variants.at(-1), bucket };
+}
+
+function firstIdentifierValue(request) {
+  return Array.isArray(request.identifiers) ? request.identifiers[0]?.value : null;
+}
+
+function bucketFor(value) {
+  const hex = createHash("sha256").update(String(value)).digest("hex").slice(0, 8);
+  return (Number.parseInt(hex, 16) / 0xffffffff) * 100;
 }
 
 function publicRuleSet(ruleSet) {
