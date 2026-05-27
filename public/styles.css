@@ -228,6 +228,54 @@ header {
   margin-bottom: 16px;
 }
 
+.lookup-guide {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.75fr) minmax(420px, 1.25fr);
+  gap: 16px;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.lookup-guide p {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.guide-card {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel-soft);
+  min-width: 0;
+}
+
+.guide-card span,
+.guide-card small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.guide-card code {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
 .table {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -290,6 +338,10 @@ textarea {
 .editor-title {
   font-weight: 700;
   margin-bottom: 12px;
+}
+
+.compact-title {
+  margin-top: 14px;
 }
 
 .status-panel {
@@ -515,6 +567,8 @@ pre {
   .filter-bar,
   .metric-grid,
   .overview-grid,
+  .lookup-guide,
+  .guide-grid,
   .status-panel,
   .grid-two,
   .grid-three,

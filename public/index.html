@@ -18,7 +18,6 @@
         <button data-view="test">Evaluate</button>
         <button data-view="audit">Audit</button>
         <button data-view="lookups">Lookups</button>
-        <button data-view="integration">Integration</button>
         <button data-view="settings">Settings</button>
       </nav>
       <label>
@@ -360,6 +359,28 @@
             <button id="export-lookup-csv">Export CSV</button>
           </div>
         </header>
+        <div class="lookup-guide">
+          <div>
+            <strong>How lookups work</strong>
+            <p>A lookup table enriches a decision result from a maintained table. Rules call a table by ID, match a row by the key column, and return one column from that row.</p>
+          </div>
+          <div class="guide-grid">
+            <div class="guide-card">
+              <span>Table ID</span>
+              <strong>offer_tiers</strong>
+              <small>Used by rules to select the table.</small>
+            </div>
+            <div class="guide-card">
+              <span>Key column</span>
+              <strong>offer_id</strong>
+              <small>Column matched against the rule expression.</small>
+            </div>
+            <div class="guide-card">
+              <span>Rule output</span>
+              <code>=lookup("offer_tiers", outputs.offer_id, "priority")</code>
+            </div>
+          </div>
+        </div>
         <div class="split">
           <div id="lookup-list" class="table"></div>
           <form id="lookup-editor" class="editor">
@@ -398,39 +419,6 @@
             </details>
             <pre id="lookup-output"></pre>
           </form>
-        </div>
-      </section>
-
-      <section id="integration" class="view">
-        <header>
-          <div>
-            <h2>Integration</h2>
-            <p class="page-subtitle">Generate Pipes request templates from runtime settings.</p>
-          </div>
-          <button id="refresh-integration">Refresh</button>
-        </header>
-        <div class="split">
-          <div class="editor">
-            <div class="editor-title">Meiro Pipes Request</div>
-            <div class="grid-two">
-              <label>
-                DEE endpoint
-                <input id="integration-endpoint" readonly />
-              </label>
-              <label>
-                Meiro collector endpoint
-                <input id="integration-meiro-url" readonly />
-              </label>
-            </div>
-            <label>
-              HTTP template
-              <textarea id="integration-template" spellcheck="false" readonly></textarea>
-            </label>
-          </div>
-          <div class="editor">
-            <div class="editor-title">Expected Response</div>
-            <pre id="integration-response"></pre>
-          </div>
         </div>
       </section>
 
@@ -506,6 +494,28 @@
                 <button type="button" id="refresh-schema">Refresh Schema</button>
               </div>
               <pre id="schema-output"></pre>
+            </details>
+            <details open>
+              <summary>Integration templates</summary>
+              <div class="actions left">
+                <button type="button" id="refresh-integration">Refresh Template</button>
+              </div>
+              <div class="grid-two">
+                <label>
+                  DEE endpoint
+                  <input id="integration-endpoint" readonly />
+                </label>
+                <label>
+                  Meiro collector endpoint
+                  <input id="integration-meiro-url" readonly />
+                </label>
+              </div>
+              <label>
+                HTTP template
+                <textarea id="integration-template" spellcheck="false" readonly></textarea>
+              </label>
+              <div class="editor-title compact-title">Expected Response</div>
+              <pre id="integration-response"></pre>
             </details>
             <pre id="settings-output"></pre>
           </div>
