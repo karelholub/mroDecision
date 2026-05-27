@@ -625,6 +625,7 @@ function renderBranchEditor() {
     bindBranchField(node, branchIndex, "result");
     bindBranchField(node, branchIndex, "outputs");
     bindBranchField(node, branchIndex, "logic");
+    bindOutputFieldEditor(node, branchIndex);
     bindLookupOutputHelper(node, branchIndex);
     node.querySelector("[data-action='remove-branch']").addEventListener("click", () => {
       builderBranches.splice(branchIndex, 1);
@@ -638,6 +639,13 @@ function renderBranchEditor() {
         operator: "equals",
         value: ""
       });
+      renderBranchEditor();
+      syncJsonFromBuilder();
+    });
+    node.querySelector("[data-action='add-output']").addEventListener("click", () => {
+      const outputs = parseJsonSafe(builderBranches[branchIndex].outputs || "{}");
+      outputs[uniqueOutputFieldName(Object.keys(outputs), "new_field")] = "";
+      builderBranches[branchIndex].outputs = JSON.stringify(outputs);
       renderBranchEditor();
       syncJsonFromBuilder();
     });
@@ -661,6 +669,113 @@ function renderBranchEditor() {
     branchEditor.append(node);
   });
   renderRuleGraph();
+}
+
+function bindOutputFieldEditor(node, branchIndex) {
+  const target = node.querySelector("[data-role='outputs']");
+  const outputs = parseJsonSafe(builderBranches[branchIndex].outputs || "{}");
+  const entries = Object.entries(outputs);
+  target.innerHTML = entries.length
+    ? entries.map(([key, value]) => outputFieldRow(key, value)).join("")
+    : `<div class="grid-empty">No output fields yet.</div>`;
+  target.querySelectorAll("[data-output-key]").forEach((input) => {
+    input.addEventListener("change", () => updateOutputField(branchIndex, input.dataset.outputKey, input.value, null));
+  });
+  target.querySelectorAll("[data-output-type]").forEach((select) => {
+    select.addEventListener("change", () => updateOutputFieldType(branchIndex, select.dataset.outputType, select.value));
+  });
+  target.querySelectorAll("[data-output-value]").forEach((input) => {
+    input.addEventListener("input", () => updateOutputField(branchIndex, input.dataset.outputValue, null, input.value));
+    input.addEventListener("change", syncJsonFromBuilder);
+  });
+  target.querySelectorAll("[data-remove-output]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const outputs = parseJsonSafe(builderBranches[branchIndex].outputs || "{}");
+      delete outputs[button.dataset.removeOutput];
+      builderBranches[branchIndex].outputs = JSON.stringify(outputs);
+      renderBranchEditor();
+      syncJsonFromBuilder();
+    });
+  });
+}
+
+function outputFieldRow(key, value) {
+  const type = outputValueType(value);
+  return `
+    <div class="output-field-row">
+      <label>
+        Field
+        <input data-output-key="${escapeHtml(key)}" value="${escapeHtml(key)}" />
+      </label>
+      <label>
+        Type
+        <select data-output-type="${escapeHtml(key)}">
+          <option value="static"${type === "static" ? " selected" : ""}>Static</option>
+          <option value="reference"${type === "reference" ? " selected" : ""}>Reference</option>
+          <option value="expression"${type === "expression" ? " selected" : ""}>Expression</option>
+        </select>
+      </label>
+      <label>
+        Value
+        <input data-output-value="${escapeHtml(key)}" value="${escapeHtml(formatOutputValue(value))}" />
+      </label>
+      <button type="button" data-remove-output="${escapeHtml(key)}">Remove</button>
+    </div>
+  `;
+}
+
+function outputValueType(value) {
+  if (typeof value === "string" && value.startsWith("=lookup(")) return "reference";
+  if (typeof value === "string" && value.startsWith("=")) return "expression";
+  return "static";
+}
+
+function formatOutputValue(value) {
+  if (value == null) return "";
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
+function updateOutputField(branchIndex, oldKey, nextKey, nextValue) {
+  const outputs = parseJsonSafe(builderBranches[branchIndex].outputs || "{}");
+  const key = nextKey ? slug(nextKey) : oldKey;
+  const currentValue = outputs[oldKey];
+  if (nextKey && key !== oldKey) delete outputs[oldKey];
+  outputs[key] = nextValue == null ? currentValue : parseOutputInputValue(nextValue, currentValue);
+  builderBranches[branchIndex].outputs = JSON.stringify(outputs);
+  const advanced = branchEditor.querySelector(`[data-branch-index="${branchIndex}"] [data-field='outputs']`);
+  if (advanced) advanced.value = builderBranches[branchIndex].outputs;
+  renderRuleGraph();
+}
+
+function updateOutputFieldType(branchIndex, key, type) {
+  const outputs = parseJsonSafe(builderBranches[branchIndex].outputs || "{}");
+  const current = outputs[key];
+  if (type === "reference" && !(typeof current === "string" && current.startsWith("=lookup("))) {
+    const table = preferredLookupTable();
+    const column = firstLookupValueColumn(table) || "field_name";
+    outputs[key] = table ? `=lookup(${JSON.stringify(table.id)}, ${defaultLookupKeyExpression(table, outputs) || "\"\""}, ${JSON.stringify(column)})` : "=lookup(\"table_id\", \"key\", \"field\")";
+  } else if (type === "expression" && !(typeof current === "string" && current.startsWith("=")) ) {
+    outputs[key] = `=${formatOutputValue(current) || "\"\""}`;
+  } else if (type === "static" && typeof current === "string" && current.startsWith("=")) {
+    outputs[key] = "";
+  }
+  builderBranches[branchIndex].outputs = JSON.stringify(outputs);
+  renderBranchEditor();
+  syncJsonFromBuilder();
+}
+
+function parseOutputInputValue(raw, previousValue) {
+  if (typeof previousValue === "string" && previousValue.startsWith("=")) return raw;
+  return parseReferenceCell(raw);
+}
+
+function uniqueOutputFieldName(fields, base) {
+  if (!fields.includes(base)) return base;
+  for (let index = 2; index < 100; index += 1) {
+    const candidate = `${base}_${index}`;
+    if (!fields.includes(candidate)) return candidate;
+  }
+  return `${base}_${Date.now()}`;
 }
 
 function renderRuleGraph() {

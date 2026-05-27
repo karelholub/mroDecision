@@ -20,10 +20,6 @@
         <button data-view="lookups">Reference Data</button>
         <button data-view="settings">Settings</button>
       </nav>
-      <label>
-        API token
-        <input id="token" type="password" value="dev-admin-token" />
-      </label>
     </aside>
     <main>
       <section id="overview" class="view active">
@@ -173,12 +169,15 @@
                     Result
                     <input data-field="result" />
                   </label>
-                  <label>
-                    Outputs JSON
-                    <input data-field="outputs" />
-                  </label>
                   <button type="button" data-action="remove-branch">Remove</button>
                 </div>
+                <details open class="output-helper">
+                  <summary>Output fields</summary>
+                  <div data-role="outputs" class="output-field-list"></div>
+                  <div class="actions left">
+                    <button type="button" data-action="add-output">Add Output Field</button>
+                  </div>
+                </details>
                 <details class="output-helper">
                   <summary>Reference data fields</summary>
                   <div class="lookup-output-grid">
@@ -200,6 +199,10 @@
                     </label>
                     <button type="button" data-action="apply-lookup-output">Apply</button>
                   </div>
+                </details>
+                <details class="output-helper">
+                  <summary>Advanced output JSON</summary>
+                  <input data-field="outputs" />
                 </details>
                 <div class="branch-logic">
                   <label>
@@ -444,6 +447,10 @@
         <div class="split">
           <div class="editor">
             <div class="editor-title">Environment</div>
+            <label class="auth-token-field">
+              Active API token
+              <input id="token" type="password" value="dev-admin-token" />
+            </label>
             <form id="settings-form">
               <div class="grid-two">
                 <label>

@@ -62,8 +62,7 @@ h1 {
   font-size: 13px;
 }
 
-aside .brand span,
-aside label {
+aside .brand span {
   color: #b9c4d2;
 }
 
@@ -136,6 +135,14 @@ aside input {
   border-color: rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
+}
+
+.auth-token-field {
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
 }
 
 input.invalid,
@@ -568,6 +575,18 @@ button.graph-node:hover {
   align-items: end;
 }
 
+.output-field-list {
+  display: grid;
+  gap: 8px;
+}
+
+.output-field-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(110px, 0.55fr) minmax(180px, 1.2fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
 details {
   margin-top: 12px;
 }
@@ -646,6 +665,7 @@ pre {
   .builder-bar,
   .branch-head,
   .condition-row,
+  .output-field-row,
   .lookup-output-grid {
     grid-template-columns: 1fr;
   }
