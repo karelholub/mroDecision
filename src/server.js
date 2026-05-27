@@ -15,6 +15,8 @@ import {
 
 const store = await Store.load();
 setAuthStore(store);
+let schemaSyncTimer = null;
+let schemaSyncNextRunAt = "";
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -33,6 +35,7 @@ const server = http.createServer(async (req, res) => {
 server.listen(config.port, () => {
   console.log(`DEE listening on http://localhost:${config.port}`);
 });
+scheduleSchemaSync();
 
 async function routeApi(req, res, url) {
   const { pathname } = url;
@@ -140,7 +143,8 @@ async function routeApi(req, res, url) {
       runtime: {
         direct_url: `http://localhost:${config.port}`,
         docker_url: "http://localhost:8090",
-        db_path: config.dbPath
+        db_path: config.dbPath,
+        schema_sync: schemaSyncRuntime()
       }
     });
     return;
@@ -150,7 +154,8 @@ async function routeApi(req, res, url) {
     requireScope(req, "admin");
     const settings = store.updateSettings(await readJson(req), req.auth.name);
     await store.save();
-    sendJson(res, 200, { settings: publicSettings(settings) });
+    scheduleSchemaSync();
+    sendJson(res, 200, { settings: publicSettings(settings), runtime: { schema_sync: schemaSyncRuntime() } });
     return;
   }
 
@@ -235,6 +240,7 @@ async function routeApi(req, res, url) {
     requireScope(req, "admin");
     const body = await readJson(req);
     const synced = await syncSchemaFromMeiroProfile(body, req.auth.name);
+    recordSchemaSyncSuccess(synced, req.auth.name);
     await store.save();
     sendJson(res, 200, synced);
     return;
@@ -247,8 +253,8 @@ async function syncSchemaFromMeiroProfile(input, author) {
   const settings = store.getSettings();
   const endpoint = String(input.meiro_api_url || settings.meiro_api_url || "").trim();
   const token = String(input.meiro_api_token || settings.meiro_api_token || "").trim();
-  const identifierType = String(input.identifier_type || "").trim();
-  const identifierValue = String(input.identifier_value || "").trim();
+  const identifierType = String(input.identifier_type || settings.schema_sync_identifier_type || "").trim();
+  const identifierValue = String(input.identifier_value || settings.schema_sync_identifier_value || "").trim();
   if (!endpoint) badRequest("meiro_api_url is required");
   if (!token) badRequest("meiro_api_token is required");
   if (!identifierType || !identifierValue) badRequest("identifier_type and identifier_value are required");
@@ -287,6 +293,81 @@ async function syncSchemaFromMeiroProfile(input, author) {
     },
     profile_shape: Object.keys(profile)
   };
+}
+
+function scheduleSchemaSync() {
+  if (schemaSyncTimer) {
+    clearTimeout(schemaSyncTimer);
+    schemaSyncTimer = null;
+  }
+  const settings = store.getSettings();
+  if (!schemaSyncConfigured(settings)) {
+    schemaSyncNextRunAt = "";
+    return;
+  }
+  const intervalMs = Math.max(1, Number(settings.schema_sync_interval_minutes || 15)) * 60 * 1000;
+  schemaSyncNextRunAt = new Date(Date.now() + intervalMs).toISOString();
+  schemaSyncTimer = setTimeout(async () => {
+    schemaSyncTimer = null;
+    await runScheduledSchemaSync();
+    scheduleSchemaSync();
+  }, intervalMs);
+  schemaSyncTimer.unref?.();
+}
+
+async function runScheduledSchemaSync() {
+  try {
+    const synced = await syncSchemaFromMeiroProfile({}, "schema-scheduler");
+    recordSchemaSyncSuccess(synced, "schema-scheduler");
+    await store.save();
+  } catch (error) {
+    store.updateSettings(
+      {
+        schema_last_synced_at: createdAtIso(),
+        schema_last_sync_status: "error",
+        schema_last_sync_error: error.message || "Schema sync failed"
+      },
+      "schema-scheduler"
+    );
+    await store.save();
+    console.warn(`Scheduled schema sync failed: ${error.message}`);
+  }
+}
+
+function recordSchemaSyncSuccess(synced, author) {
+  const importedCount = Object.values(synced.imported || {}).reduce((sum, items) => sum + (Array.isArray(items) ? items.length : 0), 0);
+  store.updateSettings(
+    {
+      schema_last_synced_at: createdAtIso(),
+      schema_last_sync_status: "ok",
+      schema_last_sync_error: "",
+      schema_last_sync_count: importedCount
+    },
+    author
+  );
+}
+
+function schemaSyncConfigured(settings) {
+  return Boolean(
+    String(settings.meiro_api_url || "").trim() &&
+    String(settings.meiro_api_token || "").trim() &&
+    String(settings.schema_sync_identifier_type || "").trim() &&
+    String(settings.schema_sync_identifier_value || "").trim() &&
+    Number(settings.schema_sync_interval_minutes || 0) > 0
+  );
+}
+
+function schemaSyncRuntime() {
+  const settings = store.getSettings();
+  return {
+    configured: schemaSyncConfigured(settings),
+    next_run_at: schemaSyncNextRunAt || null,
+    interval_minutes: Number(settings.schema_sync_interval_minutes || 0)
+  };
+}
+
+function createdAtIso() {
+  return new Date().toISOString();
 }
 
 function inferSchemaFromProfile(profile) {

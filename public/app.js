@@ -1135,6 +1135,9 @@ async function loadSettings() {
     document.querySelector("#setting-meiro-api-token").value = "";
     document.querySelector("#setting-meiro-api-token").placeholder = settings.meiro_api_token_configured ? "Configured" : "";
     document.querySelector("#setting-schema-sync-interval").value = settings.schema_sync_interval_minutes || 15;
+    document.querySelector("#schema-sync-identifier-type").value = settings.schema_sync_identifier_type || "";
+    document.querySelector("#schema-sync-identifier-value").value = settings.schema_sync_identifier_value || "";
+    renderSchemaSyncStatus(settings, body.runtime?.schema_sync || {});
     settingsOutput.textContent = JSON.stringify(body, null, 2);
     renderIntegration();
     await loadTokens();
@@ -1152,7 +1155,9 @@ async function saveSettings(event) {
       meiro_url: document.querySelector("#setting-meiro-url").value.trim(),
       meiro_source_slug: document.querySelector("#setting-meiro-source-slug").value.trim(),
       meiro_api_url: document.querySelector("#setting-meiro-api-url").value.trim(),
-      schema_sync_interval_minutes: Number(document.querySelector("#setting-schema-sync-interval").value || 15)
+      schema_sync_interval_minutes: Number(document.querySelector("#setting-schema-sync-interval").value || 15),
+      schema_sync_identifier_type: document.querySelector("#schema-sync-identifier-type").value.trim(),
+      schema_sync_identifier_value: document.querySelector("#schema-sync-identifier-value").value.trim()
     };
     const apiToken = document.querySelector("#setting-meiro-api-token").value.trim();
     if (apiToken) payload.meiro_api_token = apiToken;
@@ -1161,6 +1166,7 @@ async function saveSettings(event) {
       body: JSON.stringify(payload)
     });
     cachedSettings = { ...cachedSettings, settings: body.settings || {} };
+    renderSchemaSyncStatus(body.settings || {}, body.runtime?.schema_sync || {});
     renderIntegration();
     settingsOutput.textContent = JSON.stringify(body, null, 2);
   } catch (error) {
@@ -1182,11 +1188,23 @@ async function syncSchemaFromMeiro() {
       ...(body.imported?.segments || []),
       ...(body.imported?.context || [])
     ];
+    await loadSettings();
     renderBranchEditor();
     schemaOutput.textContent = JSON.stringify(body, null, 2);
   } catch (error) {
     schemaOutput.textContent = error.message;
   }
+}
+
+function renderSchemaSyncStatus(settings, runtime) {
+  const target = document.querySelector("#schema-sync-status");
+  if (!target) return;
+  const status = settings.schema_last_sync_status || "never";
+  const lastSync = settings.schema_last_synced_at ? formatTime(settings.schema_last_synced_at) : "never";
+  const nextRun = runtime.configured && runtime.next_run_at ? formatTime(runtime.next_run_at) : "not scheduled";
+  const count = Number(settings.schema_last_sync_count || 0);
+  const error = settings.schema_last_sync_error ? ` Error: ${settings.schema_last_sync_error}` : "";
+  target.textContent = `Status: ${status}. Last sync: ${lastSync}. Imported: ${count}. Next sync: ${nextRun}.${error}`;
 }
 
 async function importSchema() {

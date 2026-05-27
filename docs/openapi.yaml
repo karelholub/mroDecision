@@ -731,6 +731,9 @@ paths:
                     $ref: "#/components/schemas/Settings"
                   runtime:
                     type: object
+                    properties:
+                      schema_sync:
+                        $ref: "#/components/schemas/SchemaSyncRuntime"
     put:
       summary: Update operational settings
       requestBody:
@@ -749,6 +752,11 @@ paths:
                 properties:
                   settings:
                     $ref: "#/components/schemas/Settings"
+                  runtime:
+                    type: object
+                    properties:
+                      schema_sync:
+                        $ref: "#/components/schemas/SchemaSyncRuntime"
 components:
   securitySchemes:
     bearerAuth:
@@ -1115,4 +1123,29 @@ components:
         meiro_api_token:
           type: string
         schema_sync_interval_minutes:
+          type: integer
+        schema_sync_identifier_type:
+          type: string
+        schema_sync_identifier_value:
+          type: string
+        schema_last_synced_at:
+          type: string
+          format: date-time
+        schema_last_sync_status:
+          type: string
+          enum: [never, ok, error]
+        schema_last_sync_error:
+          type: string
+        schema_last_sync_count:
+          type: integer
+    SchemaSyncRuntime:
+      type: object
+      properties:
+        configured:
+          type: boolean
+        next_run_at:
+          type: string
+          format: date-time
+          nullable: true
+        interval_minutes:
           type: integer

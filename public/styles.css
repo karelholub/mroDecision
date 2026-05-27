@@ -338,6 +338,13 @@ summary {
   margin-bottom: 8px;
 }
 
+.status-line {
+  margin: 4px 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .grid-two,
 .grid-three {
   display: grid;

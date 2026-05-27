@@ -465,7 +465,13 @@ export class Store {
       "meiro_source_slug",
       "meiro_api_url",
       "meiro_api_token",
-      "schema_sync_interval_minutes"
+      "schema_sync_interval_minutes",
+      "schema_sync_identifier_type",
+      "schema_sync_identifier_value",
+      "schema_last_synced_at",
+      "schema_last_sync_status",
+      "schema_last_sync_error",
+      "schema_last_sync_count"
     ]);
     const now = createdAtNow();
     const upsert = this.db.prepare(
@@ -667,7 +673,13 @@ function seedSettings(db) {
     meiro_source_slug: "",
     meiro_api_url: "",
     meiro_api_token: "",
-    schema_sync_interval_minutes: 15
+    schema_sync_interval_minutes: 15,
+    schema_sync_identifier_type: "",
+    schema_sync_identifier_value: "",
+    schema_last_synced_at: "",
+    schema_last_sync_status: "never",
+    schema_last_sync_error: "",
+    schema_last_sync_count: 0
   };
   const insert = db.prepare(
     `INSERT OR IGNORE INTO settings (key, value_json, updated_at, updated_by)

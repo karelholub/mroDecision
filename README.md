@@ -15,7 +15,7 @@ This initial implementation is dependency-light and runs on Node.js built-ins on
 - Audit log queries
 - Manual schema cache import for attribute, segment, and context definitions
 - Schema-aware rule builder key suggestions and broken-reference warnings
-- Meiro Profile API schema sync from a sample identifier
+- Meiro Profile API schema sync from a sample identifier, with optional scheduled refresh
 - Bearer-token authentication with viewer/editor/publisher/admin/evaluate scopes
 - Database-backed API token management
 - Embedded management UI

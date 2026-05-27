@@ -17,6 +17,7 @@ Implemented:
 - Rule-set metadata fields for v2 surfaces: `type`, `priority`, `surface`, `cache_policy`, and `metadata`.
 - Manual schema cache import for attributes, segments, and context keys.
 - Meiro Profile API schema sync from a sample identifier.
+- Scheduled Meiro Profile API schema sync when API settings and sample identifier are configured.
 - Rule Builder key suggestions from cached attributes, segments, and context keys.
 - Client-side broken-reference warnings with publish blocking when cached schema references are invalid.
 - Rule-set list search/filter controls with duplicate and archive actions.
@@ -27,8 +28,7 @@ Implemented:
 
 Important gaps:
 
-- No scheduled Meiro API schema sync yet; manual sync from a sample profile is implemented.
-- No visual advanced flow canvas yet.
+- Visual rule graph preview is implemented; a full drag canvas is still pending.
 - No client behavior for `inapp_message` or `experiment` rule-set types yet.
 - No client-facing `/v1/client/*` APIs.
 - No experiment assignment engine.
@@ -64,6 +64,8 @@ Goal: make authoring safer by validating against Meiro attributes and audiences.
 - Block publish when required rule references are broken.
 
 Open decision: confirm exact Meiro Profile/Engage API endpoints and credentials available for schema and segment sync.
+
+Status: implemented for Profile API sample-profile sync; broader segment catalog sync depends on final Meiro API contract.
 
 ## Phase 3: Advanced Rule Authoring
 
@@ -124,7 +126,7 @@ Goal: make the service deployable beyond local demo.
 ## Recommended Next Sprint
 
 1. Build first-pass advanced graph editor.
-2. Add real Meiro schema sync scheduling.
-3. Add client-facing experiment skeleton.
-4. Add data-retention controls beyond audit logs.
-5. Add CI/deployment hardening for hosted environments.
+2. Add client-facing experiment skeleton.
+3. Add data-retention controls beyond audit logs.
+4. Add CI/deployment hardening for hosted environments.
+5. Add broader Meiro catalog sync if/when segment schema APIs are confirmed.

@@ -432,7 +432,7 @@
               </div>
             </form>
             <details>
-              <summary>Manual schema import</summary>
+              <summary>Schema sync and manual import</summary>
               <div class="grid-two">
                 <label>
                   Identifier type
@@ -446,6 +446,7 @@
               <div class="actions left">
                 <button type="button" id="sync-schema">Sync From Meiro</button>
               </div>
+              <div id="schema-sync-status" class="status-line"></div>
               <textarea id="schema-import" spellcheck="false" placeholder='{"attributes":[{"name":"lead_score","type":"number"}],"segments":[{"name":"vip_customers","type":"boolean"}],"context":[{"name":"channel","type":"string"}]}'></textarea>
               <div class="actions left">
                 <button type="button" id="import-schema">Import Schema</button>
