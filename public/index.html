@@ -399,10 +399,21 @@
                 <input id="lookup-key-column" value="key" required />
               </label>
             </div>
-            <label>
-              Rows JSON
-              <textarea id="lookup-rows" spellcheck="false"></textarea>
-            </label>
+            <div class="reference-grid-shell">
+              <div class="reference-grid-actions">
+                <button type="button" id="add-reference-row">Add Row</button>
+                <button type="button" id="add-reference-column">Add Column</button>
+                <button type="button" id="sync-reference-json">Sync JSON</button>
+              </div>
+              <div id="reference-grid" class="reference-grid"></div>
+            </div>
+            <details>
+              <summary>Advanced JSON</summary>
+              <label>
+                Rows JSON
+                <textarea id="lookup-rows" spellcheck="false"></textarea>
+              </label>
+            </details>
             <details>
               <summary>Paste CSV</summary>
               <textarea id="lookup-csv" spellcheck="false" placeholder="country,tier&#10;CZ,A&#10;SK,B"></textarea>

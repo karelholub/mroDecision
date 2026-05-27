@@ -5,6 +5,7 @@ const editorOutput = document.querySelector("#rule-editor-output");
 const branchEditor = document.querySelector("#branch-editor");
 const ruleGraph = document.querySelector("#rule-graph");
 const lookupOutput = document.querySelector("#lookup-output");
+const referenceGrid = document.querySelector("#reference-grid");
 const auditDetail = document.querySelector("#audit-detail");
 const versionList = document.querySelector("#version-list");
 const lookupVersionList = document.querySelector("#lookup-version-list");
@@ -74,6 +75,11 @@ document.querySelector("#fallback-result").addEventListener("input", syncJsonFro
 document.querySelector("#fallback-outputs").addEventListener("change", syncJsonFromBuilder);
 document.querySelector("#lookup-editor").addEventListener("submit", saveLookup);
 document.querySelector("#import-lookup-csv").addEventListener("click", importLookupCsv);
+document.querySelector("#add-reference-row").addEventListener("click", addReferenceRow);
+document.querySelector("#add-reference-column").addEventListener("click", addReferenceColumn);
+document.querySelector("#sync-reference-json").addEventListener("click", syncReferenceGridFromJson);
+document.querySelector("#lookup-rows").addEventListener("change", syncReferenceGridFromJson);
+document.querySelector("#lookup-key-column").addEventListener("change", renderReferenceGrid);
 document.querySelector("#settings-form").addEventListener("submit", saveSettings);
 document.querySelector("#token-form").addEventListener("submit", createToken);
 
@@ -1031,9 +1037,176 @@ function newLookup() {
     null,
     2
   );
+  renderReferenceGrid();
   document.querySelector("#lookup-csv").value = "";
   loadLookupVersions(null);
   lookupOutput.textContent = "Ready for a new reference table";
+}
+
+function referenceRowsFromJson() {
+  const rowsInput = document.querySelector("#lookup-rows");
+  try {
+    const rows = JSON.parse(rowsInput.value || "[]");
+    if (!Array.isArray(rows)) throw new Error("Rows JSON must be an array");
+    return rows.map((rowItem) => rowItem && typeof rowItem === "object" && !Array.isArray(rowItem) ? rowItem : {});
+  } catch (error) {
+    rowsInput.classList.add("invalid");
+    throw error;
+  }
+}
+
+function referenceColumns(rows = referenceRowsFromJson()) {
+  const keyColumn = document.querySelector("#lookup-key-column").value.trim() || "key";
+  const discovered = [...new Set(rows.flatMap((rowItem) => Object.keys(rowItem || {})))];
+  return [keyColumn, ...discovered.filter((column) => column !== keyColumn)];
+}
+
+function renderReferenceGrid() {
+  clearInvalid();
+  let rows;
+  try {
+    rows = referenceRowsFromJson();
+  } catch (error) {
+    referenceGrid.innerHTML = `<div class="grid-empty">${escapeHtml(error.message)}</div>`;
+    return;
+  }
+  const columns = referenceColumns(rows);
+  const headerCells = columns
+    .map((column) => `
+      <div class="reference-header-cell">
+        <input data-column-name="${escapeHtml(column)}" value="${escapeHtml(column)}" />
+        <button type="button" data-remove-column="${escapeHtml(column)}">Remove</button>
+      </div>
+    `)
+    .join("");
+  const bodyRows = rows
+    .map((rowItem, rowIndex) => `
+      <div class="reference-grid-row">
+        ${columns.map((column) => `
+          <input data-row-index="${rowIndex}" data-column="${escapeHtml(column)}" value="${escapeHtml(formatReferenceCell(rowItem[column]))}" />
+        `).join("")}
+        <button type="button" data-remove-row="${rowIndex}">Remove</button>
+      </div>
+    `)
+    .join("");
+  referenceGrid.style.setProperty("--reference-columns", `repeat(${Math.max(columns.length, 1)}, minmax(130px, 1fr)) 82px`);
+  referenceGrid.innerHTML = `
+    <div class="reference-grid-row header-row">${headerCells}<div></div></div>
+    ${bodyRows || `<div class="grid-empty">No rows yet. Add a row or paste CSV.</div>`}
+  `;
+  referenceGrid.querySelectorAll("[data-row-index]").forEach((input) => {
+    input.addEventListener("input", syncReferenceJsonFromGrid);
+  });
+  referenceGrid.querySelectorAll("[data-column-name]").forEach((input) => {
+    input.addEventListener("change", renameReferenceColumn);
+  });
+  referenceGrid.querySelectorAll("[data-remove-row]").forEach((button) => {
+    button.addEventListener("click", () => removeReferenceRow(Number(button.dataset.removeRow)));
+  });
+  referenceGrid.querySelectorAll("[data-remove-column]").forEach((button) => {
+    button.addEventListener("click", () => removeReferenceColumn(button.dataset.removeColumn));
+  });
+}
+
+function formatReferenceCell(value) {
+  if (value == null) return "";
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
+function parseReferenceCell(value) {
+  const trimmed = String(value ?? "").trim();
+  if (trimmed === "") return "";
+  if (trimmed === "true") return true;
+  if (trimmed === "false") return false;
+  if (trimmed === "null") return null;
+  if (!Number.isNaN(Number(trimmed)) && /^-?\d+(?:\.\d+)?$/.test(trimmed)) return Number(trimmed);
+  if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
+function syncReferenceJsonFromGrid() {
+  const rows = [];
+  referenceGrid.querySelectorAll(".reference-grid-row:not(.header-row)").forEach((rowNode) => {
+    const rowItem = {};
+    rowNode.querySelectorAll("[data-column]").forEach((input) => {
+      rowItem[input.dataset.column] = parseReferenceCell(input.value);
+    });
+    if (Object.values(rowItem).some((value) => value !== "")) rows.push(rowItem);
+  });
+  document.querySelector("#lookup-rows").value = JSON.stringify(rows, null, 2);
+}
+
+function syncReferenceGridFromJson() {
+  renderReferenceGrid();
+  lookupOutput.textContent = "Reference grid synced from JSON";
+}
+
+function addReferenceRow() {
+  const rows = referenceRowsFromJson();
+  const columns = referenceColumns(rows);
+  rows.push(Object.fromEntries(columns.map((column) => [column, ""])));
+  document.querySelector("#lookup-rows").value = JSON.stringify(rows, null, 2);
+  renderReferenceGrid();
+}
+
+function addReferenceColumn() {
+  const rows = referenceRowsFromJson();
+  const nextColumn = uniqueColumnName(referenceColumns(rows), "new_field");
+  const nextRows = rows.length ? rows.map((rowItem) => ({ ...rowItem, [nextColumn]: "" })) : [{ [document.querySelector("#lookup-key-column").value.trim() || "key"]: "", [nextColumn]: "" }];
+  document.querySelector("#lookup-rows").value = JSON.stringify(nextRows, null, 2);
+  renderReferenceGrid();
+}
+
+function uniqueColumnName(columns, base) {
+  if (!columns.includes(base)) return base;
+  for (let index = 2; index < 100; index += 1) {
+    const candidate = `${base}_${index}`;
+    if (!columns.includes(candidate)) return candidate;
+  }
+  return `${base}_${Date.now()}`;
+}
+
+function renameReferenceColumn(event) {
+  const oldName = event.target.dataset.columnName;
+  const newName = slug(event.target.value || oldName);
+  const rows = referenceRowsFromJson().map((rowItem) => {
+    if (oldName === newName) return rowItem;
+    const next = {};
+    for (const [key, value] of Object.entries(rowItem)) next[key === oldName ? newName : key] = value;
+    return next;
+  });
+  if (document.querySelector("#lookup-key-column").value.trim() === oldName) {
+    document.querySelector("#lookup-key-column").value = newName;
+  }
+  document.querySelector("#lookup-rows").value = JSON.stringify(rows, null, 2);
+  renderReferenceGrid();
+}
+
+function removeReferenceRow(index) {
+  const rows = referenceRowsFromJson().filter((_, rowIndex) => rowIndex !== index);
+  document.querySelector("#lookup-rows").value = JSON.stringify(rows, null, 2);
+  renderReferenceGrid();
+}
+
+function removeReferenceColumn(column) {
+  const keyColumn = document.querySelector("#lookup-key-column").value.trim() || "key";
+  if (column === keyColumn) {
+    lookupOutput.textContent = "The match column cannot be removed. Change the match column first.";
+    return;
+  }
+  const rows = referenceRowsFromJson().map((rowItem) => {
+    const next = { ...rowItem };
+    delete next[column];
+    return next;
+  });
+  document.querySelector("#lookup-rows").value = JSON.stringify(rows, null, 2);
+  renderReferenceGrid();
 }
 
 function loadLookup(id, tables) {
@@ -1048,6 +1221,7 @@ function loadLookup(id, tables) {
   document.querySelector("#lookup-name").value = table.name;
   document.querySelector("#lookup-key-column").value = table.key_column;
   document.querySelector("#lookup-rows").value = JSON.stringify(table.rows || [], null, 2);
+  renderReferenceGrid();
   document.querySelector("#lookup-csv").value = "";
   loadLookupVersions(id);
   lookupOutput.textContent = `Loaded ${id}`;
@@ -1060,6 +1234,7 @@ async function loadLookupVersion(id, version) {
     document.querySelector("#lookup-name").value = table.name;
     document.querySelector("#lookup-key-column").value = table.key_column;
     document.querySelector("#lookup-rows").value = JSON.stringify(table.rows || [], null, 2);
+    renderReferenceGrid();
     lookupOutput.textContent = `Loaded ${id} version ${version} into the editor. Save Reference Table to restore it as the current version.`;
   } catch (error) {
     lookupOutput.textContent = error.message;
@@ -1071,6 +1246,7 @@ async function saveLookup(event) {
   clearInvalid();
   try {
     const id = selectedLookupId || document.querySelector("#lookup-id").value.trim();
+    syncReferenceJsonFromGrid();
     const rowsInput = document.querySelector("#lookup-rows");
     const rows = JSON.parse(rowsInput.value || "[]");
     if (!Array.isArray(rows)) {
@@ -1129,6 +1305,7 @@ function importLookupCsv() {
     if (!headers.includes(document.querySelector("#lookup-key-column").value)) {
       document.querySelector("#lookup-key-column").value = headers[0] || "key";
     }
+    renderReferenceGrid();
     lookupOutput.textContent = `Imported ${rows.length} CSV rows`;
   } catch (error) {
     document.querySelector("#lookup-csv").classList.add("invalid");
