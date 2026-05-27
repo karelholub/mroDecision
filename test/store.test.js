@@ -109,6 +109,10 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   const eventMetrics = store.getMetrics().client_events;
   assert.equal(eventMetrics.total, 1);
   assert.equal(eventMetrics.by_type[0].event_type, "exposure");
+  const eventReport = store.getClientEventMetrics({ decision_key: "campaign_suppression" });
+  assert.equal(eventReport.by_rule[0].key, "campaign_suppression");
+  assert.equal(eventReport.by_variant[0].key, "control");
+  assert.equal(eventReport.recent_events[0].event_id, "evt-test-1");
 
   const table = store.replaceLookupTable("tiers", { key_column: "country", rows: [{ country: "CZ", tier: "A" }] }, "tester");
   assert.equal(table.version, 1);

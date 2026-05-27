@@ -16,6 +16,7 @@ const integrationTemplate = document.querySelector("#integration-template");
 const integrationResponse = document.querySelector("#integration-response");
 const metricCards = document.querySelector("#metric-cards");
 const ruleDetailPanel = document.querySelector("#metrics-rule-detail");
+const clientEventsPanel = document.querySelector("#metrics-client-events");
 let selectedRuleKey = null;
 let selectedLookupId = null;
 let builderBranches = [];
@@ -146,6 +147,7 @@ function renderMetrics(metrics) {
   ].join("");
 
   renderRuleUsage(metrics.rule_usage || []);
+  loadClientEventMetrics();
   renderTable("#metrics-result-distribution", ["Result", "Count", "Share", "", ""], resultDistributionRows(metrics));
   renderTable("#metrics-rule-inventory", ["Status", "Count", "", "", ""], [
     ["Published", formatNumber(rules.published), "", "", ""],
@@ -167,6 +169,62 @@ function renderMetrics(metrics) {
   if (ruleDetailPanel && !ruleDetailPanel.textContent.trim()) {
     ruleDetailPanel.innerHTML = `<div class="status-line">Select a rule in Rule Usage to inspect recent decisions, fallback rate, and matched branch frequency.</div>`;
   }
+}
+
+async function loadClientEventMetrics() {
+  if (!clientEventsPanel) return;
+  try {
+    const body = await api("/v1/metrics/client-events?limit=8&recent_limit=8");
+    renderClientEventMetrics(body.metrics);
+  } catch (error) {
+    clientEventsPanel.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderClientEventMetrics(metrics) {
+  clientEventsPanel.innerHTML = `
+    <div class="overview-grid">
+      ${clientEventGroup("Rules", metrics.by_rule)}
+      ${clientEventGroup("Variants", metrics.by_variant)}
+      ${clientEventGroup("Messages", metrics.by_message)}
+      ${clientEventGroup("Surfaces", metrics.by_surface)}
+    </div>
+    <div>
+      <div class="editor-title">Recent Events</div>
+      <div class="table compact-table">${header(["Time", "Type", "Rule", "Profile", "Variant"])}${clientEventRows(metrics.recent_events)}</div>
+    </div>
+  `;
+}
+
+function clientEventGroup(title, items = []) {
+  return `
+    <div>
+      <div class="editor-title">${escapeHtml(title)}</div>
+      <div class="table compact-table">${header(["Key", "Type", "Count", "Profiles", "Last seen"])}${
+        items.length
+          ? items.map((item) => row([
+              item.key,
+              item.event_type,
+              formatNumber(item.count),
+              formatNumber(item.unique_profiles),
+              item.last_seen_at ? formatTime(item.last_seen_at) : "-"
+            ])).join("")
+          : row(["No data", "", "", "", ""])
+      }</div>
+    </div>
+  `;
+}
+
+function clientEventRows(items = []) {
+  return items.length
+    ? items.map((item) => row([
+        item.occurred_at ? formatTime(item.occurred_at) : "-",
+        item.event_type,
+        item.decision_key,
+        item.profile_key,
+        item.variant_key || item.message_id || "-"
+      ])).join("")
+    : row(["No events yet", "", "", "", ""]);
 }
 
 function clientEventStatusItems(items) {

@@ -78,6 +78,7 @@ DEE_DB_PATH=/path/to/dee.sqlite npm start
 - `POST /v1/rule-sets/:key/test`
 - `GET /v1/metrics`
 - `GET /v1/metrics/rule/:key`
+- `GET /v1/metrics/client-events`
 - `GET /v1/audit`
 - `GET /v1/audit?format=csv`
 - `GET /v1/lookup-tables`

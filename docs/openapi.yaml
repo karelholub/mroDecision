@@ -264,6 +264,55 @@ paths:
                 properties:
                   metrics:
                     $ref: "#/components/schemas/RuleMetrics"
+  /v1/metrics/client-events:
+    get:
+      summary: Get client event reports for impressions and exposures
+      parameters:
+        - name: decision_key
+          in: query
+          schema:
+            type: string
+        - name: profile_key
+          in: query
+          schema:
+            type: string
+        - name: event_type
+          in: query
+          schema:
+            type: string
+            enum: [impression, exposure]
+        - name: variant_key
+          in: query
+          schema:
+            type: string
+        - name: message_id
+          in: query
+          schema:
+            type: string
+        - name: surface
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Client event grouped reports
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  metrics:
+                    $ref: "#/components/schemas/ClientEventMetrics"
   /v1/rule-sets/{key}:
     get:
       summary: Get a rule set with draft and latest published version
@@ -1544,6 +1593,53 @@ components:
                 type: array
                 items:
                   type: string
+    ClientEventMetrics:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        filters:
+          type: object
+        by_rule:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientEventGroup"
+        by_variant:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientEventGroup"
+        by_message:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientEventGroup"
+        by_surface:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientEventGroup"
+        by_profile:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientEventGroup"
+        recent_events:
+          type: array
+          items:
+            type: object
+    ClientEventGroup:
+      type: object
+      properties:
+        key:
+          type: string
+        event_type:
+          type: string
+          enum: [impression, exposure]
+        count:
+          type: integer
+        unique_profiles:
+          type: integer
+        last_seen_at:
+          type: string
+          nullable: true
     Settings:
       type: object
       properties:

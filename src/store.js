@@ -428,6 +428,68 @@ export class Store {
     };
   }
 
+  getClientEventMetrics(params = {}) {
+    const conditions = [];
+    const values = [];
+    for (const key of ["decision_key", "profile_key", "event_type", "variant_key", "message_id", "surface"]) {
+      if (params[key]) {
+        conditions.push(`${key} = ?`);
+        values.push(params[key]);
+      }
+    }
+    if (params.from) {
+      conditions.push("occurred_at >= ?");
+      values.push(params.from);
+    }
+    if (params.to) {
+      conditions.push("occurred_at <= ?");
+      values.push(params.to);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limit = Math.min(Number(params.limit || 10), 100);
+    const group = (column) =>
+      this.db
+        .prepare(
+          `SELECT ${column} AS key, event_type, COUNT(*) AS count, COUNT(DISTINCT profile_key) AS unique_profiles, MAX(occurred_at) AS last_seen_at
+           FROM client_events
+           ${where}
+           GROUP BY ${column}, event_type
+           ORDER BY count DESC, key ASC
+           LIMIT ?`
+        )
+        .all(...values, limit)
+        .map((row) => ({
+          key: row.key || "(empty)",
+          event_type: row.event_type,
+          count: Number(row.count || 0),
+          unique_profiles: Number(row.unique_profiles || 0),
+          last_seen_at: row.last_seen_at || null
+        }));
+    const recent = this.db
+      .prepare(`SELECT event_json FROM client_events ${where} ORDER BY occurred_at DESC LIMIT ?`)
+      .all(...values, Math.min(Number(params.recent_limit || 20), 100))
+      .map((row) => parse(row.event_json));
+    return {
+      generated_at: createdAtNow(),
+      filters: {
+        decision_key: params.decision_key || "",
+        profile_key: params.profile_key || "",
+        event_type: params.event_type || "",
+        variant_key: params.variant_key || "",
+        message_id: params.message_id || "",
+        surface: params.surface || "",
+        from: params.from || "",
+        to: params.to || ""
+      },
+      by_rule: group("decision_key"),
+      by_variant: group("variant_key"),
+      by_message: group("message_id"),
+      by_surface: group("surface"),
+      by_profile: group("profile_key"),
+      recent_events: recent
+    };
+  }
+
   getRuleMetrics(decisionKey) {
     if (!this.getRuleSet(decisionKey)) notFound(`Rule set not found: ${decisionKey}`);
     const audit = this.queryAudit({ decision_key: decisionKey, limit: 1000 });
