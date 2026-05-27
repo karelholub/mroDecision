@@ -16,7 +16,9 @@ export function requireScope(req, scope) {
     throw error;
   }
 
-  const token = authStore?.verifyApiToken(match[1]) || config.tokens.find((candidate) => candidate.token === match[1]);
+  const storedToken = authStore?.verifyApiToken(match[1]);
+  const bootstrapEnabled = authStore?.bootstrapTokensEnabled?.() ?? config.bootstrapTokensEnabled;
+  const token = storedToken || (bootstrapEnabled ? config.tokens.find((candidate) => candidate.token === match[1]) : null);
   if (!token) {
     const error = new Error("Invalid bearer token");
     error.statusCode = 401;

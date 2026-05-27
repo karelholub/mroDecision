@@ -25,6 +25,7 @@ This initial implementation is dependency-light and runs on Node.js built-ins on
 - Meiro Profile API schema sync from a sample identifier, with optional scheduled refresh
 - Bearer-token authentication with viewer/editor/publisher/admin/evaluate scopes
 - Database-backed API token management
+- Guarded bootstrap-token disablement after a database admin token exists
 - Embedded management UI
 - Meiro integration templates generated from runtime settings
 - Dockerfile and Compose example
@@ -134,6 +135,8 @@ Retention is configurable in Settings:
 - `audit_retention_days` controls evaluation audit retention.
 - `client_event_retention_days` controls impression and exposure retention.
 
+For production, create at least one database-backed token with the `admin` scope, then disable bootstrap tokens in Settings. This prevents the built-in development token or `DEE_TOKENS` bootstrap list from remaining a long-term access path. The service rejects disabling bootstrap tokens until an active DB admin token exists.
+
 For Docker deployments, place the service behind an HTTPS reverse proxy and mount `data/` on durable storage. Back up SQLite by snapshotting `data/dee.sqlite` together with its WAL/SHM sidecar files while the container is stopped, or by using SQLite online backup tooling from the host. Restore by replacing those files before starting the container.
 
 Run a simple local latency check against the Docker service with:
@@ -143,3 +146,5 @@ npm run bench
 ```
 
 Tune it with `DEE_BENCH_URL`, `DEE_BENCH_TOKEN`, `DEE_BENCH_REQUESTS`, `DEE_BENCH_CONCURRENCY`, and `DEE_BENCH_DECISION_KEY`.
+
+Pull requests and pushes to `main` run GitHub Actions checks for JavaScript syntax, the Node test suite, and a Docker image build.

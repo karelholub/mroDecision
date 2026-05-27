@@ -7,6 +7,7 @@ export const config = {
   dbPath: process.env.DEE_DB_PATH || path.join(process.env.DEE_DATA_DIR || path.resolve("data"), "dee.sqlite"),
   auditRetentionDays: Number(process.env.DEE_AUDIT_RETENTION_DAYS || 90),
   clientEventRetentionDays: Number(process.env.DEE_CLIENT_EVENT_RETENTION_DAYS || 180),
+  bootstrapTokensEnabled: process.env.DEE_BOOTSTRAP_TOKENS_ENABLED !== "false",
   tokens: parseTokens(process.env.DEE_TOKENS)
 };
 

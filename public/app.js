@@ -1826,6 +1826,7 @@ async function loadSettings() {
     document.querySelector("#setting-environment-label").value = settings.environment_label || "";
     document.querySelector("#setting-audit-retention-days").value = settings.audit_retention_days || "";
     document.querySelector("#setting-client-event-retention-days").value = settings.client_event_retention_days || "";
+    document.querySelector("#setting-bootstrap-tokens-enabled").value = settings.bootstrap_tokens_enabled === false ? "false" : "true";
     document.querySelector("#setting-meiro-url").value = settings.meiro_url || "";
     document.querySelector("#setting-meiro-source-slug").value = settings.meiro_source_slug || "";
     document.querySelector("#setting-meiro-api-url").value = settings.meiro_api_url || "";
@@ -1850,6 +1851,7 @@ async function saveSettings(event) {
       environment_label: document.querySelector("#setting-environment-label").value.trim(),
       audit_retention_days: Number(document.querySelector("#setting-audit-retention-days").value || 90),
       client_event_retention_days: Number(document.querySelector("#setting-client-event-retention-days").value || 180),
+      bootstrap_tokens_enabled: document.querySelector("#setting-bootstrap-tokens-enabled").value !== "false",
       meiro_url: document.querySelector("#setting-meiro-url").value.trim(),
       meiro_source_slug: document.querySelector("#setting-meiro-source-slug").value.trim(),
       meiro_api_url: document.querySelector("#setting-meiro-api-url").value.trim(),

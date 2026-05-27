@@ -780,6 +780,7 @@ export class Store {
       "environment_label",
       "audit_retention_days",
       "client_event_retention_days",
+      "bootstrap_tokens_enabled",
       "meiro_url",
       "meiro_source_slug",
       "meiro_api_url",
@@ -802,9 +803,24 @@ export class Store {
          updated_by = excluded.updated_by`
     );
     for (const [key, value] of Object.entries(input)) {
+      if (key === "bootstrap_tokens_enabled" && value === false && !this.hasActiveAdminToken()) {
+        badRequest("Create an active DB admin token before disabling bootstrap tokens");
+      }
       if (allowed.has(key)) upsert.run(key, stringify(value), now, author);
     }
     return this.getSettings();
+  }
+
+  bootstrapTokensEnabled() {
+    const row = this.db.prepare("SELECT value_json FROM settings WHERE key = 'bootstrap_tokens_enabled'").get();
+    return row ? parse(row.value_json) !== false : config.bootstrapTokensEnabled;
+  }
+
+  hasActiveAdminToken() {
+    return this.db
+      .prepare("SELECT scopes_json FROM api_tokens WHERE revoked_at IS NULL")
+      .all()
+      .some((row) => parse(row.scopes_json).includes("admin"));
   }
 
   getAuditRetentionDays() {
@@ -1031,6 +1047,7 @@ function seedSettings(db) {
     environment_label: "local",
     audit_retention_days: config.auditRetentionDays,
     client_event_retention_days: config.clientEventRetentionDays,
+    bootstrap_tokens_enabled: config.bootstrapTokensEnabled,
     meiro_url: "",
     meiro_source_slug: "",
     meiro_api_url: "",

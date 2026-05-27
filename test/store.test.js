@@ -159,6 +159,18 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(store.getAuditRetentionDays(), 30);
   assert.equal(store.getClientEventRetentionDays(), 45);
   assert.equal(store.health().ok, true);
+  assert.equal(store.bootstrapTokensEnabled(), true);
+  assert.equal(store.hasActiveAdminToken(), false);
+  assert.throws(
+    () => store.updateSettings({ bootstrap_tokens_enabled: false }, "tester"),
+    /Create an active DB admin token/
+  );
+  const adminToken = store.createApiToken({ name: "Admin token", scopes: ["admin"] }, "tester");
+  assert.match(adminToken.token, /^dee_/);
+  assert.equal(store.hasActiveAdminToken(), true);
+  const hardenedSettings = store.updateSettings({ bootstrap_tokens_enabled: false }, "tester");
+  assert.equal(hardenedSettings.bootstrap_tokens_enabled, false);
+  assert.equal(store.bootstrapTokensEnabled(), false);
 
   const schema = store.replaceSchemaItems("attribute", [{ name: "lead_score", type: "number", dimension: "profile" }], "tester");
   assert.equal(schema[0].name, "lead_score");

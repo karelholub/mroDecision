@@ -1874,6 +1874,9 @@ components:
           type: integer
         client_event_retention_days:
           type: integer
+        bootstrap_tokens_enabled:
+          type: boolean
+          description: Whether configured bootstrap tokens such as DEE_TOKENS remain accepted after database-backed tokens exist.
         meiro_url:
           type: string
         meiro_source_slug:
