@@ -18,6 +18,7 @@ let selectedRuleKey = null;
 let selectedLookupId = null;
 let builderBranches = [];
 let cachedRuleSets = [];
+let cachedLookupTables = [];
 let cachedSettings = {};
 let cachedSchema = [];
 
@@ -80,6 +81,7 @@ loadMetrics();
 loadRules();
 newRule();
 newLookup();
+loadLookups();
 loadSettings();
 loadSchema({ silent: true });
 loadEvaluatePreset();
@@ -477,12 +479,14 @@ async function loadLookups() {
   target.innerHTML = header(["Name", "ID", "Key column", "Rows", "Version"]);
   try {
     const body = await api("/v1/lookup-tables");
+    cachedLookupTables = body.lookup_tables || [];
     target.innerHTML += body.lookup_tables
       .map((item) => row([item.name, item.id, item.key_column, item.rows.length, item.version], { lookupId: item.id }))
       .join("");
     document.querySelectorAll("[data-lookup-id]").forEach((element) => {
       element.addEventListener("click", () => loadLookup(element.dataset.lookupId, body.lookup_tables));
     });
+    renderBranchEditor();
   } catch (error) {
     target.innerHTML += row([error.message, "", "", "", ""]);
   }
@@ -707,10 +711,27 @@ function bindLookupOutputHelper(node, branchIndex) {
   const keyInput = node.querySelector("[data-helper='key']");
   const columnInput = node.querySelector("[data-helper='column']");
   const outputs = parseJsonSafe(branch.outputs || "{}");
-  targetInput.value = "offer_tier";
-  tableInput.value = "offer_tiers";
-  keyInput.value = typeof outputs.offer_id === "string" ? JSON.stringify(outputs.offer_id) : "";
-  columnInput.value = "offer_tier";
+  const existingLookup = firstLookupOutput(outputs);
+  const defaultTable = existingLookup?.table || preferredLookupTable()?.id || "offer_tiers";
+  const table = lookupTableById(defaultTable);
+  const defaultColumn = existingLookup?.column || firstLookupValueColumn(table) || "offer_tier";
+  targetInput.value = existingLookup?.target || defaultColumn;
+  tableInput.value = defaultTable;
+  keyInput.value = existingLookup?.keyExpression || defaultLookupKeyExpression(table, outputs);
+  columnInput.value = defaultColumn;
+  attachLookupDatalist(tableInput, "lookup-table-options", cachedLookupTables.map((item) => item.id));
+  setLookupColumnDatalist(columnInput, table);
+  tableInput.addEventListener("input", () => {
+    const nextTable = lookupTableById(tableInput.value.trim());
+    setLookupColumnDatalist(columnInput, nextTable);
+    const nextColumn = firstLookupValueColumn(nextTable);
+    if (nextColumn) {
+      columnInput.value = nextColumn;
+      if (!targetInput.value || targetInput.value === columnInput.defaultValue) targetInput.value = nextColumn;
+    }
+    const nextKeyExpression = defaultLookupKeyExpression(nextTable, outputs);
+    if (nextKeyExpression) keyInput.placeholder = nextKeyExpression;
+  });
   node.querySelector("[data-action='apply-lookup-output']").addEventListener("click", () => {
     try {
       const target = slug(targetInput.value || columnInput.value);
@@ -727,6 +748,58 @@ function bindLookupOutputHelper(node, branchIndex) {
       editorOutput.textContent = error.message;
     }
   });
+}
+
+function firstLookupOutput(outputs) {
+  for (const [target, value] of Object.entries(outputs || {})) {
+    if (typeof value !== "string") continue;
+    const match = value.match(/^=lookup\("([^"]+)",\s*(.+),\s*"([^"]+)"\)$/);
+    if (match) return { target, table: match[1], keyExpression: match[2].trim(), column: match[3] };
+  }
+  return null;
+}
+
+function preferredLookupTable() {
+  return cachedLookupTables.find((item) => item.id === "offer_tiers") || cachedLookupTables[0] || null;
+}
+
+function lookupTableById(id) {
+  return cachedLookupTables.find((item) => item.id === id) || null;
+}
+
+function lookupColumns(table) {
+  if (!table) return [];
+  return [...new Set((table.rows || []).flatMap((rowItem) => Object.keys(rowItem || {})))];
+}
+
+function firstLookupValueColumn(table) {
+  const columns = lookupColumns(table);
+  return columns.find((column) => column !== table?.key_column) || columns[0] || "";
+}
+
+function defaultLookupKeyExpression(table, outputs) {
+  if (outputs.offer_id) return "outputs.offer_id";
+  if (table?.rows?.[0]?.[table.key_column] != null) return JSON.stringify(table.rows[0][table.key_column]);
+  return table?.key_column ? `attributes.${table.key_column}` : "";
+}
+
+function attachLookupDatalist(input, id, values) {
+  const list = document.createElement("datalist");
+  list.id = `${id}-${Math.random().toString(16).slice(2)}`;
+  list.innerHTML = values.map((value) => `<option value="${escapeHtml(String(value))}"></option>`).join("");
+  input.setAttribute("list", list.id);
+  input.after(list);
+}
+
+function setLookupColumnDatalist(input, table) {
+  input.nextElementSibling?.matches("datalist[data-lookup-columns='true']") && input.nextElementSibling.remove();
+  const columns = lookupColumns(table);
+  const list = document.createElement("datalist");
+  list.dataset.lookupColumns = "true";
+  list.id = `lookup-column-options-${Math.random().toString(16).slice(2)}`;
+  list.innerHTML = columns.map((value) => `<option value="${escapeHtml(String(value))}"></option>`).join("");
+  input.setAttribute("list", list.id);
+  input.after(list);
 }
 
 function bindBranchField(node, branchIndex, field) {
