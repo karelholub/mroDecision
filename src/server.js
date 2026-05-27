@@ -232,6 +232,22 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  if (req.method === "GET" && pathname === "/v1/messages") {
+    requireScope(req, "viewer");
+    sendJson(res, 200, { messages: store.listMessages(Object.fromEntries(url.searchParams)) });
+    return;
+  }
+
+  const messageMatch = pathname.match(/^\/v1\/messages\/([^/]+)$/);
+  if (messageMatch && req.method === "PUT") {
+    requireScope(req, "editor");
+    const message = store.upsertMessage(decodeURIComponent(messageMatch[1]), await readJson(req), req.auth.name);
+    await store.save();
+    clientResultCache.clear();
+    sendJson(res, 200, { message });
+    return;
+  }
+
   const lookupExportMatch = pathname.match(/^\/v1\/lookup-tables\/([^/]+)\/export$/);
   if (lookupExportMatch && req.method === "GET") {
     requireScope(req, "viewer");
@@ -718,7 +734,10 @@ function evaluateClientRequest(body) {
     clientEventCounter: (params) => store.countClientEvents(params)
   });
   const assigned = assignExperimentVariant(ruleSet, request, evaluated);
-  const finalOutputs = assigned ? { ...evaluated.outputs, ...(assigned.outputs || {}) } : evaluated.outputs;
+  const finalOutputs = enrichMessageOutputs(
+    assigned ? { ...evaluated.outputs, ...(assigned.outputs || {}) } : evaluated.outputs,
+    ruleSet
+  );
   const ttlSeconds = Number(ruleSet.cache_policy?.client_ttl || 0);
   store.addAudit({
     ...evaluated,
@@ -751,6 +770,27 @@ function evaluateClientRequest(body) {
   };
   response.cache.expires_at = response.errors.length ? null : clientResultCache.set(cached.cache_key, response, ruleSet);
   return response;
+}
+
+function enrichMessageOutputs(outputs, ruleSet) {
+  const messageId = outputs.message_id || outputs.messageId || outputs.message?.id;
+  if (!messageId) return outputs;
+  const message = store.getMessage(String(messageId));
+  if (!message || message.status === "archived") return outputs;
+  if (message.surface && ruleSet.surface && message.surface !== ruleSet.surface) return outputs;
+  return {
+    ...outputs,
+    message: {
+      id: message.id,
+      name: message.name,
+      surface: message.surface,
+      content: {
+        ...message.default_content,
+        ...(outputs.message_content && typeof outputs.message_content === "object" ? outputs.message_content : {})
+      },
+      metadata: message.metadata
+    }
+  };
 }
 
 function clientEventFromRequest(eventType, body) {

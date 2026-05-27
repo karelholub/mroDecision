@@ -5,6 +5,7 @@ const editorOutput = document.querySelector("#rule-editor-output");
 const branchEditor = document.querySelector("#branch-editor");
 const ruleGraph = document.querySelector("#rule-graph");
 const lookupOutput = document.querySelector("#lookup-output");
+const messageOutput = document.querySelector("#message-output");
 const referenceGrid = document.querySelector("#reference-grid");
 const auditDetail = document.querySelector("#audit-detail");
 const versionList = document.querySelector("#version-list");
@@ -19,6 +20,7 @@ const ruleDetailPanel = document.querySelector("#metrics-rule-detail");
 const clientEventsPanel = document.querySelector("#metrics-client-events");
 let selectedRuleKey = null;
 let selectedLookupId = null;
+let selectedMessageId = null;
 let builderBranches = [];
 let cachedRuleSets = [];
 let cachedLookupTables = [];
@@ -42,6 +44,7 @@ document.querySelector("#rule-filter-type").addEventListener("change", renderRul
 document.querySelector("#rule-filter-tag").addEventListener("input", renderRuleList);
 document.querySelector("#refresh-audit").addEventListener("click", loadAudit);
 document.querySelector("#refresh-lookups").addEventListener("click", loadLookups);
+document.querySelector("#refresh-messages").addEventListener("click", loadMessages);
 document.querySelector("#export-lookup-csv").addEventListener("click", exportLookupCsv);
 document.querySelector("#refresh-settings").addEventListener("click", loadSettings);
 document.querySelector("#refresh-integration").addEventListener("click", loadIntegration);
@@ -63,6 +66,7 @@ document.querySelector("#eval-profile-key").addEventListener("input", () => {
 });
 document.querySelector("#new-rule").addEventListener("click", newRule);
 document.querySelector("#new-lookup").addEventListener("click", newLookup);
+document.querySelector("#new-message").addEventListener("click", newMessage);
 document.querySelector("#export-config").addEventListener("click", exportConfig);
 document.querySelector("#sync-json").addEventListener("click", syncJsonFromBuilder);
 document.querySelector("#add-branch").addEventListener("click", () => {
@@ -76,6 +80,7 @@ document.querySelector("#rule-draft").addEventListener("change", syncBuilderFrom
 document.querySelector("#fallback-result").addEventListener("input", syncJsonFromBuilder);
 document.querySelector("#fallback-outputs").addEventListener("change", syncJsonFromBuilder);
 document.querySelector("#lookup-editor").addEventListener("submit", saveLookup);
+document.querySelector("#message-editor").addEventListener("submit", saveMessage);
 document.querySelector("#import-lookup-csv").addEventListener("click", importLookupCsv);
 document.querySelector("#add-reference-row").addEventListener("click", addReferenceRow);
 document.querySelector("#add-reference-column").addEventListener("click", addReferenceColumn);
@@ -89,7 +94,9 @@ loadMetrics();
 loadRules();
 newRule();
 newLookup();
+newMessage();
 loadLookups();
+loadMessages();
 loadSettings();
 loadSchema({ silent: true });
 loadEvaluatePreset();
@@ -646,6 +653,88 @@ async function loadLookups() {
   }
 }
 
+async function loadMessages() {
+  const target = document.querySelector("#message-list");
+  target.innerHTML = header(["Name", "ID", "Surface", "Status", "Updated"]);
+  try {
+    const body = await api("/v1/messages");
+    target.innerHTML += body.messages.length
+      ? body.messages.map((item) => row([item.name, item.id, item.surface || "-", item.status, item.updated_at], { messageId: item.id })).join("")
+      : row(["No messages", "", "", "", ""]);
+    document.querySelectorAll("[data-message-id]").forEach((element) => {
+      element.addEventListener("click", () => loadMessage(element.dataset.messageId, body.messages));
+    });
+  } catch (error) {
+    target.innerHTML += row([error.message, "", "", "", ""]);
+  }
+}
+
+function newMessage() {
+  selectedMessageId = null;
+  document.querySelector("#message-id").value = "hero_offer";
+  document.querySelector("#message-id").disabled = false;
+  document.querySelector("#message-name").value = "Hero Offer";
+  document.querySelector("#message-surface").value = "homepage_hero";
+  document.querySelector("#message-status").value = "active";
+  document.querySelector("#message-content").value = JSON.stringify({
+    title: "Special offer",
+    body: "A personalized offer is ready.",
+    cta_label: "View offer",
+    image_url: ""
+  }, null, 2);
+  document.querySelector("#message-schema").value = JSON.stringify({
+    title: "string",
+    body: "string",
+    cta_label: "string",
+    image_url: "url"
+  }, null, 2);
+  document.querySelector("#message-metadata").value = JSON.stringify({}, null, 2);
+  messageOutput.textContent = "Ready for a new message";
+}
+
+function loadMessage(id, messages) {
+  const message = messages.find((item) => item.id === id);
+  if (!message) {
+    messageOutput.textContent = `Message not found: ${id}`;
+    return;
+  }
+  selectedMessageId = id;
+  document.querySelector("#message-id").value = message.id;
+  document.querySelector("#message-id").disabled = true;
+  document.querySelector("#message-name").value = message.name;
+  document.querySelector("#message-surface").value = message.surface || "";
+  document.querySelector("#message-status").value = message.status || "active";
+  document.querySelector("#message-content").value = JSON.stringify(message.default_content || {}, null, 2);
+  document.querySelector("#message-schema").value = JSON.stringify(message.content_schema || {}, null, 2);
+  document.querySelector("#message-metadata").value = JSON.stringify(message.metadata || {}, null, 2);
+  messageOutput.textContent = `Loaded ${id}`;
+}
+
+async function saveMessage(event) {
+  event.preventDefault();
+  try {
+    const id = selectedMessageId || document.querySelector("#message-id").value.trim();
+    const body = {
+      name: document.querySelector("#message-name").value.trim() || id,
+      surface: document.querySelector("#message-surface").value.trim(),
+      status: document.querySelector("#message-status").value,
+      default_content: JSON.parse(document.querySelector("#message-content").value || "{}"),
+      content_schema: JSON.parse(document.querySelector("#message-schema").value || "{}"),
+      metadata: JSON.parse(document.querySelector("#message-metadata").value || "{}")
+    };
+    const response = await api(`/v1/messages/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(body)
+    });
+    selectedMessageId = response.message.id;
+    document.querySelector("#message-id").disabled = true;
+    messageOutput.textContent = JSON.stringify(response, null, 2);
+    await loadMessages();
+  } catch (error) {
+    messageOutput.textContent = error.message;
+  }
+}
+
 async function loadLookupVersions(id) {
   lookupVersionList.innerHTML = header(["Version", "Updated", "Author", "Rows", "Action"]);
   if (!id) {
@@ -707,11 +796,12 @@ function row(values, options = {}) {
   const attrs = [
     options.key ? `data-rule-key="${escapeHtml(options.key)}"` : "",
     options.lookupId ? `data-lookup-id="${escapeHtml(options.lookupId)}"` : "",
+    options.messageId ? `data-message-id="${escapeHtml(options.messageId)}"` : "",
     options.metricRuleKey ? `data-metric-rule-key="${escapeHtml(options.metricRuleKey)}"` : "",
     Number.isInteger(options.auditIndex) ? `data-audit-index="${options.auditIndex}"` : "",
     options.tokenId ? `data-token-id="${escapeHtml(options.tokenId)}"` : ""
   ].filter(Boolean).join(" ");
-  const className = options.key || options.lookupId || options.metricRuleKey || Number.isInteger(options.auditIndex) || options.tokenId ? "row actionable" : "row";
+  const className = options.key || options.lookupId || options.messageId || options.metricRuleKey || Number.isInteger(options.auditIndex) || options.tokenId ? "row actionable" : "row";
   return `<div class="${className}" ${attrs}>${values.map((value, index) => `<div>${options.rawColumns?.includes(index) ? String(value ?? "") : escapeHtml(String(value ?? ""))}</div>`).join("")}</div>`;
 }
 

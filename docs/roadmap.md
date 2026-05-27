@@ -35,6 +35,7 @@ Important gaps:
 - First client-facing endpoint exists: `POST /v1/client/evaluate`.
 - Deterministic experiment assignment exists for configured variants.
 - First impression/exposure feedback endpoints and event reports exist; in-app message library is still pending.
+- In-app message library stores reusable content for client decisions.
 - No role model beyond token scopes.
 
 ## Phase 1: Harden the Core Decision Engine
@@ -114,7 +115,7 @@ Goal: support feedback loops and operational reporting for client surfaces.
 - Add exposure and impression reports by rule set, variant, message, surface, and profile.
 - Add optional export format for downstream analytics or Meiro ingestion.
 
-Status: first-pass feedback ingestion is implemented with client-scoped impression and exposure endpoints, service metrics, event reports by rule, variant, message, surface, and profile, and a `frequency_cap` graph node backed by impression events.
+Status: first-pass feedback ingestion is implemented with client-scoped impression and exposure endpoints, service metrics, event reports by rule, variant, message, surface, and profile, a `frequency_cap` graph node backed by impression events, and a reusable message library.
 
 Open decision: defer mutual exclusion groups until basic experiment evaluation and exposure feedback are proven.
 
@@ -133,7 +134,7 @@ Goal: make the service deployable beyond local demo.
 ## Recommended Next Sprint
 
 1. Build first-pass advanced graph editor.
-2. Add in-app message library with content schemas and default content.
+2. Add in-app surface priority evaluation.
 3. Add data-retention controls beyond audit logs.
 4. Add CI/deployment hardening for hosted environments.
 5. Add broader Meiro catalog sync if/when segment schema APIs are confirmed.

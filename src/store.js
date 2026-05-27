@@ -643,6 +643,73 @@ export class Store {
     return rowToLookupTable(row);
   }
 
+  listMessages(params = {}) {
+    const conditions = [];
+    const values = [];
+    if (params.status) {
+      conditions.push("status = ?");
+      values.push(params.status);
+    }
+    if (params.surface) {
+      conditions.push("surface = ?");
+      values.push(params.surface);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    return this.db
+      .prepare(`SELECT * FROM messages ${where} ORDER BY updated_at DESC, id ASC`)
+      .all(...values)
+      .map(rowToMessage);
+  }
+
+  upsertMessage(id, input, author) {
+    if (!id) badRequest("Message id is required");
+    const existing = this.db.prepare("SELECT * FROM messages WHERE id = ?").get(id);
+    const now = createdAtNow();
+    const message = {
+      id,
+      name: input.name || existing?.name || id,
+      surface: input.surface || existing?.surface || "",
+      status: ["active", "archived"].includes(input.status) ? input.status : existing?.status || "active",
+      content_schema: isPlainObject(input.content_schema) ? input.content_schema : existing ? parse(existing.content_schema_json) : {},
+      default_content: isPlainObject(input.default_content) ? input.default_content : existing ? parse(existing.default_content_json) : {},
+      metadata: isPlainObject(input.metadata) ? input.metadata : existing ? parse(existing.metadata_json) : {},
+      updated_at: now,
+      author
+    };
+    this.db
+      .prepare(
+        `INSERT INTO messages (
+          id, name, surface, status, content_schema_json, default_content_json, metadata_json, updated_at, author
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          surface = excluded.surface,
+          status = excluded.status,
+          content_schema_json = excluded.content_schema_json,
+          default_content_json = excluded.default_content_json,
+          metadata_json = excluded.metadata_json,
+          updated_at = excluded.updated_at,
+          author = excluded.author`
+      )
+      .run(
+        message.id,
+        message.name,
+        message.surface,
+        message.status,
+        stringify(message.content_schema),
+        stringify(message.default_content),
+        stringify(message.metadata),
+        message.updated_at,
+        message.author
+      );
+    return message;
+  }
+
+  getMessage(id) {
+    const row = this.db.prepare("SELECT * FROM messages WHERE id = ?").get(id);
+    return row ? rowToMessage(row) : null;
+  }
+
   listApiTokens() {
     return this.db
       .prepare("SELECT id, name, scopes_json, decision_keys_json, created_at, last_used_at, revoked_at FROM api_tokens ORDER BY created_at DESC")
@@ -741,7 +808,8 @@ export class Store {
         ...rowToRuleSet(row),
         versions: this.getVersionsForRuleSet(row.decision_key)
       })),
-      lookup_tables: this.listLookupTables()
+      lookup_tables: this.listLookupTables(),
+      messages: this.listMessages()
     };
     if (includeAudit) {
       bundle.audit = this.db
@@ -753,7 +821,7 @@ export class Store {
   }
 
   importBundle(bundle, author) {
-    const imported = { rule_sets: 0, lookup_tables: 0 };
+    const imported = { rule_sets: 0, lookup_tables: 0, messages: 0 };
     this.transaction(() => {
       for (const ruleSet of bundle.rule_sets) {
         this.upsertRuleSet(ruleSet, author);
@@ -762,6 +830,10 @@ export class Store {
       for (const table of bundle.lookup_tables || []) {
         this.replaceLookupTable(table.id, table, author);
         imported.lookup_tables += 1;
+      }
+      for (const message of bundle.messages || []) {
+        this.upsertMessage(message.id, message, author);
+        imported.messages += 1;
       }
     });
     return imported;
@@ -843,6 +915,18 @@ function migrate(db) {
       PRIMARY KEY (id, version)
     );
 
+    CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      surface TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL CHECK (status IN ('active', 'archived')),
+      content_schema_json TEXT NOT NULL DEFAULT '{}',
+      default_content_json TEXT NOT NULL DEFAULT '{}',
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL,
+      author TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       evaluated_at TEXT NOT NULL,
@@ -912,6 +996,7 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash);
     CREATE INDEX IF NOT EXISTS idx_schema_items_kind ON schema_items(kind, name);
     CREATE INDEX IF NOT EXISTS idx_lookup_table_versions ON lookup_table_versions(id, version);
+    CREATE INDEX IF NOT EXISTS idx_messages_surface_status ON messages(surface, status);
   `);
   ensureColumn(db, "rule_sets", "type", "TEXT NOT NULL DEFAULT 'decision'");
   ensureColumn(db, "rule_sets", "priority", "INTEGER NOT NULL DEFAULT 0");
@@ -1190,6 +1275,20 @@ function rowToLookupTableVersionSummary(row) {
     name: row.name,
     key_column: row.key_column,
     row_count: parse(row.rows_json).length,
+    updated_at: row.updated_at,
+    author: row.author
+  };
+}
+
+function rowToMessage(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    surface: row.surface || "",
+    status: row.status || "active",
+    content_schema: parse(row.content_schema_json || "{}"),
+    default_content: parse(row.default_content_json || "{}"),
+    metadata: parse(row.metadata_json || "{}"),
     updated_at: row.updated_at,
     author: row.author
   };

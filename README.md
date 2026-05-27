@@ -11,6 +11,7 @@ This initial implementation is dependency-light and runs on Node.js built-ins on
 - Single and batch evaluation APIs
 - Client evaluation API for app-facing decisions and experiments
 - Client impression and exposure feedback APIs
+- In-app message library with reusable default content
 - Safe expression evaluation without `eval`
 - Basic rule-builder style branches and advanced graph nodes
 - Generic reference data table storage for catalogs, matrices, mappings, and suppressions
@@ -64,6 +65,8 @@ DEE_DB_PATH=/path/to/dee.sqlite npm start
 - `POST /v1/client/evaluate`
 - `POST /v1/client/impression`
 - `POST /v1/client/exposure`
+- `GET /v1/messages`
+- `PUT /v1/messages/:id`
 - `GET /v1/rule-sets`
 - `GET /v1/rule-sets/:key`
 - `GET /v1/rule-sets/:key/versions`

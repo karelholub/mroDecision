@@ -126,6 +126,19 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(store.listLookupTableVersions("tiers").length, 2);
   assert.equal(store.getLookupTableVersion("tiers", 1).rows[0].tier, "A");
   assert.equal(store.getLookupTableVersion("tiers", 2).rows[0].tier, "B");
+  const message = store.upsertMessage(
+    "hero_offer",
+    {
+      name: "Hero Offer",
+      surface: "homepage",
+      default_content: { title: "Hello", body: "Offer body" },
+      content_schema: { title: "string", body: "string" }
+    },
+    "tester"
+  );
+  assert.equal(message.status, "active");
+  assert.equal(store.getMessage("hero_offer").default_content.title, "Hello");
+  assert.equal(store.listMessages({ surface: "homepage" })[0].id, "hero_offer");
 
   const apiToken = store.createApiToken({ name: "Evaluate token", scopes: ["evaluate"] }, "tester");
   assert.match(apiToken.token, /^dee_/);
@@ -154,6 +167,7 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(bundle.rule_sets.length, 2);
   assert.equal(bundle.rule_sets.find((item) => item.decision_key === "campaign_suppression").type, "inapp_message");
   assert.equal(bundle.lookup_tables.length, 1);
+  assert.equal(bundle.messages.length, 1);
 
   store.close();
   const reopened = await Store.load();

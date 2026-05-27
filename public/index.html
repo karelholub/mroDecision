@@ -17,6 +17,7 @@
         <button data-view="rules">Rule Sets</button>
         <button data-view="test">Evaluate</button>
         <button data-view="audit">Audit</button>
+        <button data-view="messages">Messages</button>
         <button data-view="lookups">Reference Data</button>
         <button data-view="settings">Settings</button>
       </nav>
@@ -371,6 +372,63 @@
             <div class="editor-title">Audit Detail</div>
             <pre id="audit-detail"></pre>
           </div>
+        </div>
+      </section>
+
+      <section id="messages" class="view">
+        <header>
+          <div>
+            <h2>Messages</h2>
+            <p class="page-subtitle">Manage reusable in-app message content returned by client decisions.</p>
+          </div>
+          <button id="refresh-messages">Refresh</button>
+        </header>
+        <div class="split">
+          <div class="editor">
+            <div class="editor-title">Message Library</div>
+            <div id="message-list" class="table"></div>
+          </div>
+          <form id="message-editor" class="editor">
+            <div class="editor-title">Message Content</div>
+            <div class="grid-two">
+              <label>
+                Message ID
+                <input id="message-id" required pattern="[a-zA-Z0-9_-]+" />
+              </label>
+              <label>
+                Name
+                <input id="message-name" required />
+              </label>
+              <label>
+                Surface
+                <input id="message-surface" placeholder="homepage_hero" />
+              </label>
+              <label>
+                Status
+                <select id="message-status">
+                  <option value="active">Active</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              Content JSON
+              <textarea id="message-content" spellcheck="false"></textarea>
+            </label>
+            <label>
+              Content schema JSON
+              <textarea id="message-schema" spellcheck="false"></textarea>
+            </label>
+            <label>
+              Metadata JSON
+              <textarea id="message-metadata" spellcheck="false"></textarea>
+            </label>
+            <div class="actions left">
+              <button type="button" id="new-message">New</button>
+              <button type="submit">Save Message</button>
+            </div>
+            <pre id="message-output"></pre>
+          </form>
         </div>
       </section>
 

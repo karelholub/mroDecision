@@ -688,6 +688,56 @@ paths:
                 properties:
                   lookup_table:
                     $ref: "#/components/schemas/LookupTable"
+  /v1/messages:
+    get:
+      summary: List in-app message library items
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, archived]
+        - name: surface
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Message library items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Message"
+  /v1/messages/{id}:
+    put:
+      summary: Create or update an in-app message library item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageWrite"
+      responses:
+        "200":
+          description: Saved message
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    $ref: "#/components/schemas/Message"
   /v1/schema:
     get:
       summary: List cached Meiro schema items
@@ -1323,6 +1373,52 @@ components:
           format: date-time
         author:
           type: string
+    Message:
+      type: object
+      required: [id, name, status, default_content]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        surface:
+          type: string
+        status:
+          type: string
+          enum: [active, archived]
+        content_schema:
+          type: object
+          additionalProperties: true
+        default_content:
+          type: object
+          additionalProperties: true
+        metadata:
+          type: object
+          additionalProperties: true
+        updated_at:
+          type: string
+          format: date-time
+        author:
+          type: string
+    MessageWrite:
+      type: object
+      properties:
+        name:
+          type: string
+        surface:
+          type: string
+        status:
+          type: string
+          enum: [active, archived]
+        content_schema:
+          type: object
+          additionalProperties: true
+        default_content:
+          type: object
+          additionalProperties: true
+        metadata:
+          type: object
+          additionalProperties: true
     SchemaItem:
       type: object
       required: [kind, name, type]
@@ -1398,6 +1494,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LookupTable"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
     ApiToken:
       type: object
       required: [id, name, scopes, decision_keys, created_at]
