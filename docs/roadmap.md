@@ -20,6 +20,7 @@ Implemented:
 - Scheduled Meiro Profile API schema sync when API settings and sample identifier are configured.
 - Rule Builder key suggestions from cached attributes, segments, and context keys.
 - Client-side broken-reference warnings with publish blocking when cached schema references are invalid.
+- In-process client response caching based on rule TTL and cache scope.
 - Rule-set list search/filter controls with duplicate and archive actions.
 - Version history panel with published-version diff and rollback into draft.
 - Audit date filtering and CSV export.
@@ -89,13 +90,14 @@ Goal: add the new v2 surface types while keeping them isolated from the server-s
 - Add `POST /v1/client/evaluate`.
 - Add rule set types: `decision`, `inapp_message`, and `experiment`.
 - Add client-safe response shaping with `ttl_seconds`; authoring UI now captures response TTL hints in rule cache policy.
-- Add in-process result cache and attribute cache with TTL policy.
+- Add in-process result cache with TTL policy.
+- Add attribute/profile enrichment cache with TTL policy.
 - Add deterministic bucket hashing for experiments.
 - Add experiment allocation validation where weights sum to 100%.
 - Add forced variant and holdout overrides.
 - Add experiment freeze warnings when launched allocations or eligibility change.
 
-Status: first-pass client evaluation is implemented with client tokens, allowed decision keys, TTL response hints, deterministic experiment bucketing, forced variants, and allocation validation. Profile enrichment, result caching, richer app/environment scoping, and experiment freeze warnings remain.
+Status: first-pass client evaluation is implemented with client tokens, allowed decision keys, TTL response hints, deterministic experiment bucketing, forced variants, allocation validation, and in-process result caching. Profile enrichment, attribute caching, richer app/environment scoping, and experiment freeze warnings remain.
 
 Open decision: client calls require profile enrichment. Confirm whether the first production version should support Profile API enrichment or allow context-only rules until Profile API latency is benchmarked.
 
@@ -129,7 +131,7 @@ Goal: make the service deployable beyond local demo.
 ## Recommended Next Sprint
 
 1. Build first-pass advanced graph editor.
-2. Add in-process result cache and attribute cache with TTL policy.
+2. Add first client impression/exposure feedback endpoints.
 3. Add data-retention controls beyond audit logs.
 4. Add CI/deployment hardening for hosted environments.
 5. Add broader Meiro catalog sync if/when segment schema APIs are confirmed.

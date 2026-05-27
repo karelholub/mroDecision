@@ -3,6 +3,7 @@ import { URL } from "node:url";
 import { createHash } from "node:crypto";
 import { requireScope, setAuthStore } from "./auth.js";
 import { config } from "./config.js";
+import { createClientResultCache } from "./clientCache.js";
 import { evaluateDecision } from "./evaluator.js";
 import { notFound, readJson, sendError, sendJson, sendText, serveStatic } from "./http.js";
 import { Store } from "./store.js";
@@ -16,6 +17,7 @@ import {
 } from "./validation.js";
 
 const store = await Store.load();
+const clientResultCache = createClientResultCache();
 setAuthStore(store);
 let schemaSyncTimer = null;
 let schemaSyncNextRunAt = "";
@@ -105,7 +107,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "GET" && pathname === "/v1/metrics") {
     requireScope(req, "viewer");
-    sendJson(res, 200, { metrics: store.getMetrics() });
+    sendJson(res, 200, { metrics: { ...store.getMetrics(), client_cache: clientResultCache.metrics() } });
     return;
   }
 
@@ -123,6 +125,7 @@ async function routeApi(req, res, url) {
     validateRuleDefinition(body.draft || body.definition || {}, body.input_schema || {});
     const ruleSet = store.createRuleSet(body, req.auth.name);
     await store.save();
+    clientResultCache.clear();
     sendJson(res, 201, { rule_set: publicRuleSet(ruleSet) });
     return;
   }
@@ -139,6 +142,7 @@ async function routeApi(req, res, url) {
     validateBundle(body);
     const imported = store.importBundle(body, req.auth.name);
     await store.save();
+    clientResultCache.clear();
     sendJson(res, 200, { imported });
     return;
   }
@@ -243,6 +247,7 @@ async function routeApi(req, res, url) {
     requireScope(req, "editor");
     const table = store.replaceLookupTable(decodeURIComponent(lookupMatch[1]), await readJson(req), req.auth.name);
     await store.save();
+    clientResultCache.clear();
     sendJson(res, 200, { lookup_table: table });
     return;
   }
@@ -508,6 +513,7 @@ async function routeRuleSet(req, res, key, suffix) {
     requireScope(req, "editor");
     const ruleSet = store.rollbackDraftToVersion(key, Number(versionRollbackMatch[1]), req.auth.name);
     await store.save();
+    clientResultCache.clear();
     sendJson(res, 200, { rule_set: publicRuleSet(ruleSet), draft: ruleSet.draft });
     return;
   }
@@ -521,6 +527,7 @@ async function routeRuleSet(req, res, key, suffix) {
     validateRuleDefinition(body.draft || body.definition || {}, body.input_schema || existing.input_schema || {});
     const ruleSet = store.updateDraft(key, body, req.auth.name);
     await store.save();
+    clientResultCache.clear();
     sendJson(res, 200, { rule_set: publicRuleSet(ruleSet), draft: ruleSet.draft });
     return;
   }
@@ -532,6 +539,7 @@ async function routeRuleSet(req, res, key, suffix) {
     validateRuleDefinition(ruleSet.draft, ruleSet.input_schema || {});
     const version = store.publish(key, req.auth.name);
     await store.save();
+    clientResultCache.clear();
     sendJson(res, 200, { version });
     return;
   }
@@ -540,6 +548,7 @@ async function routeRuleSet(req, res, key, suffix) {
     requireScope(req, "editor");
     const ruleSet = store.archiveRuleSet(key, req.auth.name);
     await store.save();
+    clientResultCache.clear();
     sendJson(res, 200, { rule_set: publicRuleSet(ruleSet) });
     return;
   }
@@ -556,6 +565,7 @@ async function routeRuleSet(req, res, key, suffix) {
     );
     const ruleSet = store.duplicateRuleSet(key, body, req.auth.name);
     await store.save();
+    clientResultCache.clear();
     sendJson(res, 201, { rule_set: publicRuleSet(ruleSet), draft: ruleSet.draft });
     return;
   }
@@ -674,6 +684,18 @@ function evaluateClientRequest(body) {
     context: {},
     ...body
   };
+  const cached = clientResultCache.get(request, ruleSet, version);
+  if (cached.hit) {
+    return {
+      ...cached.value,
+      ttl_seconds: cached.ttl_seconds,
+      cache: {
+        hit: true,
+        scope: ruleSet.cache_policy?.scope || "profile",
+        expires_at: cached.expires_at
+      }
+    };
+  }
   const evaluated = evaluateDecision({
     request,
     version,
@@ -694,7 +716,7 @@ function evaluateClientRequest(body) {
       request_source: "client"
     }
   });
-  return {
+  const response = {
     decision_key: evaluated.decision_key,
     profile_key: evaluated.profile_key,
     result: evaluated.result,
@@ -702,10 +724,17 @@ function evaluateClientRequest(body) {
     rule_version: evaluated.rule_version,
     ttl_seconds: Number.isFinite(ttlSeconds) && ttlSeconds > 0 ? ttlSeconds : 0,
     cache_scope: ruleSet.cache_policy?.scope || null,
+    cache: {
+      hit: false,
+      scope: ruleSet.cache_policy?.scope || null,
+      expires_at: null
+    },
     experiment: assigned ? { variant_key: assigned.key, bucket: assigned.bucket } : null,
     matched_rules: evaluated.matched_rules,
     errors: evaluated.errors
   };
+  response.cache.expires_at = response.errors.length ? null : clientResultCache.set(cached.cache_key, response, ruleSet);
+  return response;
 }
 
 function assignExperimentVariant(ruleSet, request, evaluated) {

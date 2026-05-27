@@ -134,11 +134,13 @@ function renderMetrics(metrics) {
   const requests = metrics.requests || {};
   const rules = metrics.rules || {};
   const schema = metrics.schema || {};
+  const cache = metrics.client_cache || {};
   metricCards.innerHTML = [
     metricCard("Requests 24h", formatNumber(requests.last_24h), `${formatNumber(requests.total)} total`),
     metricCard("Unique Profiles", formatNumber(requests.unique_profiles), "Seen in audit log"),
     metricCard("Published Rules", formatNumber(rules.published), `${formatNumber(rules.draft)} drafts`),
-    metricCard("Schema Items", formatNumber(schema.total), `${schema.last_sync_status || "never"} sync`)
+    metricCard("Schema Items", formatNumber(schema.total), `${schema.last_sync_status || "never"} sync`),
+    metricCard("Client Cache", `${Math.round((cache.hit_rate || 0) * 100)}%`, `${formatNumber(cache.entries || 0)} active entries`)
   ].join("");
 
   renderRuleUsage(metrics.rule_usage || []);
@@ -155,7 +157,9 @@ function renderMetrics(metrics) {
     statusItem("Context keys", formatNumber(schema.context || 0)),
     statusItem("Last sync", schema.last_synced_at ? formatTime(schema.last_synced_at) : "never"),
     statusItem("Imported last sync", formatNumber(schema.last_sync_count || 0)),
-    statusItem("Reference tables", formatNumber(metrics.lookups?.total || 0))
+    statusItem("Reference tables", formatNumber(metrics.lookups?.total || 0)),
+    statusItem("Cache hits", formatNumber(cache.hits || 0)),
+    statusItem("Cache misses", formatNumber(cache.misses || 0))
   ].join("");
   if (ruleDetailPanel && !ruleDetailPanel.textContent.trim()) {
     ruleDetailPanel.innerHTML = `<div class="status-line">Select a rule in Rule Usage to inspect recent decisions, fallback rate, and matched branch frequency.</div>`;

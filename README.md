@@ -16,6 +16,7 @@ This initial implementation is dependency-light and runs on Node.js built-ins on
 - Audit log queries and operational metrics
 - Per-rule usage detail with fallback, branch, and recent decision views
 - Response TTL hints for cache-aware decision clients
+- In-process client response caching based on rule TTL and cache scope
 - Client API tokens with optional allowed decision-key restrictions
 - Manual schema cache import for attribute, segment, and context definitions
 - Schema-aware rule builder key suggestions and broken-reference warnings
