@@ -216,6 +216,69 @@ select {
   gap: 12px;
 }
 
+.rule-graph {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.graph-stage {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(220px, 1.4fr) minmax(150px, 0.7fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.graph-lane {
+  display: grid;
+  gap: 10px;
+}
+
+.graph-node,
+.graph-empty {
+  display: grid;
+  gap: 5px;
+  min-height: 108px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: left;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.graph-node {
+  height: 100%;
+}
+
+button.graph-node {
+  cursor: pointer;
+}
+
+button.graph-node:hover {
+  border-color: var(--accent);
+}
+
+.graph-kicker,
+.graph-node small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.branch-node {
+  background: #f7fbfb;
+}
+
+.fallback-node {
+  background: #fbfaf7;
+}
+
+.branch-card.highlight {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.15);
+}
+
 .branch-card {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -319,6 +382,7 @@ pre {
   .filter-bar,
   .grid-two,
   .grid-three,
+  .graph-stage,
   .builder-bar,
   .branch-head,
   .condition-row,

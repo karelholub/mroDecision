@@ -3,6 +3,7 @@ const evalInput = document.querySelector("#eval-input");
 const evalOutput = document.querySelector("#eval-output");
 const editorOutput = document.querySelector("#rule-editor-output");
 const branchEditor = document.querySelector("#branch-editor");
+const ruleGraph = document.querySelector("#rule-graph");
 const lookupOutput = document.querySelector("#lookup-output");
 const auditDetail = document.querySelector("#audit-detail");
 const versionList = document.querySelector("#version-list");
@@ -527,6 +528,7 @@ function renderBranchEditor() {
   branchEditor.innerHTML = "";
   builderBranches.forEach((branch, branchIndex) => {
     const node = document.querySelector("#branch-template").content.firstElementChild.cloneNode(true);
+    node.dataset.branchIndex = String(branchIndex);
     bindBranchField(node, branchIndex, "id");
     bindBranchField(node, branchIndex, "result");
     bindBranchField(node, branchIndex, "outputs");
@@ -565,6 +567,54 @@ function renderBranchEditor() {
     });
 
     branchEditor.append(node);
+  });
+  renderRuleGraph();
+}
+
+function renderRuleGraph() {
+  if (!ruleGraph) return;
+  const fallbackResult = document.querySelector("#fallback-result").value.trim() || "deferred";
+  const fallbackOutputs = parseJsonSafe(document.querySelector("#fallback-outputs").value || "{}");
+  const branchCards = builderBranches.map((branch, index) => {
+    const outputs = parseJsonSafe(branch.outputs || "{}");
+    const conditionText = branch.conditions.length
+      ? `${branch.conditions.length} ${branch.logic === "any" ? "any" : "all"} condition${branch.conditions.length === 1 ? "" : "s"}`
+      : "No conditions";
+    return `
+      <button type="button" class="graph-node branch-node" data-graph-branch="${index}">
+        <span class="graph-kicker">Branch ${index + 1}</span>
+        <strong>${escapeHtml(branch.id || `branch_${index + 1}`)}</strong>
+        <span>${escapeHtml(conditionText)}</span>
+        <span>${escapeHtml(branch.result || "eligible")}</span>
+        <small>${escapeHtml(Object.keys(outputs).length ? `${Object.keys(outputs).length} output field${Object.keys(outputs).length === 1 ? "" : "s"}` : "No outputs")}</small>
+      </button>
+    `;
+  }).join("");
+  ruleGraph.innerHTML = `
+    <div class="graph-stage">
+      <div class="graph-node input-node">
+        <span class="graph-kicker">Input</span>
+        <strong>Profile + context</strong>
+        <span>Attributes, segments, identifiers</span>
+      </div>
+      <div class="graph-lane">
+        ${branchCards || '<div class="graph-empty">Add a branch to start the decision flow.</div>'}
+      </div>
+      <div class="graph-node fallback-node">
+        <span class="graph-kicker">Fallback</span>
+        <strong>${escapeHtml(fallbackResult)}</strong>
+        <span>${escapeHtml(Object.keys(fallbackOutputs).length ? `${Object.keys(fallbackOutputs).length} output field${Object.keys(fallbackOutputs).length === 1 ? "" : "s"}` : "No outputs")}</span>
+      </div>
+    </div>
+  `;
+  ruleGraph.querySelectorAll("[data-graph-branch]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const branchIndex = Number(button.dataset.graphBranch);
+      const target = branchEditor.querySelector(`[data-branch-index="${branchIndex}"]`);
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      target?.classList.add("highlight");
+      setTimeout(() => target?.classList.remove("highlight"), 900);
+    });
   });
 }
 
@@ -647,6 +697,7 @@ function syncJsonFromBuilder() {
     const draft = draftFromBuilder();
     validateDraft(draft);
     document.querySelector("#rule-draft").value = JSON.stringify(draft, null, 2);
+    renderRuleGraph();
     editorOutput.textContent = `Draft synced${formatSchemaWarnings(schemaReferenceWarnings(draft))}`;
   } catch (error) {
     editorOutput.textContent = error.message;
