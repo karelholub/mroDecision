@@ -370,6 +370,36 @@ export class Store {
     };
   }
 
+  getRuleMetrics(decisionKey) {
+    if (!this.getRuleSet(decisionKey)) notFound(`Rule set not found: ${decisionKey}`);
+    const audit = this.queryAudit({ decision_key: decisionKey, limit: 1000 });
+    const total = audit.length;
+    const results = countBy(audit, (entry) => entry.result || "unknown");
+    const matchedBranches = countBy(
+      audit.flatMap((entry) => Array.isArray(entry.matched_rules) && entry.matched_rules.length ? entry.matched_rules : ["fallback"]),
+      (value) => value
+    );
+    const recent = audit.slice(0, 20).map((entry) => ({
+      evaluated_at: entry.evaluated_at,
+      profile_key: entry.profile_key,
+      result: entry.result,
+      rule_version: entry.rule_version,
+      matched_rules: entry.matched_rules || [],
+      outputs: entry.outputs || {},
+      errors: entry.errors || []
+    }));
+    return {
+      decision_key: decisionKey,
+      requests: total,
+      unique_profiles: new Set(audit.map((entry) => entry.profile_key)).size,
+      fallback_count: audit.filter((entry) => !entry.matched_rules?.length).length,
+      error_count: audit.filter((entry) => entry.errors?.length).length,
+      result_distribution: Object.entries(results).map(([result, count]) => ({ result, count })),
+      matched_branch_distribution: Object.entries(matchedBranches).map(([branch, count]) => ({ branch, count })),
+      recent_decisions: recent
+    };
+  }
+
   listSchemaItems(params = {}) {
     const conditions = [];
     const values = [];
@@ -1050,6 +1080,15 @@ function normalizeRuleSetType(type) {
 
 function normalizeCachePolicy(policy) {
   return isPlainObject(policy) ? policy : {};
+}
+
+function countBy(items, fn) {
+  const counts = {};
+  for (const item of items) {
+    const key = fn(item);
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  return counts;
 }
 
 function isPlainObject(value) {

@@ -172,6 +172,21 @@ paths:
                 properties:
                   metrics:
                     $ref: "#/components/schemas/Metrics"
+  /v1/metrics/rule/{key}:
+    get:
+      summary: Get operational usage metrics for one rule set
+      parameters:
+        - $ref: "#/components/parameters/RuleSetKey"
+      responses:
+        "200":
+          description: Rule metrics summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  metrics:
+                    $ref: "#/components/schemas/RuleMetrics"
   /v1/rule-sets/{key}:
     get:
       summary: Get a rule set with draft and latest published version
@@ -1195,6 +1210,61 @@ components:
               last_evaluated_at:
                 type: string
                 nullable: true
+    RuleMetrics:
+      type: object
+      properties:
+        decision_key:
+          type: string
+        requests:
+          type: integer
+        unique_profiles:
+          type: integer
+        fallback_count:
+          type: integer
+        error_count:
+          type: integer
+        result_distribution:
+          type: array
+          items:
+            type: object
+            properties:
+              result:
+                type: string
+              count:
+                type: integer
+        matched_branch_distribution:
+          type: array
+          items:
+            type: object
+            properties:
+              branch:
+                type: string
+              count:
+                type: integer
+        recent_decisions:
+          type: array
+          items:
+            type: object
+            properties:
+              evaluated_at:
+                type: string
+                format: date-time
+              profile_key:
+                type: string
+              result:
+                type: string
+              rule_version:
+                type: integer
+              matched_rules:
+                type: array
+                items:
+                  type: string
+              outputs:
+                type: object
+              errors:
+                type: array
+                items:
+                  type: string
     Settings:
       type: object
       properties:

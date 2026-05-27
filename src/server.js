@@ -91,6 +91,13 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  const ruleMetricsMatch = pathname.match(/^\/v1\/metrics\/rule\/([^/]+)$/);
+  if (ruleMetricsMatch && req.method === "GET") {
+    requireScope(req, "viewer");
+    sendJson(res, 200, { metrics: store.getRuleMetrics(decodeURIComponent(ruleMetricsMatch[1])) });
+    return;
+  }
+
   if (req.method === "POST" && pathname === "/v1/rule-sets") {
     requireScope(req, "editor");
     const body = await readJson(req);

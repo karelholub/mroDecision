@@ -15,6 +15,7 @@ const schemaOutput = document.querySelector("#schema-output");
 const integrationTemplate = document.querySelector("#integration-template");
 const integrationResponse = document.querySelector("#integration-response");
 const metricCards = document.querySelector("#metric-cards");
+const ruleDetailPanel = document.querySelector("#metrics-rule-detail");
 let selectedRuleKey = null;
 let selectedLookupId = null;
 let builderBranches = [];
@@ -140,13 +141,7 @@ function renderMetrics(metrics) {
     metricCard("Schema Items", formatNumber(schema.total), `${schema.last_sync_status || "never"} sync`)
   ].join("");
 
-  renderTable("#metrics-rule-usage", ["Rule", "Requests", "24h", "Profiles", "Last seen"], (metrics.rule_usage || []).map((item) => [
-    item.decision_key,
-    formatNumber(item.requests),
-    formatNumber(item.requests_24h),
-    formatNumber(item.unique_profiles),
-    item.last_evaluated_at ? formatTime(item.last_evaluated_at) : "-"
-  ]));
+  renderRuleUsage(metrics.rule_usage || []);
   renderTable("#metrics-result-distribution", ["Result", "Count", "Share", "", ""], resultDistributionRows(metrics));
   renderTable("#metrics-rule-inventory", ["Status", "Count", "", "", ""], [
     ["Published", formatNumber(rules.published), "", "", ""],
@@ -162,6 +157,82 @@ function renderMetrics(metrics) {
     statusItem("Imported last sync", formatNumber(schema.last_sync_count || 0)),
     statusItem("Reference tables", formatNumber(metrics.lookups?.total || 0))
   ].join("");
+  if (ruleDetailPanel && !ruleDetailPanel.textContent.trim()) {
+    ruleDetailPanel.innerHTML = `<div class="status-line">Select a rule in Rule Usage to inspect recent decisions, fallback rate, and matched branch frequency.</div>`;
+  }
+}
+
+function renderRuleUsage(items) {
+  const target = document.querySelector("#metrics-rule-usage");
+  target.innerHTML = header(["Rule", "Requests", "24h", "Profiles", "Last seen"]);
+  target.innerHTML += items.length
+    ? items.map((item) => row(
+        [
+          item.decision_key,
+          formatNumber(item.requests),
+          formatNumber(item.requests_24h),
+          formatNumber(item.unique_profiles),
+          item.last_evaluated_at ? formatTime(item.last_evaluated_at) : "-"
+        ],
+        { metricRuleKey: item.decision_key }
+      )).join("")
+    : row(["No data yet", "", "", "", ""]);
+  target.querySelectorAll("[data-metric-rule-key]").forEach((element) => {
+    element.addEventListener("click", () => loadRuleMetrics(element.dataset.metricRuleKey));
+  });
+}
+
+async function loadRuleMetrics(key) {
+  try {
+    const body = await api(`/v1/metrics/rule/${encodeURIComponent(key)}`);
+    renderRuleMetricsDetail(body.metrics);
+  } catch (error) {
+    ruleDetailPanel.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderRuleMetricsDetail(metrics) {
+  const fallbackRate = metrics.requests ? Math.round((metrics.fallback_count / metrics.requests) * 100) : 0;
+  ruleDetailPanel.innerHTML = `
+    <div class="detail-summary">
+      ${statusItem("Rule", metrics.decision_key)}
+      ${statusItem("Requests", formatNumber(metrics.requests))}
+      ${statusItem("Fallback rate", `${fallbackRate}%`)}
+      ${statusItem("Errors", formatNumber(metrics.error_count))}
+    </div>
+    <div class="overview-grid">
+      <div>
+        <div class="editor-title">Results</div>
+        <div class="table compact-table">${header(["Result", "Count", "Share", "", ""])}${resultRows(metrics.result_distribution, metrics.requests)}</div>
+      </div>
+      <div>
+        <div class="editor-title">Matched Branches</div>
+        <div class="table compact-table">${header(["Branch", "Count", "Share", "", ""])}${branchRows(metrics.matched_branch_distribution, metrics.requests)}</div>
+      </div>
+    </div>
+    <div>
+      <div class="editor-title">Recent Decisions</div>
+      <div class="table compact-table">${header(["Time", "Profile", "Result", "Version", "Matched"])}${recentDecisionRows(metrics.recent_decisions)}</div>
+    </div>
+  `;
+}
+
+function resultRows(items, total) {
+  return items.length ? items.map((item) => row([item.result, formatNumber(item.count), `${Math.round((item.count / Math.max(1, total)) * 100)}%`, "", ""])).join("") : row(["No data", "", "", "", ""]);
+}
+
+function branchRows(items, total) {
+  return items.length ? items.map((item) => row([item.branch, formatNumber(item.count), `${Math.round((item.count / Math.max(1, total)) * 100)}%`, "", ""])).join("") : row(["No data", "", "", "", ""]);
+}
+
+function recentDecisionRows(items) {
+  return items.length ? items.map((item) => row([
+    formatTime(item.evaluated_at),
+    item.profile_key,
+    item.result,
+    item.rule_version,
+    (item.matched_rules || []).join(", ") || "fallback"
+  ])).join("") : row(["No recent decisions", "", "", "", ""]);
 }
 
 function metricCard(label, value, meta) {
@@ -278,6 +349,8 @@ async function loadRule(key) {
     document.querySelector("#rule-type").value = body.rule_set.type || "decision";
     document.querySelector("#rule-priority").value = body.rule_set.priority || 0;
     document.querySelector("#rule-surface").value = body.rule_set.surface || "";
+    document.querySelector("#rule-client-ttl").value = body.rule_set.cache_policy?.client_ttl ?? "";
+    document.querySelector("#rule-cache-scope").value = body.rule_set.cache_policy?.scope || (body.rule_set.cache_policy?.client_ttl ? "profile" : "none");
     document.querySelector("#rule-description").value = body.rule_set.description || "";
     document.querySelector("#rule-draft").value = JSON.stringify(
       body.draft || body.version?.definition || { fallback: { result: "deferred", outputs: {} }, branches: [] },
@@ -300,6 +373,8 @@ function newRule() {
   document.querySelector("#rule-type").value = "decision";
   document.querySelector("#rule-priority").value = 0;
   document.querySelector("#rule-surface").value = "";
+  document.querySelector("#rule-client-ttl").value = "";
+  document.querySelector("#rule-cache-scope").value = "none";
   document.querySelector("#rule-description").value = "";
   document.querySelector("#fallback-result").value = "ineligible";
   document.querySelector("#fallback-outputs").value = "{}";
@@ -559,10 +634,11 @@ function row(values, options = {}) {
   const attrs = [
     options.key ? `data-rule-key="${escapeHtml(options.key)}"` : "",
     options.lookupId ? `data-lookup-id="${escapeHtml(options.lookupId)}"` : "",
+    options.metricRuleKey ? `data-metric-rule-key="${escapeHtml(options.metricRuleKey)}"` : "",
     Number.isInteger(options.auditIndex) ? `data-audit-index="${options.auditIndex}"` : "",
     options.tokenId ? `data-token-id="${escapeHtml(options.tokenId)}"` : ""
   ].filter(Boolean).join(" ");
-  const className = options.key || options.lookupId || Number.isInteger(options.auditIndex) || options.tokenId ? "row actionable" : "row";
+  const className = options.key || options.lookupId || options.metricRuleKey || Number.isInteger(options.auditIndex) || options.tokenId ? "row actionable" : "row";
   return `<div class="${className}" ${attrs}>${values.map((value, index) => `<div>${options.rawColumns?.includes(index) ? String(value ?? "") : escapeHtml(String(value ?? ""))}</div>`).join("")}</div>`;
 }
 
@@ -586,9 +662,19 @@ function readEditorPayload() {
     type: document.querySelector("#rule-type").value,
     priority: Number(document.querySelector("#rule-priority").value || 0),
     surface: document.querySelector("#rule-surface").value.trim(),
+    cache_policy: readCachePolicy(),
     draft: JSON.parse(document.querySelector("#rule-draft").value),
     tags: []
   };
+}
+
+function readCachePolicy() {
+  const ttl = Number(document.querySelector("#rule-client-ttl").value || 0);
+  const scope = document.querySelector("#rule-cache-scope").value;
+  const policy = {};
+  if (ttl > 0) policy.client_ttl = ttl;
+  if (scope !== "none") policy.scope = scope;
+  return policy;
 }
 
 function parseLiteral(value) {

@@ -257,7 +257,7 @@ header {
 
 .guide-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
 
@@ -424,6 +424,17 @@ textarea {
 .status-panel {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rule-detail-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.detail-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
   gap: 10px;
 }
 
@@ -659,6 +670,7 @@ pre {
   .lookup-guide,
   .guide-grid,
   .status-panel,
+  .detail-summary,
   .grid-two,
   .grid-three,
   .graph-stage,

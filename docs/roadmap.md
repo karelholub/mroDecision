@@ -23,6 +23,7 @@ Implemented:
 - Rule-set list search/filter controls with duplicate and archive actions.
 - Version history panel with published-version diff and rollback into draft.
 - Audit date filtering and CSV export.
+- Overview rule usage drilldown with fallback rate, matched branch distribution, and recent decisions.
 - Embedded UI for rule sets, draft testing, evaluation, audit, lookups, settings, tokens, and Meiro request templates.
 - OpenAPI and Meiro Pipes integration templates.
 
@@ -87,7 +88,7 @@ Goal: add the new v2 surface types while keeping them isolated from the server-s
 - Add public client tokens scoped to application, environment, and allowed `decision_key` values.
 - Add `POST /v1/client/evaluate`.
 - Add rule set types: `decision`, `inapp_message`, and `experiment`.
-- Add client-safe response shaping with `ttl_seconds`.
+- Add client-safe response shaping with `ttl_seconds`; authoring UI now captures response TTL hints in rule cache policy.
 - Add in-process result cache and attribute cache with TTL policy.
 - Add deterministic bucket hashing for experiments.
 - Add experiment allocation validation where weights sum to 100%.

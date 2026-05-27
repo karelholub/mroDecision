@@ -51,6 +51,10 @@
             <div id="metrics-schema-health" class="status-panel"></div>
           </div>
         </div>
+        <div class="editor">
+          <div class="editor-title">Rule Detail</div>
+          <div id="metrics-rule-detail" class="rule-detail-panel"></div>
+        </div>
       </section>
 
       <section id="rules" class="view">
@@ -123,6 +127,21 @@
               <label>
                 Surface
                 <input id="rule-surface" placeholder="homepage_hero" />
+              </label>
+            </div>
+            <div class="grid-two">
+              <label>
+                Response TTL seconds
+                <input id="rule-client-ttl" type="number" min="0" placeholder="300" />
+              </label>
+              <label>
+                TTL scope
+                <select id="rule-cache-scope">
+                  <option value="none">No cache hint</option>
+                  <option value="profile">Profile decision</option>
+                  <option value="session">Session decision</option>
+                  <option value="global">Global response</option>
+                </select>
               </label>
             </div>
             <label>
@@ -381,6 +400,11 @@
             <div class="guide-card">
               <span>Generated output</span>
               <code>=lookup("product_catalog", outputs.product_code, "priority")</code>
+            </div>
+            <div class="guide-card">
+              <span>Optional validity</span>
+              <strong>valid_from / valid_to / ttl_seconds</strong>
+              <small>Use for offers, tariffs, bundles, or other expiring objects.</small>
             </div>
           </div>
         </div>
