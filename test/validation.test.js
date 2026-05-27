@@ -5,7 +5,8 @@ import {
   validateClientEventRequest,
   validateEvaluateRequest,
   validateRuleDefinition,
-  validateRuleSetPayload
+  validateRuleSetPayload,
+  validateClientSurfaceRequest
 } from "../src/validation.js";
 
 test("validates evaluate request shape", () => {
@@ -133,4 +134,19 @@ test("validates client event requests", () => {
     () => validateClientEventRequest({ decision_key: "hero", profile_key: "p1", occurred_at: "not-a-date" }),
     /occurred_at/
   );
+});
+
+test("validates client surface requests", () => {
+  assert.doesNotThrow(() =>
+    validateClientSurfaceRequest({
+      surface: "homepage_hero",
+      profile_key: "p1",
+      attributes: {},
+      segments: {},
+      context: {},
+      limit: 5
+    })
+  );
+  assert.throws(() => validateClientSurfaceRequest({ profile_key: "p1" }), /surface/);
+  assert.throws(() => validateClientSurfaceRequest({ surface: "homepage", profile_key: "p1", limit: 1.5 }), /limit/);
 });

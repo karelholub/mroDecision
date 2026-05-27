@@ -115,7 +115,7 @@ Goal: support feedback loops and operational reporting for client surfaces.
 - Add exposure and impression reports by rule set, variant, message, surface, and profile.
 - Add optional export format for downstream analytics or Meiro ingestion.
 
-Status: first-pass feedback ingestion is implemented with client-scoped impression and exposure endpoints, service metrics, event reports by rule, variant, message, surface, and profile, a `frequency_cap` graph node backed by impression events, and a reusable message library.
+Status: first-pass feedback ingestion is implemented with client-scoped impression and exposure endpoints, service metrics, event reports by rule, variant, message, surface, and profile, a `frequency_cap` graph node backed by impression events, a reusable message library, and surface-level priority evaluation.
 
 Open decision: defer mutual exclusion groups until basic experiment evaluation and exposure feedback are proven.
 
@@ -134,7 +134,7 @@ Goal: make the service deployable beyond local demo.
 ## Recommended Next Sprint
 
 1. Build first-pass advanced graph editor.
-2. Add in-app surface priority evaluation.
+2. Add data-retention controls beyond audit logs.
 3. Add data-retention controls beyond audit logs.
 4. Add CI/deployment hardening for hosted environments.
 5. Add broader Meiro catalog sync if/when segment schema APIs are confirmed.

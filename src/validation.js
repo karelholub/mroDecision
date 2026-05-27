@@ -61,6 +61,18 @@ export function validateClientEvaluateRequest(body) {
   optionalObject(body, "context");
 }
 
+export function validateClientSurfaceRequest(body) {
+  if (!isPlainObject(body)) badRequest("Request body must be an object");
+  requiredString(body, "surface");
+  requiredString(body, "profile_key");
+  optionalObject(body, "attributes");
+  optionalObject(body, "segments");
+  optionalObject(body, "context");
+  if (body.limit != null && !Number.isInteger(Number(body.limit))) {
+    badRequest("limit must be an integer when provided");
+  }
+}
+
 export function validateClientEventRequest(body) {
   if (!isPlainObject(body)) badRequest("Request body must be an object");
   requiredString(body, "decision_key");

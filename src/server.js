@@ -11,6 +11,7 @@ import {
   validateBundle,
   validateClientEventRequest,
   validateClientEvaluateRequest,
+  validateClientSurfaceRequest,
   validateEvaluateRequest,
   validateRuleDefinition,
   validateRuleSetPayload,
@@ -90,6 +91,16 @@ async function routeApi(req, res, url) {
     validateClientEvaluateRequest(body);
     enforceAllowedDecision(req, body.decision_key);
     const result = evaluateClientRequest(body);
+    await store.save();
+    sendJson(res, 200, result);
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/v1/client/surface") {
+    requireScope(req, "client");
+    const body = await readJson(req);
+    validateClientSurfaceRequest(body);
+    const result = evaluateClientSurface(body, req.auth);
     await store.save();
     sendJson(res, 200, result);
     return;
@@ -790,6 +801,55 @@ function enrichMessageOutputs(outputs, ruleSet) {
       },
       metadata: message.metadata
     }
+  };
+}
+
+function evaluateClientSurface(body, auth) {
+  const ruleSets = store
+    .listRuleSets()
+    .filter((ruleSet) =>
+      ruleSet.type === "inapp_message" &&
+      ruleSet.status === "published" &&
+      ruleSet.surface === body.surface &&
+      (!auth.decision_keys?.length || auth.decision_keys.includes(ruleSet.decision_key))
+    )
+    .sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0) || a.decision_key.localeCompare(b.decision_key))
+    .slice(0, Math.min(Number(body.limit || 20), 50));
+
+  const candidates = [];
+  let selected = null;
+  for (const ruleSetSummary of ruleSets) {
+    const result = evaluateClientRequest({
+      ...body,
+      decision_key: ruleSetSummary.decision_key,
+      context: {
+        ...(body.context || {}),
+        surface: body.surface
+      }
+    });
+    const candidate = {
+      decision_key: result.decision_key,
+      priority: ruleSetSummary.priority,
+      result: result.result,
+      message_id: result.outputs?.message_id || result.outputs?.message?.id || "",
+      matched_rules: result.matched_rules,
+      cache: result.cache
+    };
+    candidates.push(candidate);
+    if (!selected && result.result === "eligible") {
+      selected = {
+        ...result,
+        priority: ruleSetSummary.priority,
+        surface: ruleSetSummary.surface
+      };
+    }
+  }
+
+  return {
+    surface: body.surface,
+    profile_key: body.profile_key,
+    selected,
+    candidates
   };
 }
 

@@ -63,6 +63,7 @@ DEE_DB_PATH=/path/to/dee.sqlite npm start
 - `POST /v1/evaluate`
 - `POST /v1/evaluate/batch`
 - `POST /v1/client/evaluate`
+- `POST /v1/client/surface`
 - `POST /v1/client/impression`
 - `POST /v1/client/exposure`
 - `GET /v1/messages`

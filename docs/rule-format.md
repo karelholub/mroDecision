@@ -147,3 +147,5 @@ Rule sets with `"type": "experiment"` can define deterministic variant allocatio
 After rendering a message or exposing an experiment variant, clients can send feedback events to `POST /v1/client/impression` and `POST /v1/client/exposure`. Include `decision_key`, `profile_key`, and any available `rule_version`, `variant_key`, `message_id`, `surface`, or `context` values.
 
 For in-app messages, store reusable content in the message library and return `outputs.message_id` from the rule. `POST /v1/client/evaluate` expands active library content into `outputs.message`, and optional `outputs.message_content` values override the library defaults for that decision.
+
+Clients can call `POST /v1/client/surface` with a `surface` and profile payload to evaluate all published `inapp_message` rules for that surface. The response returns the highest-priority eligible result as `selected` plus a compact candidate list for observability.

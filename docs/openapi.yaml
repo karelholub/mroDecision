@@ -164,6 +164,31 @@ paths:
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
+  /v1/client/surface:
+    post:
+      summary: Evaluate all published in-app messages for a surface and return the highest-priority eligible result
+      description: Requires a token with the `client` scope. Tokens with a decision-key allow-list only evaluate allowed rules.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientSurfaceRequest"
+      responses:
+        "200":
+          description: Surface-selected in-app message response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientSurfaceResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
   /v1/client/impression:
     post:
       summary: Record an in-app message impression
@@ -1145,6 +1170,69 @@ components:
           type: array
           items:
             type: string
+    ClientSurfaceRequest:
+      type: object
+      required: [surface, profile_key]
+      properties:
+        surface:
+          type: string
+        profile_key:
+          type: string
+        limit:
+          type: integer
+          default: 20
+        identifiers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Identifier"
+        attributes:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/AttributeValue"
+        segments:
+          type: object
+          additionalProperties:
+            type: boolean
+        context:
+          type: object
+          additionalProperties: true
+    ClientSurfaceResponse:
+      type: object
+      required: [surface, profile_key, candidates]
+      properties:
+        surface:
+          type: string
+        profile_key:
+          type: string
+        selected:
+          allOf:
+            - $ref: "#/components/schemas/ClientEvaluateResponse"
+            - type: object
+              nullable: true
+              properties:
+                priority:
+                  type: integer
+                surface:
+                  type: string
+        candidates:
+          type: array
+          items:
+            type: object
+            properties:
+              decision_key:
+                type: string
+              priority:
+                type: integer
+              result:
+                type: string
+              message_id:
+                type: string
+              matched_rules:
+                type: array
+                items:
+                  type: string
     ClientEventRequest:
       type: object
       required: [decision_key, profile_key]
