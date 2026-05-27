@@ -10,7 +10,7 @@ Implemented:
 - Server-side `/v1/evaluate` and `/v1/evaluate/batch`.
 - Rule sets with draft, publish, immutable published versions, export, and import.
 - Basic branch rules, safe expressions, lookup expressions, score and lookup graph nodes.
-- Lookup tables with JSON editing and CSV import.
+- Generic reference data tables with JSON editing and CSV import.
 - Audit log with basic filters and configurable retention.
 - Hashed API tokens with `admin` and `evaluate` scopes.
 - Expanded role scopes: `viewer`, `editor`, `publisher`, `admin`, and `evaluate`.
@@ -45,7 +45,7 @@ Goal: make the existing Pipes-facing decision engine closer to production-ready 
 - Add rule set search and filters by status, type, tag, and key.
 - Add archive and duplicate actions.
 - Add audit date range filters and CSV export.
-- Add lookup table CSV export and independent lookup version history.
+- Add reference data CSV export and independent table version history.
 - Add version diff and rollback to published version.
 - Update OpenAPI to match the hardened contract.
 

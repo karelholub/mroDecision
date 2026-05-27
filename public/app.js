@@ -154,7 +154,7 @@ function renderMetrics(metrics) {
     statusItem("Context keys", formatNumber(schema.context || 0)),
     statusItem("Last sync", schema.last_synced_at ? formatTime(schema.last_synced_at) : "never"),
     statusItem("Imported last sync", formatNumber(schema.last_sync_count || 0)),
-    statusItem("Lookup tables", formatNumber(metrics.lookups?.total || 0))
+    statusItem("Reference tables", formatNumber(metrics.lookups?.total || 0))
   ].join("");
 }
 
@@ -476,7 +476,7 @@ async function exportAuditCsv() {
 
 async function loadLookups() {
   const target = document.querySelector("#lookup-list");
-  target.innerHTML = header(["Name", "ID", "Key column", "Rows", "Version"]);
+  target.innerHTML = header(["Name", "ID", "Match column", "Rows", "Version"]);
   try {
     const body = await api("/v1/lookup-tables");
     cachedLookupTables = body.lookup_tables || [];
@@ -712,9 +712,9 @@ function bindLookupOutputHelper(node, branchIndex) {
   const columnInput = node.querySelector("[data-helper='column']");
   const outputs = parseJsonSafe(branch.outputs || "{}");
   const existingLookup = firstLookupOutput(outputs);
-  const defaultTable = existingLookup?.table || preferredLookupTable()?.id || "offer_tiers";
+  const defaultTable = existingLookup?.table || preferredLookupTable()?.id || "";
   const table = lookupTableById(defaultTable);
-  const defaultColumn = existingLookup?.column || firstLookupValueColumn(table) || "offer_tier";
+  const defaultColumn = existingLookup?.column || firstLookupValueColumn(table) || "";
   targetInput.value = existingLookup?.target || defaultColumn;
   tableInput.value = defaultTable;
   keyInput.value = existingLookup?.keyExpression || defaultLookupKeyExpression(table, outputs);
@@ -738,7 +738,7 @@ function bindLookupOutputHelper(node, branchIndex) {
       const table = tableInput.value.trim();
       const keyExpression = keyInput.value.trim();
       const column = columnInput.value.trim();
-      if (!target || !table || !keyExpression || !column) throw new Error("Lookup output needs target, table, key expression, and column");
+      if (!target || !table || !keyExpression || !column) throw new Error("Reference data output needs target, table, key expression, and returned field");
       const nextOutputs = parseJsonField(null, `Outputs for ${branch.id || `branch_${branchIndex + 1}`}`, branch.outputs || "{}");
       nextOutputs[target] = `=lookup(${JSON.stringify(table)}, ${keyExpression}, ${JSON.stringify(column)})`;
       branch.outputs = JSON.stringify(nextOutputs);
@@ -760,7 +760,7 @@ function firstLookupOutput(outputs) {
 }
 
 function preferredLookupTable() {
-  return cachedLookupTables.find((item) => item.id === "offer_tiers") || cachedLookupTables[0] || null;
+  return cachedLookupTables[0] || null;
 }
 
 function lookupTableById(id) {
@@ -778,7 +778,7 @@ function firstLookupValueColumn(table) {
 }
 
 function defaultLookupKeyExpression(table, outputs) {
-  if (outputs.offer_id) return "outputs.offer_id";
+  if (table?.key_column && outputs[table.key_column] != null) return `outputs.${table.key_column}`;
   if (table?.rows?.[0]?.[table.key_column] != null) return JSON.stringify(table.rows[0][table.key_column]);
   return table?.key_column ? `attributes.${table.key_column}` : "";
 }
@@ -1019,27 +1019,27 @@ function slug(value) {
 
 function newLookup() {
   selectedLookupId = null;
-  document.querySelector("#lookup-id").value = "offer_tiers";
+  document.querySelector("#lookup-id").value = "reference_table";
   document.querySelector("#lookup-id").disabled = false;
-  document.querySelector("#lookup-name").value = "Offer Tiers";
-  document.querySelector("#lookup-key-column").value = "offer_id";
+  document.querySelector("#lookup-name").value = "Reference Table";
+  document.querySelector("#lookup-key-column").value = "key";
   document.querySelector("#lookup-rows").value = JSON.stringify(
     [
-      { offer_id: "solar_green_energy", offer_tier: "premium", priority: 80 },
-      { offer_id: "retention_discount", offer_tier: "save", priority: 90 }
+      { key: "A", label: "Segment A", priority: 80 },
+      { key: "B", label: "Segment B", priority: 40 }
     ],
     null,
     2
   );
   document.querySelector("#lookup-csv").value = "";
   loadLookupVersions(null);
-  lookupOutput.textContent = "Ready for a new lookup table";
+  lookupOutput.textContent = "Ready for a new reference table";
 }
 
 function loadLookup(id, tables) {
   const table = tables.find((item) => item.id === id);
   if (!table) {
-    lookupOutput.textContent = `Lookup table not found: ${id}`;
+    lookupOutput.textContent = `Reference table not found: ${id}`;
     return;
   }
   selectedLookupId = id;
@@ -1060,7 +1060,7 @@ async function loadLookupVersion(id, version) {
     document.querySelector("#lookup-name").value = table.name;
     document.querySelector("#lookup-key-column").value = table.key_column;
     document.querySelector("#lookup-rows").value = JSON.stringify(table.rows || [], null, 2);
-    lookupOutput.textContent = `Loaded ${id} version ${version} into the editor. Save Lookup to restore it as the current version.`;
+    lookupOutput.textContent = `Loaded ${id} version ${version} into the editor. Save Reference Table to restore it as the current version.`;
   } catch (error) {
     lookupOutput.textContent = error.message;
   }
@@ -1103,7 +1103,7 @@ async function saveLookup(event) {
 
 async function exportLookupCsv() {
   if (!selectedLookupId) {
-    lookupOutput.textContent = "Select or save a lookup table before exporting CSV.";
+    lookupOutput.textContent = "Select or save a reference table before exporting CSV.";
     return;
   }
   try {

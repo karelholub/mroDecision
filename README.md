@@ -11,7 +11,7 @@ This initial implementation is dependency-light and runs on Node.js built-ins on
 - Single and batch evaluation APIs
 - Safe expression evaluation without `eval`
 - Basic rule-builder style branches and advanced graph nodes
-- Lookup table storage
+- Generic reference data table storage for catalogs, matrices, mappings, and suppressions
 - Audit log queries and operational metrics
 - Manual schema cache import for attribute, segment, and context definitions
 - Schema-aware rule builder key suggestions and broken-reference warnings
@@ -105,6 +105,6 @@ The embedded UI supports the current MVP workflow:
 3. Save the draft.
 4. Publish the draft.
 5. Evaluate a sample profile against either the published version or the current draft.
-6. Inspect audit entries, lookup tables, API tokens, and Meiro Pipes request templates.
+6. Inspect audit entries, reference data tables, API tokens, and Meiro Pipes request templates.
 
 The visual flow canvas described in the product spec is intentionally not part of this first implementation; advanced graphs are supported through JSON drafts.

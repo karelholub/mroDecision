@@ -17,7 +17,7 @@
         <button data-view="rules">Rule Sets</button>
         <button data-view="test">Evaluate</button>
         <button data-view="audit">Audit</button>
-        <button data-view="lookups">Lookups</button>
+        <button data-view="lookups">Reference Data</button>
         <button data-view="settings">Settings</button>
       </nav>
       <label>
@@ -180,23 +180,23 @@
                   <button type="button" data-action="remove-branch">Remove</button>
                 </div>
                 <details class="output-helper">
-                  <summary>Lookup outputs</summary>
+                  <summary>Reference data fields</summary>
                   <div class="lookup-output-grid">
                     <label>
                       Target output
-                      <input data-helper="target" placeholder="offer_tier" />
+                      <input data-helper="target" placeholder="response_field" />
                     </label>
                     <label>
-                      Lookup table
-                      <input data-helper="table" placeholder="offer_tiers" />
+                      Reference table
+                      <input data-helper="table" placeholder="customer_segment_map" />
                     </label>
                     <label>
                       Key expression
-                      <input data-helper="key" placeholder="&quot;solar_green_energy&quot;" />
+                      <input data-helper="key" placeholder="attributes.segment_code" />
                     </label>
                     <label>
-                      Lookup column
-                      <input data-helper="column" placeholder="offer_tier" />
+                      Field to return
+                      <input data-helper="column" placeholder="field_name" />
                     </label>
                     <button type="button" data-action="apply-lookup-output">Apply</button>
                   </div>
@@ -350,8 +350,8 @@
       <section id="lookups" class="view">
         <header>
           <div>
-            <h2>Lookup Tables</h2>
-            <p class="page-subtitle">Manage versioned enrichment tables used by rule outputs.</p>
+            <h2>Reference Data</h2>
+            <p class="page-subtitle">Manage configurable tables used to enrich, classify, map, or suppress decisions.</p>
           </div>
           <div class="actions">
             <button id="new-lookup">New</button>
@@ -361,30 +361,30 @@
         </header>
         <div class="lookup-guide">
           <div>
-            <strong>How lookups work</strong>
-            <p>A lookup table enriches a decision result from a maintained table. Rules call a table by ID, match a row by the key column, and return one column from that row.</p>
+            <strong>How reference data works</strong>
+            <p>Reference data is a maintained table that rules can use without changing code. A rule chooses a table, matches one row by the match column, and returns a selected field from that row.</p>
           </div>
           <div class="guide-grid">
             <div class="guide-card">
-              <span>Table ID</span>
-              <strong>offer_tiers</strong>
-              <small>Used by rules to select the table.</small>
+              <span>Reference table</span>
+              <strong>product_catalog</strong>
+              <small>Used by rules to select a business table.</small>
             </div>
             <div class="guide-card">
-              <span>Key column</span>
-              <strong>offer_id</strong>
-              <small>Column matched against the rule expression.</small>
+              <span>Match column</span>
+              <strong>product_code</strong>
+              <small>Column matched against profile, context, or output values.</small>
             </div>
             <div class="guide-card">
-              <span>Rule output</span>
-              <code>=lookup("offer_tiers", outputs.offer_id, "priority")</code>
+              <span>Generated output</span>
+              <code>=lookup("product_catalog", outputs.product_code, "priority")</code>
             </div>
           </div>
         </div>
         <div class="split">
           <div id="lookup-list" class="table"></div>
           <form id="lookup-editor" class="editor">
-            <div class="editor-title">Lookup Editor</div>
+            <div class="editor-title">Reference Table Editor</div>
             <div class="grid-three">
               <label>
                 Table ID
@@ -395,7 +395,7 @@
                 <input id="lookup-name" required />
               </label>
               <label>
-                Key column
+                Match column
                 <input id="lookup-key-column" value="key" required />
               </label>
             </div>
@@ -411,7 +411,7 @@
               </div>
             </details>
             <div class="actions left">
-              <button type="submit" id="save-lookup">Save Lookup</button>
+              <button type="submit" id="save-lookup">Save Reference Table</button>
             </div>
             <details open>
               <summary>Version History</summary>
