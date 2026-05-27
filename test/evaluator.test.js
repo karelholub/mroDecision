@@ -167,3 +167,55 @@ test("evaluates contains operators for promotion history arrays", () => {
   assert.equal(result.result, "eligible");
   assert.equal(result.outputs.offer_id, "solar_green_energy");
 });
+
+test("evaluates graph frequency cap nodes from client events", () => {
+  const base = {
+    now: new Date("2026-05-27T00:00:00.000Z"),
+    lookupTables: [],
+    request: {
+      decision_key: "homepage_message",
+      profile_key: "profile-1",
+      identifiers: [{ typeId: "email", value: "user@example.com" }],
+      attributes: {},
+      segments: {},
+      context: {}
+    },
+    version: {
+      version: 1,
+      definition: {
+        graph: {
+          entry: "cap",
+          nodes: [
+            {
+              id: "cap",
+              type: "frequency_cap",
+              max: 2,
+              window_days: 7,
+              message_id: "hero_offer",
+              output_key: "impression_count",
+              next: "show",
+              capped: "hide"
+            },
+            { id: "show", type: "output", result: "eligible", outputs: { count: '=context("impression_count")' } },
+            { id: "hide", type: "output", result: "suppressed", outputs: { reason: "frequency_cap" } }
+          ]
+        }
+      }
+    }
+  };
+
+  const eligible = evaluateDecision({ ...base, clientEventCounter: () => 1 });
+  assert.equal(eligible.result, "eligible");
+  assert.equal(eligible.outputs.count, 1);
+
+  const capped = evaluateDecision({ ...base, clientEventCounter: (params) => {
+    assert.equal(params.event_type, "impression");
+    assert.equal(params.decision_key, "homepage_message");
+    assert.equal(params.profile_key, "profile-1");
+    assert.equal(params.message_id, "hero_offer");
+    assert.equal(params.since, "2026-05-20T00:00:00.000Z");
+    return 2;
+  } });
+  assert.equal(capped.result, "suppressed");
+  assert.deepEqual(capped.outputs, { reason: "frequency_cap" });
+});

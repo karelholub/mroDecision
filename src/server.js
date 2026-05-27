@@ -103,6 +103,7 @@ async function routeApi(req, res, url) {
     enforceAllowedDecision(req, body.decision_key);
     const event = store.addClientEvent(clientEventFromRequest(clientEventMatch[1], body));
     await store.save();
+    clientResultCache.clear();
     sendJson(res, 202, { event });
     return;
   }
@@ -713,7 +714,8 @@ function evaluateClientRequest(body) {
   const evaluated = evaluateDecision({
     request,
     version,
-    lookupTables: store.listLookupTables()
+    lookupTables: store.listLookupTables(),
+    clientEventCounter: (params) => store.countClientEvents(params)
   });
   const assigned = assignExperimentVariant(ruleSet, request, evaluated);
   const finalOutputs = assigned ? { ...evaluated.outputs, ...(assigned.outputs || {}) } : evaluated.outputs;

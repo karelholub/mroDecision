@@ -1,11 +1,11 @@
 import { evaluateExpression } from "./expression.js";
 
-export function evaluateDecision({ request, version, lookupTables, now = new Date() }) {
+export function evaluateDecision({ request, version, lookupTables, now = new Date(), clientEventCounter = () => 0 }) {
   const errors = [];
   const matchedRules = [];
   const scores = new Map();
   const definition = version.definition;
-  const env = buildEnv(request, lookupTables, scores, errors, now);
+  const env = buildEnv(request, lookupTables, scores, errors, now, clientEventCounter);
   let outcome;
 
   try {
@@ -77,6 +77,17 @@ function evaluateGraph(graph, env, matchedRules, errors) {
       const value = env.lookup(node.table, evaluateExpression(node.key_expression, env), node.column);
       env.setContext(node.output_key || node.id, value);
       current = node.next;
+    } else if (node.type === "frequency_cap") {
+      const count = env.clientEventCount({
+        event_type: node.event_type || "impression",
+        decision_key: node.decision_key || env.request.decision_key,
+        profile_key: env.request.profile_key,
+        message_id: node.message_id || undefined,
+        surface: node.surface || undefined,
+        window_days: Number(node.window_days || 30)
+      });
+      if (node.output_key) env.setContext(node.output_key, count);
+      current = count < Number(node.max || 1) ? node.next : node.capped || node.false || node.fallback;
     } else if (node.type === "sub-decision") {
       errors.push(`Sub-decision node ${node.id} is declared but external dependency execution is not enabled in this runtime`);
       current = node.fallback || node.next;
@@ -150,13 +161,14 @@ function readSource(source, env) {
   throw new Error(`Unsupported condition source: ${source.source}`);
 }
 
-function buildEnv(request, lookupTables, scores, errors, now) {
+function buildEnv(request, lookupTables, scores, errors, now, clientEventCounter) {
   const attributes = request.attributes || {};
   const segments = request.segments || {};
   const context = { ...(request.context || {}) };
   const lookupById = new Map((lookupTables || []).map((table) => [table.id, table]));
 
   return {
+    request,
     now,
     attribute: (key) => {
       const value = normalizeAttributeValue(attributes[key]);
@@ -181,6 +193,10 @@ function buildEnv(request, lookupTables, scores, errors, now) {
       const row = (table.rows || []).find((item) => item[table.key_column || "key"] === key);
       if (!row) return null;
       return column ? row[column] : row;
+    },
+    clientEventCount: (params) => {
+      const since = new Date(now.getTime() - Number(params.window_days || 30) * 86400000).toISOString();
+      return Number(clientEventCounter({ ...params, since }) || 0);
     }
   };
 }

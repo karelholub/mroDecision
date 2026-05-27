@@ -311,6 +311,24 @@ export class Store {
     return event;
   }
 
+  countClientEvents(params = {}) {
+    const conditions = [];
+    const values = [];
+    for (const key of ["event_type", "decision_key", "profile_key", "variant_key", "message_id", "surface"]) {
+      if (params[key]) {
+        conditions.push(`${key} = ?`);
+        values.push(params[key]);
+      }
+    }
+    if (params.since) {
+      conditions.push("occurred_at >= ?");
+      values.push(params.since);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const row = this.db.prepare(`SELECT COUNT(*) AS count FROM client_events ${where}`).get(...values);
+    return Number(row?.count || 0);
+  }
+
   queryAudit(params) {
     const conditions = [];
     const values = [];

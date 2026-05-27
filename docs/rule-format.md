@@ -97,6 +97,26 @@ Expression functions:
 
 The expression parser is a small safe parser. It does not use JavaScript `eval`.
 
+### Frequency Cap Nodes
+
+Graph rules can use `frequency_cap` nodes to suppress a path when the profile has already received enough client events in a time window. The first implementation counts stored `impression` events.
+
+```json
+{
+  "id": "cap_hero_message",
+  "type": "frequency_cap",
+  "max": 3,
+  "window_days": 7,
+  "message_id": "hero_offer",
+  "surface": "homepage",
+  "output_key": "hero_impressions",
+  "next": "show_message",
+  "capped": "fallback"
+}
+```
+
+The node continues to `next` when the event count is below `max`, otherwise it continues to `capped`. `output_key` is optional and stores the current count in context for downstream expressions.
+
 ## Experiment Metadata
 
 Rule sets with `"type": "experiment"` can define deterministic variant allocation in `metadata.experiment`. Variant weights must sum to 100.
