@@ -1,6 +1,6 @@
 import http from "node:http";
 import { URL } from "node:url";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { requireScope, setAuthStore } from "./auth.js";
 import { config } from "./config.js";
 import { createClientResultCache } from "./clientCache.js";
@@ -25,16 +25,24 @@ let schemaSyncTimer = null;
 let schemaSyncNextRunAt = "";
 
 const server = http.createServer(async (req, res) => {
+  const startedAt = Date.now();
+  res.requestId = req.headers["x-request-id"] || randomUUID();
   try {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
     if (url.pathname.startsWith("/v1/")) {
       await routeApi(req, res, url);
+      logRequest(req, res, startedAt);
       return;
     }
-    if (await serveStatic(res, url.pathname)) return;
+    if (await serveStatic(res, url.pathname)) {
+      logRequest(req, res, startedAt);
+      return;
+    }
     notFound(res);
+    logRequest(req, res, startedAt);
   } catch (error) {
     sendError(res, error);
+    logRequest(req, res, startedAt, error);
   }
 });
 
@@ -51,6 +59,17 @@ async function routeApi(req, res, url) {
       status: "ok",
       service: "meiro-decision-engine",
       now: new Date().toISOString()
+    });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/v1/ready") {
+    const database = store.health();
+    sendJson(res, database.ok ? 200 : 503, {
+      status: database.ok ? "ready" : "not_ready",
+      service: "meiro-decision-engine",
+      now: new Date().toISOString(),
+      database
     });
     return;
   }
@@ -446,6 +465,21 @@ function schemaSyncRuntime() {
 
 function createdAtIso() {
   return new Date().toISOString();
+}
+
+function logRequest(req, res, startedAt, error) {
+  const statusCode = res.statusCode || error?.statusCode || 500;
+  const record = {
+    level: statusCode >= 500 ? "error" : "info",
+    at: createdAtIso(),
+    request_id: res.requestId,
+    method: req.method,
+    path: req.url?.split("?")[0] || "",
+    status: statusCode,
+    duration_ms: Date.now() - startedAt
+  };
+  if (error) record.error = error.message;
+  console.log(JSON.stringify(record));
 }
 
 function inferSchemaFromProfile(profile) {

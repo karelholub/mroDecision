@@ -33,6 +33,15 @@ export class Store {
     this.db.close();
   }
 
+  health() {
+    try {
+      const row = this.db.prepare("SELECT 1 AS ok").get();
+      return { ok: row?.ok === 1, path: config.dbPath };
+    } catch (error) {
+      return { ok: false, path: config.dbPath, error: error.message };
+    }
+  }
+
   listRuleSets() {
     return this.db
       .prepare(
@@ -308,6 +317,8 @@ export class Store {
         stringify(event.context),
         stringify(event)
       );
+    const cutoff = new Date(Date.now() - this.getClientEventRetentionDays() * 24 * 60 * 60 * 1000).toISOString();
+    this.db.prepare("DELETE FROM client_events WHERE occurred_at < ?").run(cutoff);
     return event;
   }
 
@@ -768,6 +779,7 @@ export class Store {
     const allowed = new Set([
       "environment_label",
       "audit_retention_days",
+      "client_event_retention_days",
       "meiro_url",
       "meiro_source_slug",
       "meiro_api_url",
@@ -798,6 +810,11 @@ export class Store {
   getAuditRetentionDays() {
     const row = this.db.prepare("SELECT value_json FROM settings WHERE key = 'audit_retention_days'").get();
     return Number(row ? parse(row.value_json) : config.auditRetentionDays) || config.auditRetentionDays;
+  }
+
+  getClientEventRetentionDays() {
+    const row = this.db.prepare("SELECT value_json FROM settings WHERE key = 'client_event_retention_days'").get();
+    return Number(row ? parse(row.value_json) : config.clientEventRetentionDays) || config.clientEventRetentionDays;
   }
 
   exportBundle({ includeAudit = false } = {}) {
@@ -1013,6 +1030,7 @@ function seedSettings(db) {
   const defaults = {
     environment_label: "local",
     audit_retention_days: config.auditRetentionDays,
+    client_event_retention_days: config.clientEventRetentionDays,
     meiro_url: "",
     meiro_source_slug: "",
     meiro_api_url: "",

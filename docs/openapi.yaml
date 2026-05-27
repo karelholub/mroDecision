@@ -33,6 +33,23 @@ paths:
                   now:
                     type: string
                     format: date-time
+  /v1/ready:
+    get:
+      security: []
+      summary: Readiness check with database status
+      responses:
+        "200":
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+        "503":
+          description: Service is not ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
   /v1/evaluate:
     post:
       summary: Evaluate one profile against a published rule set
@@ -1020,6 +1037,26 @@ components:
           type: string
         message:
           type: string
+    Readiness:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        service:
+          type: string
+        now:
+          type: string
+          format: date-time
+        database:
+          type: object
+          properties:
+            ok:
+              type: boolean
+            path:
+              type: string
+            error:
+              type: string
     Identifier:
       type: object
       required: [typeId, value]
@@ -1834,6 +1871,8 @@ components:
         environment_label:
           type: string
         audit_retention_days:
+          type: integer
+        client_event_retention_days:
           type: integer
         meiro_url:
           type: string

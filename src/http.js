@@ -36,7 +36,8 @@ export function sendJson(res, statusCode, payload) {
   const body = JSON.stringify(payload, null, 2);
   res.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store"
+    "cache-control": "no-store",
+    ...requestIdHeader(res)
   });
   res.end(body);
 }
@@ -44,7 +45,8 @@ export function sendJson(res, statusCode, payload) {
 export function sendText(res, statusCode, body, contentType = "text/plain; charset=utf-8") {
   res.writeHead(statusCode, {
     "content-type": contentType,
-    "cache-control": "no-store"
+    "cache-control": "no-store",
+    ...requestIdHeader(res)
   });
   res.end(body);
 }
@@ -81,4 +83,8 @@ export function notFound(res) {
 
 export function createdAtNow() {
   return new Date().toISOString();
+}
+
+function requestIdHeader(res) {
+  return res.requestId ? { "x-request-id": res.requestId } : {};
 }

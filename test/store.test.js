@@ -154,9 +154,11 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   store.revokeApiToken(apiToken.id, "tester");
   assert.equal(store.verifyApiToken(apiToken.token), null);
 
-  const settings = store.updateSettings({ environment_label: "staging", audit_retention_days: 30 }, "tester");
+  const settings = store.updateSettings({ environment_label: "staging", audit_retention_days: 30, client_event_retention_days: 45 }, "tester");
   assert.equal(settings.environment_label, "staging");
   assert.equal(store.getAuditRetentionDays(), 30);
+  assert.equal(store.getClientEventRetentionDays(), 45);
+  assert.equal(store.health().ok, true);
 
   const schema = store.replaceSchemaItems("attribute", [{ name: "lead_score", type: "number", dimension: "profile" }], "tester");
   assert.equal(schema[0].name, "lead_score");

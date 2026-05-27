@@ -12,6 +12,7 @@ Implemented:
 - Basic branch rules, safe expressions, lookup expressions, score and lookup graph nodes.
 - Generic reference data tables with JSON editing and CSV import.
 - Audit log with basic filters and configurable retention.
+- Client event retention controls for impressions and exposures.
 - Hashed API tokens with `admin` and `evaluate` scopes.
 - Expanded role scopes: `viewer`, `editor`, `publisher`, `admin`, and `evaluate`.
 - Rule-set metadata fields for v2 surfaces: `type`, `priority`, `surface`, `cache_policy`, and `metadata`.
@@ -27,6 +28,7 @@ Implemented:
 - Overview rule usage drilldown with fallback rate, matched branch distribution, and recent decisions.
 - Embedded UI for rule sets, draft testing, evaluation, audit, lookups, settings, tokens, and Meiro request templates.
 - OpenAPI and Meiro Pipes integration templates.
+- Readiness endpoint, request IDs, request logs, and basic deployment/backup guidance.
 
 Important gaps:
 
@@ -131,10 +133,12 @@ Goal: make the service deployable beyond local demo.
 - Add backup/restore guidance for SQLite or migration path to a managed database.
 - Add data-retention controls for audit, impression, and exposure events.
 
+Status: readiness, request IDs, request logs, backup guidance, a simple p50/p95/p99 benchmark harness, and SQLite retention controls for audits and client events are implemented. A managed database migration path remains.
+
 ## Recommended Next Sprint
 
 1. Build first-pass advanced graph editor.
-2. Add data-retention controls beyond audit logs.
-3. Add data-retention controls beyond audit logs.
+2. Add optional bootstrap-token disablement once DB admin tokens exist.
+3. Add managed database migration guidance.
 4. Add CI/deployment hardening for hosted environments.
 5. Add broader Meiro catalog sync if/when segment schema APIs are confirmed.

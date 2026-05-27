@@ -60,6 +60,7 @@ DEE_DB_PATH=/path/to/dee.sqlite npm start
 ## API
 
 - `GET /v1/health`
+- `GET /v1/ready`
 - `POST /v1/evaluate`
 - `POST /v1/evaluate/batch`
 - `POST /v1/client/evaluate`
@@ -123,3 +124,22 @@ The embedded UI supports the current MVP workflow:
 6. Inspect audit entries, reference data tables, API tokens, and Meiro Pipes request templates.
 
 The visual flow canvas described in the product spec is intentionally not part of this first implementation; advanced graphs are supported through JSON drafts.
+
+## Operations
+
+Use `GET /v1/health` for a lightweight process check and `GET /v1/ready` for readiness checks that verify SQLite access. Every API response includes `x-request-id`; callers can pass their own `x-request-id` header to correlate upstream logs. The service writes one JSON log line per request.
+
+Retention is configurable in Settings:
+
+- `audit_retention_days` controls evaluation audit retention.
+- `client_event_retention_days` controls impression and exposure retention.
+
+For Docker deployments, place the service behind an HTTPS reverse proxy and mount `data/` on durable storage. Back up SQLite by snapshotting `data/dee.sqlite` together with its WAL/SHM sidecar files while the container is stopped, or by using SQLite online backup tooling from the host. Restore by replacing those files before starting the container.
+
+Run a simple local latency check against the Docker service with:
+
+```bash
+npm run bench
+```
+
+Tune it with `DEE_BENCH_URL`, `DEE_BENCH_TOKEN`, `DEE_BENCH_REQUESTS`, `DEE_BENCH_CONCURRENCY`, and `DEE_BENCH_DECISION_KEY`.
