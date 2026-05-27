@@ -9,6 +9,7 @@ import { notFound, readJson, sendError, sendJson, sendText, serveStatic } from "
 import { Store } from "./store.js";
 import {
   validateBundle,
+  validateClientEventRequest,
   validateClientEvaluateRequest,
   validateEvaluateRequest,
   validateRuleDefinition,
@@ -87,15 +88,22 @@ async function routeApi(req, res, url) {
     requireScope(req, "client");
     const body = await readJson(req);
     validateClientEvaluateRequest(body);
-    if (req.auth.decision_keys?.length && !req.auth.decision_keys.includes(body.decision_key)) {
-      const error = new Error(`Client token is not allowed to evaluate: ${body.decision_key}`);
-      error.statusCode = 403;
-      error.code = "forbidden";
-      throw error;
-    }
+    enforceAllowedDecision(req, body.decision_key);
     const result = evaluateClientRequest(body);
     await store.save();
     sendJson(res, 200, result);
+    return;
+  }
+
+  const clientEventMatch = pathname.match(/^\/v1\/client\/(impression|exposure)$/);
+  if (clientEventMatch && req.method === "POST") {
+    requireScope(req, "client");
+    const body = await readJson(req);
+    validateClientEventRequest(body);
+    enforceAllowedDecision(req, body.decision_key);
+    const event = store.addClientEvent(clientEventFromRequest(clientEventMatch[1], body));
+    await store.save();
+    sendJson(res, 202, { event });
     return;
   }
 
@@ -735,6 +743,30 @@ function evaluateClientRequest(body) {
   };
   response.cache.expires_at = response.errors.length ? null : clientResultCache.set(cached.cache_key, response, ruleSet);
   return response;
+}
+
+function clientEventFromRequest(eventType, body) {
+  return {
+    event_type: eventType,
+    event_id: body.event_id,
+    occurred_at: body.occurred_at ? new Date(body.occurred_at).toISOString() : createdAtIso(),
+    decision_key: body.decision_key,
+    profile_key: body.profile_key,
+    rule_version: body.rule_version ?? null,
+    variant_key: body.variant_key || "",
+    message_id: body.message_id || "",
+    surface: body.surface || "",
+    context: body.context || {}
+  };
+}
+
+function enforceAllowedDecision(req, decisionKey) {
+  if (req.auth.decision_keys?.length && !req.auth.decision_keys.includes(decisionKey)) {
+    const error = new Error(`Client token is not allowed to evaluate: ${decisionKey}`);
+    error.statusCode = 403;
+    error.code = "forbidden";
+    throw error;
+  }
 }
 
 function assignExperimentVariant(ruleSet, request, evaluated) {

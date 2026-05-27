@@ -61,6 +61,23 @@ export function validateClientEvaluateRequest(body) {
   optionalObject(body, "context");
 }
 
+export function validateClientEventRequest(body) {
+  if (!isPlainObject(body)) badRequest("Request body must be an object");
+  requiredString(body, "decision_key");
+  requiredString(body, "profile_key");
+  optionalString(body, "event_id");
+  optionalString(body, "variant_key");
+  optionalString(body, "message_id");
+  optionalString(body, "surface");
+  optionalObject(body, "context");
+  if (body.rule_version != null && !Number.isInteger(Number(body.rule_version))) {
+    badRequest("rule_version must be an integer when provided");
+  }
+  if (body.occurred_at != null && Number.isNaN(Date.parse(body.occurred_at))) {
+    badRequest("occurred_at must be an ISO date-time when provided");
+  }
+}
+
 function validateExperimentMetadata(experiment) {
   if (!isPlainObject(experiment)) badRequest("metadata.experiment must be an object");
   if (experiment.variants == null) return;
@@ -216,6 +233,10 @@ function requiredString(object, key, message = `${key} is required`) {
     }
     badRequest(message);
   }
+}
+
+function optionalString(object, key) {
+  if (object[key] != null && typeof object[key] !== "string") badRequest(`${key} must be a string`);
 }
 
 function optionalObject(object, key) {

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateBundle, validateEvaluateRequest, validateRuleDefinition, validateRuleSetPayload } from "../src/validation.js";
+import {
+  validateBundle,
+  validateClientEventRequest,
+  validateEvaluateRequest,
+  validateRuleDefinition,
+  validateRuleSetPayload
+} from "../src/validation.js";
 
 test("validates evaluate request shape", () => {
   assert.doesNotThrow(() =>
@@ -109,5 +115,22 @@ test("validates experiment variant allocation", () => {
         draft: { fallback: { result: "eligible", outputs: {} }, branches: [] }
       }),
     /weights must sum to 100/
+  );
+});
+
+test("validates client event requests", () => {
+  assert.doesNotThrow(() =>
+    validateClientEventRequest({
+      decision_key: "hero",
+      profile_key: "p1",
+      rule_version: 1,
+      variant_key: "control",
+      occurred_at: "2026-05-27T00:00:00.000Z",
+      context: { channel: "web" }
+    })
+  );
+  assert.throws(
+    () => validateClientEventRequest({ decision_key: "hero", profile_key: "p1", occurred_at: "not-a-date" }),
+    /occurred_at/
   );
 });

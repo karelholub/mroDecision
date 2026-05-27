@@ -135,12 +135,14 @@ function renderMetrics(metrics) {
   const rules = metrics.rules || {};
   const schema = metrics.schema || {};
   const cache = metrics.client_cache || {};
+  const events = metrics.client_events || {};
   metricCards.innerHTML = [
     metricCard("Requests 24h", formatNumber(requests.last_24h), `${formatNumber(requests.total)} total`),
     metricCard("Unique Profiles", formatNumber(requests.unique_profiles), "Seen in audit log"),
     metricCard("Published Rules", formatNumber(rules.published), `${formatNumber(rules.draft)} drafts`),
     metricCard("Schema Items", formatNumber(schema.total), `${schema.last_sync_status || "never"} sync`),
-    metricCard("Client Cache", `${Math.round((cache.hit_rate || 0) * 100)}%`, `${formatNumber(cache.entries || 0)} active entries`)
+    metricCard("Client Cache", `${Math.round((cache.hit_rate || 0) * 100)}%`, `${formatNumber(cache.entries || 0)} active entries`),
+    metricCard("Client Events", formatNumber(events.last_24h || 0), `${formatNumber(events.total || 0)} total`)
   ].join("");
 
   renderRuleUsage(metrics.rule_usage || []);
@@ -159,11 +161,20 @@ function renderMetrics(metrics) {
     statusItem("Imported last sync", formatNumber(schema.last_sync_count || 0)),
     statusItem("Reference tables", formatNumber(metrics.lookups?.total || 0)),
     statusItem("Cache hits", formatNumber(cache.hits || 0)),
-    statusItem("Cache misses", formatNumber(cache.misses || 0))
+    statusItem("Cache misses", formatNumber(cache.misses || 0)),
+    ...clientEventStatusItems(events.by_type || [])
   ].join("");
   if (ruleDetailPanel && !ruleDetailPanel.textContent.trim()) {
     ruleDetailPanel.innerHTML = `<div class="status-line">Select a rule in Rule Usage to inspect recent decisions, fallback rate, and matched branch frequency.</div>`;
   }
+}
+
+function clientEventStatusItems(items) {
+  const counts = Object.fromEntries(items.map((item) => [item.event_type, item.count]));
+  return [
+    statusItem("Exposures", formatNumber(counts.exposure || 0)),
+    statusItem("Impressions", formatNumber(counts.impression || 0))
+  ];
 }
 
 function renderRuleUsage(items) {

@@ -123,3 +123,5 @@ Rule sets with `"type": "experiment"` can define deterministic variant allocatio
 `POST /v1/client/evaluate` returns the selected variant and merges the variant outputs into the decision outputs. For QA, pass `context.force_variant` to force a configured variant key.
 
 `cache_policy.client_ttl` enables in-process caching for client responses. Supported scopes are `profile`, `session`, `global`, and `request`. `session` uses `context.session_id` when present, while `request` includes the full request payload in the cache key.
+
+After rendering a message or exposing an experiment variant, clients can send feedback events to `POST /v1/client/impression` and `POST /v1/client/exposure`. Include `decision_key`, `profile_key`, and any available `rule_version`, `variant_key`, `message_id`, `surface`, or `context` values.

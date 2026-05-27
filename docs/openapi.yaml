@@ -164,6 +164,44 @@ paths:
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
+  /v1/client/impression:
+    post:
+      summary: Record an in-app message impression
+      description: Requires a token with the `client` scope. Used when a message or placement was rendered.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientEventRequest"
+      responses:
+        "202":
+          description: Accepted client event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientEventResponse"
+  /v1/client/exposure:
+    post:
+      summary: Record an experiment exposure
+      description: Requires a token with the `client` scope. Used when a variant assignment was actually exposed to the customer.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientEventRequest"
+      responses:
+        "202":
+          description: Accepted client event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientEventResponse"
   /v1/rule-sets:
     get:
       summary: List rule sets
@@ -1008,6 +1046,62 @@ components:
           type: array
           items:
             type: string
+    ClientEventRequest:
+      type: object
+      required: [decision_key, profile_key]
+      properties:
+        event_id:
+          type: string
+          description: Optional idempotency key. Duplicate event IDs are ignored.
+        decision_key:
+          type: string
+        profile_key:
+          type: string
+        rule_version:
+          type: integer
+          nullable: true
+        variant_key:
+          type: string
+        message_id:
+          type: string
+        surface:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+        context:
+          type: object
+          additionalProperties: true
+    ClientEventResponse:
+      type: object
+      required: [event]
+      properties:
+        event:
+          type: object
+          properties:
+            event_id:
+              type: string
+            event_type:
+              type: string
+              enum: [impression, exposure]
+            occurred_at:
+              type: string
+              format: date-time
+            decision_key:
+              type: string
+            profile_key:
+              type: string
+            rule_version:
+              type: integer
+              nullable: true
+            variant_key:
+              type: string
+            message_id:
+              type: string
+            surface:
+              type: string
+            context:
+              type: object
     RuleSetSummary:
       type: object
       required: [name, decision_key, status]
@@ -1349,6 +1443,27 @@ components:
               type: integer
             hit_rate:
               type: number
+        client_events:
+          type: object
+          properties:
+            total:
+              type: integer
+            last_24h:
+              type: integer
+            by_type:
+              type: array
+              items:
+                type: object
+                properties:
+                  event_type:
+                    type: string
+                    enum: [impression, exposure]
+                  count:
+                    type: integer
+                  count_24h:
+                    type: integer
+                  unique_profiles:
+                    type: integer
         result_distribution:
           type: array
           items:

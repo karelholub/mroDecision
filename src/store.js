@@ -275,6 +275,42 @@ export class Store {
     this.db.prepare("DELETE FROM audit_log WHERE evaluated_at < ?").run(cutoff);
   }
 
+  addClientEvent(input) {
+    const event = {
+      event_id: input.event_id || `evt_${randomBytes(16).toString("hex")}`,
+      event_type: input.event_type,
+      occurred_at: input.occurred_at || createdAtNow(),
+      decision_key: input.decision_key,
+      profile_key: input.profile_key,
+      rule_version: input.rule_version ?? null,
+      variant_key: input.variant_key || "",
+      message_id: input.message_id || "",
+      surface: input.surface || "",
+      context: input.context || {}
+    };
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO client_events (
+          event_id, event_type, occurred_at, decision_key, profile_key,
+          rule_version, variant_key, message_id, surface, context_json, event_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        event.event_id,
+        event.event_type,
+        event.occurred_at,
+        event.decision_key,
+        event.profile_key,
+        event.rule_version,
+        event.variant_key,
+        event.message_id,
+        event.surface,
+        stringify(event.context),
+        stringify(event)
+      );
+    return event;
+  }
+
   queryAudit(params) {
     const conditions = [];
     const values = [];
@@ -333,6 +369,18 @@ export class Store {
          LIMIT 10`
       )
       .all(since24h);
+    const clientEventSummary = this.db
+      .prepare(
+        `SELECT
+          event_type,
+          COUNT(*) AS count,
+          SUM(CASE WHEN occurred_at >= ? THEN 1 ELSE 0 END) AS count_24h,
+          COUNT(DISTINCT profile_key) AS unique_profiles
+         FROM client_events
+         GROUP BY event_type
+         ORDER BY event_type ASC`
+      )
+      .all(since24h);
     return {
       generated_at: createdAtNow(),
       requests: {
@@ -358,6 +406,16 @@ export class Store {
         last_sync_status: settings.schema_last_sync_status || "never",
         last_synced_at: settings.schema_last_synced_at || "",
         last_sync_count: Number(settings.schema_last_sync_count || 0)
+      },
+      client_events: {
+        total: clientEventSummary.reduce((sum, row) => sum + Number(row.count || 0), 0),
+        last_24h: clientEventSummary.reduce((sum, row) => sum + Number(row.count_24h || 0), 0),
+        by_type: clientEventSummary.map((row) => ({
+          event_type: row.event_type,
+          count: Number(row.count || 0),
+          count_24h: Number(row.count_24h || 0),
+          unique_profiles: Number(row.unique_profiles || 0)
+        }))
       },
       result_distribution: resultDistribution.map((row) => ({ result: row.result, count: Number(row.count || 0) })),
       rule_usage: ruleUsage.map((row) => ({
@@ -718,6 +776,20 @@ function migrate(db) {
       entry_json TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS client_events (
+      event_id TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL CHECK (event_type IN ('impression', 'exposure')),
+      occurred_at TEXT NOT NULL,
+      decision_key TEXT NOT NULL,
+      profile_key TEXT NOT NULL,
+      rule_version INTEGER,
+      variant_key TEXT NOT NULL DEFAULT '',
+      message_id TEXT NOT NULL DEFAULT '',
+      surface TEXT NOT NULL DEFAULT '',
+      context_json TEXT NOT NULL DEFAULT '{}',
+      event_json TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS api_tokens (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -754,6 +826,9 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_audit_decision_time ON audit_log(decision_key, evaluated_at);
     CREATE INDEX IF NOT EXISTS idx_audit_profile_time ON audit_log(profile_key, evaluated_at);
     CREATE INDEX IF NOT EXISTS idx_audit_result_time ON audit_log(result, evaluated_at);
+    CREATE INDEX IF NOT EXISTS idx_client_events_decision_time ON client_events(decision_key, occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_client_events_profile_time ON client_events(profile_key, occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_client_events_type_time ON client_events(event_type, occurred_at);
     CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash);
     CREATE INDEX IF NOT EXISTS idx_schema_items_kind ON schema_items(kind, name);
     CREATE INDEX IF NOT EXISTS idx_lookup_table_versions ON lookup_table_versions(id, version);
