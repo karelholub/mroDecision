@@ -1,0 +1,12 @@
+services:
+  dee:
+    build: .
+    ports:
+      - "8090:8080"
+    environment:
+      PORT: 8080
+      DEE_DATA_DIR: /app/data
+      DEE_DB_PATH: /app/data/dee.sqlite
+      DEE_TOKENS: '[{"name":"admin","token":"dev-admin-token","scopes":["admin","evaluate"]}]'
+    volumes:
+      - ./data:/app/data

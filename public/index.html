@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Meiro DEE</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <aside>
+      <h1>Meiro DEE</h1>
+      <nav>
+        <button data-view="rules" class="active">Rule Sets</button>
+        <button data-view="test">Evaluate</button>
+        <button data-view="audit">Audit</button>
+        <button data-view="lookups">Lookups</button>
+        <button data-view="integration">Integration</button>
+        <button data-view="settings">Settings</button>
+      </nav>
+      <label>
+        API token
+        <input id="token" type="password" value="dev-admin-token" />
+      </label>
+    </aside>
+    <main>
+      <section id="rules" class="view active">
+        <header>
+          <h2>Rule Sets</h2>
+          <div class="actions">
+            <button id="new-rule">New</button>
+            <button id="export-config">Export</button>
+            <button id="refresh-rules">Refresh</button>
+          </div>
+        </header>
+        <div class="filter-bar">
+          <label>
+            Search
+            <input id="rule-filter-search" placeholder="name or key" />
+          </label>
+          <label>
+            Status
+            <select id="rule-filter-status">
+              <option value="">All</option>
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+              <option value="archived">Archived</option>
+            </select>
+          </label>
+          <label>
+            Type
+            <select id="rule-filter-type">
+              <option value="">All</option>
+              <option value="decision">Decision</option>
+              <option value="inapp_message">In-app message</option>
+              <option value="experiment">Experiment</option>
+            </select>
+          </label>
+          <label>
+            Tag
+            <input id="rule-filter-tag" placeholder="nbo" />
+          </label>
+        </div>
+        <div class="split">
+          <div id="rule-list" class="table"></div>
+          <form id="rule-editor" class="editor">
+            <div class="editor-title">Draft Editor</div>
+            <div class="grid-two">
+              <label>
+                Name
+                <input id="rule-name" required />
+              </label>
+              <label>
+                Decision key
+                <input id="rule-key" required pattern="[a-z0-9_]+" />
+              </label>
+            </div>
+            <div class="grid-three">
+              <label>
+                Type
+                <select id="rule-type">
+                  <option value="decision">Decision</option>
+                  <option value="inapp_message">In-app message</option>
+                  <option value="experiment">Experiment</option>
+                </select>
+              </label>
+              <label>
+                Priority
+                <input id="rule-priority" type="number" value="0" />
+              </label>
+              <label>
+                Surface
+                <input id="rule-surface" placeholder="homepage_hero" />
+              </label>
+            </div>
+            <label>
+              Description
+              <input id="rule-description" />
+            </label>
+            <div class="builder-shell">
+              <div class="builder-bar">
+                <label>
+                  Fallback result
+                  <input id="fallback-result" value="ineligible" />
+                </label>
+                <label>
+                  Fallback outputs JSON
+                  <input id="fallback-outputs" value="{}" />
+                </label>
+                <button type="button" id="add-branch">Add Branch</button>
+              </div>
+              <div id="branch-editor" class="branch-list"></div>
+            </div>
+            <div class="actions left">
+              <button type="button" id="sync-json">Sync JSON</button>
+              <button type="submit" id="save-draft">Save Draft</button>
+              <button type="button" id="publish-rule">Publish</button>
+            </div>
+            <details>
+              <summary>Draft JSON</summary>
+              <textarea id="rule-draft" spellcheck="false"></textarea>
+            </details>
+            <details open>
+              <summary>Version History</summary>
+              <div id="version-list" class="table"></div>
+            </details>
+            <pre id="rule-editor-output"></pre>
+            <template id="branch-template">
+              <section class="branch-card">
+                <div class="branch-head">
+                  <label>
+                    Branch ID
+                    <input data-field="id" />
+                  </label>
+                  <label>
+                    Result
+                    <input data-field="result" />
+                  </label>
+                  <label>
+                    Outputs JSON
+                    <input data-field="outputs" />
+                  </label>
+                  <button type="button" data-action="remove-branch">Remove</button>
+                </div>
+                <details class="output-helper">
+                  <summary>Lookup outputs</summary>
+                  <div class="lookup-output-grid">
+                    <label>
+                      Target output
+                      <input data-helper="target" placeholder="offer_tier" />
+                    </label>
+                    <label>
+                      Lookup table
+                      <input data-helper="table" placeholder="offer_tiers" />
+                    </label>
+                    <label>
+                      Key expression
+                      <input data-helper="key" placeholder="&quot;solar_green_energy&quot;" />
+                    </label>
+                    <label>
+                      Lookup column
+                      <input data-helper="column" placeholder="offer_tier" />
+                    </label>
+                    <button type="button" data-action="apply-lookup-output">Apply</button>
+                  </div>
+                </details>
+                <div class="branch-logic">
+                  <label>
+                    Match
+                    <select data-field="logic">
+                      <option value="all">All</option>
+                      <option value="any">Any</option>
+                    </select>
+                  </label>
+                  <button type="button" data-action="add-condition">Add Condition</button>
+                </div>
+                <div data-role="conditions" class="condition-list"></div>
+              </section>
+            </template>
+            <template id="condition-template">
+              <div class="condition-row">
+                <label>
+                  Source
+                  <select data-field="source">
+                    <option value="attribute">Attribute</option>
+                    <option value="segment">Segment</option>
+                    <option value="context">Context</option>
+                  </select>
+                </label>
+                <label>
+                  Key
+                  <input data-field="key" />
+                </label>
+                <label>
+                  Operator
+                  <select data-field="operator">
+                    <option value="equals">equals</option>
+                    <option value="not_equals">not equals</option>
+                    <option value="greater_than">greater than</option>
+                    <option value="greater_than_or_equal">greater than or equal</option>
+                    <option value="less_than">less than</option>
+                    <option value="less_than_or_equal">less than or equal</option>
+                    <option value="in">in list</option>
+                    <option value="not_in">not in list</option>
+                    <option value="contains">contains</option>
+                    <option value="not_contains">does not contain</option>
+                    <option value="is_blank">is blank</option>
+                    <option value="is_not_blank">is not blank</option>
+                    <option value="matches_regex">matches regex</option>
+                    <option value="within_last_days">within last days</option>
+                    <option value="before_date">before date</option>
+                    <option value="after_date">after date</option>
+                  </select>
+                </label>
+                <label>
+                  Value
+                  <input data-field="value" />
+                </label>
+                <button type="button" data-action="remove-condition">Remove</button>
+              </div>
+            </template>
+          </form>
+        </div>
+      </section>
+
+      <section id="test" class="view">
+        <header>
+          <h2>Evaluate</h2>
+          <div class="actions">
+            <button id="load-preset">Load Preset</button>
+            <button id="run-eval">Run</button>
+          </div>
+        </header>
+        <div class="filter-bar">
+          <label>
+            Rule set
+            <select id="eval-rule-key"></select>
+          </label>
+          <label>
+            Preset
+            <select id="eval-preset">
+              <option value="nbo_green">NBO green energy</option>
+              <option value="nbo_credit">NBO credit suppression</option>
+              <option value="nbo_retention">NBO retention</option>
+              <option value="nbo_premium">NBO premium upsell</option>
+              <option value="nbo_fallback">NBO fallback</option>
+              <option value="loan">Loan eligibility</option>
+            </select>
+          </label>
+          <label>
+            Version
+            <select id="eval-mode">
+              <option value="published">Published</option>
+              <option value="draft">Current draft</option>
+            </select>
+          </label>
+          <label>
+            Profile key
+            <input id="eval-profile-key" value="demo-profile" />
+          </label>
+        </div>
+        <textarea id="eval-input" spellcheck="false"></textarea>
+        <pre id="eval-output"></pre>
+      </section>
+
+      <section id="audit" class="view">
+        <header>
+          <h2>Audit</h2>
+          <button id="refresh-audit">Refresh</button>
+        </header>
+        <div class="filter-bar">
+          <label>
+            Decision key
+            <input id="audit-decision-key" placeholder="next_best_offer" />
+          </label>
+          <label>
+            Profile key
+            <input id="audit-profile-key" />
+          </label>
+          <label>
+            Result
+            <input id="audit-result" placeholder="eligible" />
+          </label>
+          <label>
+            From
+            <input id="audit-from" type="datetime-local" />
+          </label>
+          <label>
+            To
+            <input id="audit-to" type="datetime-local" />
+          </label>
+          <label>
+            Limit
+            <input id="audit-limit" type="number" min="1" max="1000" value="100" />
+          </label>
+          <button id="export-audit-csv">Export CSV</button>
+        </div>
+        <div class="split">
+          <div id="audit-list" class="table"></div>
+          <div class="editor">
+            <div class="editor-title">Audit Detail</div>
+            <pre id="audit-detail"></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="lookups" class="view">
+        <header>
+          <h2>Lookup Tables</h2>
+          <div class="actions">
+            <button id="new-lookup">New</button>
+            <button id="refresh-lookups">Refresh</button>
+            <button id="export-lookup-csv">Export CSV</button>
+          </div>
+        </header>
+        <div class="split">
+          <div id="lookup-list" class="table"></div>
+          <form id="lookup-editor" class="editor">
+            <div class="editor-title">Lookup Editor</div>
+            <div class="grid-three">
+              <label>
+                Table ID
+                <input id="lookup-id" required pattern="[a-zA-Z0-9_-]+" />
+              </label>
+              <label>
+                Name
+                <input id="lookup-name" required />
+              </label>
+              <label>
+                Key column
+                <input id="lookup-key-column" value="key" required />
+              </label>
+            </div>
+            <label>
+              Rows JSON
+              <textarea id="lookup-rows" spellcheck="false"></textarea>
+            </label>
+            <details>
+              <summary>Paste CSV</summary>
+              <textarea id="lookup-csv" spellcheck="false" placeholder="country,tier&#10;CZ,A&#10;SK,B"></textarea>
+              <div class="actions left">
+                <button type="button" id="import-lookup-csv">Import CSV</button>
+              </div>
+            </details>
+            <div class="actions left">
+              <button type="submit" id="save-lookup">Save Lookup</button>
+            </div>
+            <details open>
+              <summary>Version History</summary>
+              <div id="lookup-version-list" class="table"></div>
+            </details>
+            <pre id="lookup-output"></pre>
+          </form>
+        </div>
+      </section>
+
+      <section id="integration" class="view">
+        <header>
+          <h2>Integration</h2>
+          <button id="refresh-integration">Refresh</button>
+        </header>
+        <div class="split">
+          <div class="editor">
+            <div class="editor-title">Meiro Pipes Request</div>
+            <div class="grid-two">
+              <label>
+                DEE endpoint
+                <input id="integration-endpoint" readonly />
+              </label>
+              <label>
+                Meiro collector endpoint
+                <input id="integration-meiro-url" readonly />
+              </label>
+            </div>
+            <label>
+              HTTP template
+              <textarea id="integration-template" spellcheck="false" readonly></textarea>
+            </label>
+          </div>
+          <div class="editor">
+            <div class="editor-title">Expected Response</div>
+            <pre id="integration-response"></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="settings" class="view">
+        <header>
+          <h2>Settings</h2>
+          <button id="refresh-settings">Refresh</button>
+        </header>
+        <div class="split">
+          <div class="editor">
+            <div class="editor-title">Environment</div>
+            <form id="settings-form">
+              <div class="grid-two">
+                <label>
+                  Environment label
+                  <input id="setting-environment-label" />
+                </label>
+                <label>
+                  Audit retention days
+                  <input id="setting-audit-retention-days" type="number" min="1" />
+                </label>
+              </div>
+              <div class="grid-two">
+                <label>
+                  Meiro URL
+                  <input id="setting-meiro-url" placeholder="https://..." />
+                </label>
+                <label>
+                  Meiro source slug
+                  <input id="setting-meiro-source-slug" />
+                </label>
+              </div>
+              <div class="grid-three">
+                <label>
+                  Meiro API URL
+                  <input id="setting-meiro-api-url" placeholder="https://..." />
+                </label>
+                <label>
+                  Meiro API token
+                  <input id="setting-meiro-api-token" type="password" />
+                </label>
+                <label>
+                  Schema sync minutes
+                  <input id="setting-schema-sync-interval" type="number" min="1" />
+                </label>
+              </div>
+              <div class="actions left">
+                <button type="submit">Save Settings</button>
+              </div>
+            </form>
+            <details>
+              <summary>Manual schema import</summary>
+              <div class="grid-two">
+                <label>
+                  Identifier type
+                  <input id="schema-sync-identifier-type" placeholder="email" />
+                </label>
+                <label>
+                  Identifier value
+                  <input id="schema-sync-identifier-value" placeholder="user@example.com" />
+                </label>
+              </div>
+              <div class="actions left">
+                <button type="button" id="sync-schema">Sync From Meiro</button>
+              </div>
+              <textarea id="schema-import" spellcheck="false" placeholder='{"attributes":[{"name":"lead_score","type":"number"}],"segments":[{"name":"vip_customers","type":"boolean"}],"context":[{"name":"channel","type":"string"}]}'></textarea>
+              <div class="actions left">
+                <button type="button" id="import-schema">Import Schema</button>
+                <button type="button" id="refresh-schema">Refresh Schema</button>
+              </div>
+              <pre id="schema-output"></pre>
+            </details>
+            <pre id="settings-output"></pre>
+          </div>
+          <div class="editor">
+            <div class="editor-title">API Tokens</div>
+            <form id="token-form">
+              <div class="grid-two">
+                <label>
+                  Token name
+                  <input id="token-name" value="Meiro Pipes evaluate" />
+                </label>
+                <label>
+                  Scopes
+                  <select id="token-scopes">
+                    <option value="evaluate">Evaluate only</option>
+                    <option value="viewer">Viewer</option>
+                    <option value="editor,viewer">Editor</option>
+                    <option value="publisher,viewer">Publisher</option>
+                    <option value="admin,evaluate">Admin + evaluate</option>
+                  </select>
+                </label>
+              </div>
+              <div class="actions left">
+                <button type="submit">Create Token</button>
+              </div>
+            </form>
+            <div id="token-list" class="table"></div>
+            <pre id="token-output"></pre>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

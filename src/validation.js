@@ -1,0 +1,211 @@
+const slugPattern = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
+const allowedSources = new Set(["attribute", "segment", "context", "score"]);
+const allowedRuleSetTypes = new Set(["decision", "inapp_message", "experiment"]);
+const allowedOperators = new Set([
+  "equals",
+  "not_equals",
+  "greater_than",
+  "greater_than_or_equal",
+  "less_than",
+  "less_than_or_equal",
+  "in",
+  "not_in",
+  "contains",
+  "not_contains",
+  "is_blank",
+  "is_not_blank",
+  "matches_regex",
+  "within_last_days",
+  "before_date",
+  "after_date"
+]);
+
+export function validateEvaluateRequest(body) {
+  if (!isPlainObject(body)) badRequest("Request body must be an object");
+  requiredString(body, "decision_key");
+  requiredString(body, "profile_key");
+  if (!Array.isArray(body.identifiers)) badRequest("identifiers must be an array");
+  if (body.identifiers.length === 0) badRequest("identifiers must include at least one identifier");
+  optionalObject(body, "attributes");
+  optionalObject(body, "segments");
+  optionalObject(body, "context");
+  if (body.rule_version != null && !Number.isInteger(Number(body.rule_version))) {
+    badRequest("rule_version must be an integer when provided");
+  }
+}
+
+export function validateRuleSetPayload(body, { partial = false } = {}) {
+  if (!isPlainObject(body)) badRequest("Rule set payload must be an object");
+  if (!partial || body.name != null) requiredString(body, "name");
+  if (!partial || body.decision_key != null) {
+    requiredString(body, "decision_key");
+    if (!slugPattern.test(body.decision_key)) badRequest("decision_key must be a slug using lowercase letters, numbers, and underscores");
+  }
+  optionalObject(body, "input_schema");
+  optionalObject(body, "output_schema");
+  optionalObject(body, "cache_policy");
+  optionalObject(body, "metadata");
+  if (body.type != null && !allowedRuleSetTypes.has(body.type)) badRequest("type must be decision, inapp_message, or experiment");
+  if (body.priority != null && !Number.isInteger(Number(body.priority))) badRequest("priority must be an integer");
+  if (body.surface != null && typeof body.surface !== "string") badRequest("surface must be a string");
+  if (body.tags != null && !Array.isArray(body.tags)) badRequest("tags must be an array");
+}
+
+export function validateSchemaImport(body) {
+  if (!isPlainObject(body)) badRequest("Schema import payload must be an object");
+  for (const kind of ["attributes", "segments", "context"]) {
+    if (body[kind] != null && !Array.isArray(body[kind])) badRequest(`${kind} must be an array`);
+  }
+  for (const item of [...(body.attributes || []), ...(body.segments || []), ...(body.context || [])]) {
+    if (!isPlainObject(item) || typeof item.name !== "string" || item.name.trim() === "") {
+      badRequest("Every schema item must include a name");
+    }
+  }
+}
+
+export function validateRuleDefinition(definition, inputSchema = {}) {
+  if (!isPlainObject(definition)) validationError("Rule definition must be an object");
+  if (definition.graph) validateGraph(definition.graph);
+  else validateBranchesDefinition(definition);
+  validateReferences(definition, inputSchema);
+}
+
+export function validateBundle(bundle) {
+  if (!isPlainObject(bundle)) badRequest("Import bundle must be an object");
+  if (bundle.kind !== "meiro-dee-config-bundle") badRequest("Unsupported bundle kind");
+  if (!Array.isArray(bundle.rule_sets)) badRequest("Bundle rule_sets must be an array");
+  if (bundle.lookup_tables != null && !Array.isArray(bundle.lookup_tables)) badRequest("Bundle lookup_tables must be an array");
+
+  for (const ruleSet of bundle.rule_sets) {
+    validateRuleSetPayload(ruleSet);
+    if (ruleSet.draft) validateRuleDefinition(ruleSet.draft);
+    if (!Array.isArray(ruleSet.versions)) badRequest(`Rule set ${ruleSet.decision_key} versions must be an array`);
+    for (const version of ruleSet.versions) {
+      if (!Number.isInteger(Number(version.version))) badRequest(`Rule set ${ruleSet.decision_key} has an invalid version`);
+      validateRuleDefinition(version.definition);
+    }
+  }
+}
+
+function validateBranchesDefinition(definition) {
+  if (!Array.isArray(definition.branches)) validationError("Rule definition must include branches or graph");
+  if (definition.branches.length > 100) validationError("Basic rule definitions are limited to 100 branches");
+  for (const branch of definition.branches) {
+    if (!isPlainObject(branch)) validationError("Each branch must be an object");
+    requiredString(branch, "id", "Branch id is required");
+    requiredString(branch, "result", `Branch ${branch.id} result is required`);
+    validateConditionGroup(branch.when, `Branch ${branch.id}`);
+    if (branch.outputs != null && !isPlainObject(branch.outputs)) validationError(`Branch ${branch.id} outputs must be an object`);
+  }
+  if (definition.fallback != null) {
+    if (!isPlainObject(definition.fallback)) validationError("Fallback must be an object");
+    requiredString(definition.fallback, "result", "Fallback result is required");
+    if (definition.fallback.outputs != null && !isPlainObject(definition.fallback.outputs)) {
+      validationError("Fallback outputs must be an object");
+    }
+  }
+}
+
+function validateReferences(definition, inputSchema) {
+  if (!inputSchema || Object.keys(inputSchema).length === 0 || definition.graph) return;
+  const declared = {
+    attribute: new Set(Object.keys(inputSchema.attributes || {})),
+    segment: new Set(Object.keys(inputSchema.segments || {})),
+    context: new Set(Object.keys(inputSchema.context || {})),
+    score: new Set(Object.keys(inputSchema.scores || {}))
+  };
+  const missing = [];
+  for (const branch of definition.branches || []) {
+    collectConditionReferences(branch.when, declared, missing);
+  }
+  if (missing.length) {
+    validationError(`Rule references undeclared inputs: ${[...new Set(missing)].join(", ")}`);
+  }
+}
+
+function collectConditionReferences(group, declared, missing) {
+  if (!group || !isPlainObject(group)) return;
+  for (const key of ["all", "any"]) {
+    if (Array.isArray(group[key])) {
+      group[key].forEach((child) => collectConditionReferences(child, declared, missing));
+      return;
+    }
+  }
+  if (group.not) {
+    collectConditionReferences(group.not, declared, missing);
+    return;
+  }
+  if (group.expression) return;
+  if (declared[group.source]?.size && !declared[group.source].has(group.key)) {
+    missing.push(`${group.source}.${group.key}`);
+  }
+}
+
+function validateConditionGroup(group, label, depth = 1) {
+  if (group == null) return;
+  if (!isPlainObject(group)) validationError(`${label} condition must be an object`);
+  if (depth > 3) validationError(`${label} condition nesting exceeds 3 levels`);
+  if (Array.isArray(group.all)) {
+    if (group.all.length === 0) validationError(`${label} all group cannot be empty`);
+    group.all.forEach((child) => validateConditionGroup(child, label, depth + 1));
+    return;
+  }
+  if (Array.isArray(group.any)) {
+    if (group.any.length === 0) validationError(`${label} any group cannot be empty`);
+    group.any.forEach((child) => validateConditionGroup(child, label, depth + 1));
+    return;
+  }
+  if (group.not) {
+    validateConditionGroup(group.not, label, depth + 1);
+    return;
+  }
+  if (group.expression) return;
+  if (!allowedSources.has(group.source)) validationError(`${label} has unsupported source: ${group.source}`);
+  if (!group.key) validationError(`${label} condition key is required`);
+  if (!allowedOperators.has(group.operator)) validationError(`${label} has unsupported operator: ${group.operator}`);
+}
+
+function validateGraph(graph) {
+  if (!isPlainObject(graph)) validationError("Graph must be an object");
+  requiredString(graph, "entry", "Graph must declare an entry node");
+  if (!Array.isArray(graph.nodes)) validationError("Graph nodes must be an array");
+  if (graph.nodes.length > 200) validationError("Rule graph exceeds 200 node limit");
+  const ids = new Set();
+  for (const node of graph.nodes) {
+    requiredString(node, "id", "Every graph node needs an id");
+    if (ids.has(node.id)) validationError(`Duplicate graph node id: ${node.id}`);
+    ids.add(node.id);
+  }
+  if (!ids.has(graph.entry)) validationError(`Graph entry node does not exist: ${graph.entry}`);
+}
+
+function requiredString(object, key, message = `${key} is required`) {
+  if (typeof object[key] !== "string" || object[key].trim() === "") {
+    if (message.startsWith("Branch") || message.startsWith("Fallback") || message.startsWith("Graph") || message.startsWith("Every")) {
+      validationError(message);
+    }
+    badRequest(message);
+  }
+}
+
+function optionalObject(object, key) {
+  if (object[key] != null && !isPlainObject(object[key])) badRequest(`${key} must be an object`);
+}
+
+function isPlainObject(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function badRequest(message) {
+  const error = new Error(message);
+  error.statusCode = 400;
+  error.code = "bad_request";
+  throw error;
+}
+
+function validationError(message) {
+  const error = new Error(message);
+  error.statusCode = 400;
+  error.code = "validation_error";
+  throw error;
+}

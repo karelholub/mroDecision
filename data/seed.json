@@ -1,0 +1,108 @@
+{
+  "ruleSets": [
+    {
+      "name": "Loan Eligibility",
+      "decision_key": "loan_eligibility",
+      "description": "Example published rule set for local testing.",
+      "input_schema": {
+        "attributes": {
+          "plan_tier": "string",
+          "lifetime_revenue": "number",
+          "last_purchase_date": "timestamp"
+        },
+        "segments": {
+          "vip_customers": "boolean"
+        },
+        "context": {
+          "channel": "string"
+        }
+      },
+      "output_schema": {
+        "offer_tier": "string",
+        "max_loan_amount": "number"
+      },
+      "author": "system",
+      "status": "published",
+      "tags": ["example"],
+      "draft": {
+        "fallback": {
+          "result": "ineligible",
+          "outputs": {
+            "suppression_reason": "criteria_not_met"
+          }
+        },
+        "branches": [
+          {
+            "id": "vip_check",
+            "label": "VIP customers with strong revenue",
+            "when": {
+              "all": [
+                {
+                  "source": "segment",
+                  "key": "vip_customers",
+                  "operator": "equals",
+                  "value": true
+                },
+                {
+                  "source": "attribute",
+                  "key": "lifetime_revenue",
+                  "operator": "greater_than_or_equal",
+                  "value": 5000
+                }
+              ]
+            },
+            "result": "eligible",
+            "outputs": {
+              "offer_tier": "premium",
+              "max_loan_amount": 25000
+            }
+          }
+        ]
+      },
+      "versions": [
+        {
+          "version": 1,
+          "published_at": "2026-01-15T00:00:00.000Z",
+          "author": "system",
+          "definition": {
+            "fallback": {
+              "result": "ineligible",
+              "outputs": {
+                "suppression_reason": "criteria_not_met"
+              }
+            },
+            "branches": [
+              {
+                "id": "vip_check",
+                "label": "VIP customers with strong revenue",
+                "when": {
+                  "all": [
+                    {
+                      "source": "segment",
+                      "key": "vip_customers",
+                      "operator": "equals",
+                      "value": true
+                    },
+                    {
+                      "source": "attribute",
+                      "key": "lifetime_revenue",
+                      "operator": "greater_than_or_equal",
+                      "value": 5000
+                    }
+                  ]
+                },
+                "result": "eligible",
+                "outputs": {
+                  "offer_tier": "premium",
+                  "max_loan_amount": 25000
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "lookupTables": [],
+  "audit": []
+}

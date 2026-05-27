@@ -1,0 +1,1118 @@
+openapi: 3.1.0
+info:
+  title: Meiro Decision & Eligibility Engine API
+  version: 0.1.0
+  description: REST API for real-time profile decision and eligibility evaluation.
+servers:
+  - url: http://localhost:8090
+    description: Docker Compose local service
+  - url: http://localhost:8080
+    description: Direct Node.js local service
+security:
+  - bearerAuth: []
+paths:
+  /v1/health:
+    get:
+      security: []
+      summary: Service health check
+      responses:
+        "200":
+          description: Service health payload
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service, now]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: meiro-decision-engine
+                  now:
+                    type: string
+                    format: date-time
+  /v1/evaluate:
+    post:
+      summary: Evaluate one profile against a published rule set
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateRequest"
+            examples:
+              nextBestOffer:
+                value:
+                  decision_key: next_best_offer
+                  profile_key: profile-123
+                  identifiers:
+                    - typeId: email
+                      value: user@example.com
+                  attributes:
+                    lead_score:
+                      - value: 82
+                    web_engagement_score:
+                      - value: 71
+                    interacted_promotions:
+                      - value: [retention_discount]
+                    customer_lifetime_value:
+                      - value: 12400
+                    monetary_rfm:
+                      - value: 5
+                    churn_risk_score:
+                      - value: 0.2
+                    outstanding_balance_tier:
+                      - value: low
+                    late_payments_count_12m:
+                      - value: 0
+                    survey_nps_latest:
+                      - value: 8
+                    sustainability_score:
+                      - value: 91
+                  context:
+                    channel: email
+                    request_source: meiro_pipes
+      responses:
+        "200":
+          description: Decision result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluateResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /v1/evaluate/batch:
+    post:
+      summary: Evaluate up to 500 profiles
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision_key, profiles]
+              properties:
+                decision_key:
+                  type: string
+                rule_version:
+                  type: integer
+                  nullable: true
+                profiles:
+                  type: array
+                  maxItems: 500
+                  items:
+                    $ref: "#/components/schemas/EvaluateRequestProfile"
+      responses:
+        "200":
+          description: Batch decision results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EvaluateResponse"
+  /v1/rule-sets:
+    get:
+      summary: List rule sets
+      responses:
+        "200":
+          description: Rule set list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rule_sets]
+                properties:
+                  rule_sets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RuleSetSummary"
+    post:
+      summary: Create a rule set draft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuleSetWrite"
+      responses:
+        "201":
+          description: Created rule set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rule_set:
+                    $ref: "#/components/schemas/RuleSetSummary"
+  /v1/rule-sets/{key}:
+    get:
+      summary: Get a rule set with draft and latest published version
+      parameters:
+        - $ref: "#/components/parameters/RuleSetKey"
+      responses:
+        "200":
+          description: Rule set details
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rule_set, draft, version]
+                properties:
+                  rule_set:
+                    $ref: "#/components/schemas/RuleSetSummary"
+                  draft:
+                    $ref: "#/components/schemas/RuleDefinition"
+                  version:
+                    $ref: "#/components/schemas/RuleVersion"
+  /v1/rule-sets/{key}/draft:
+    put:
+      summary: Replace the mutable draft for a rule set
+      parameters:
+        - $ref: "#/components/parameters/RuleSetKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuleSetWrite"
+      responses:
+        "200":
+          description: Updated draft
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rule_set:
+                    $ref: "#/components/schemas/RuleSetSummary"
+                  draft:
+                    $ref: "#/components/schemas/RuleDefinition"
+  /v1/rule-sets/{key}/publish:
+    post:
+      summary: Publish the current draft
+      parameters:
+        - $ref: "#/components/parameters/RuleSetKey"
+      responses:
+        "200":
+          description: Published version
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    $ref: "#/components/schemas/RuleVersion"
+  /v1/rule-sets/{key}/archive:
+    post:
+      summary: Archive a rule set
+      parameters:
+        - $ref: "#/components/parameters/RuleSetKey"
+      responses:
+        "200":
+          description: Archived rule set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rule_set:
+                    $ref: "#/components/schemas/RuleSetSummary"
+  /v1/rule-sets/{key}/duplicate:
+    post:
+      summary: Duplicate a rule set into a new draft
+      parameters:
+        - $ref: "#/components/parameters/RuleSetKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                decision_key:
+                  type: string
+      responses:
+        "201":
+          description: Duplicated draft rule set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rule_set:
+                    $ref: "#/components/schemas/RuleSetSummary"
+                  draft:
+                    $ref: "#/components/schemas/RuleDefinition"
+  /v1/rule-sets/{key}/test:
+    post:
+      summary: Test the current draft for a rule set without writing an audit entry
+      parameters:
+        - $ref: "#/components/parameters/RuleSetKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateRequestProfile"
+      responses:
+        "200":
+          description: Draft decision result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/EvaluateResponse"
+                  - type: object
+                    properties:
+                      tested_version:
+                        type: string
+                        const: draft
+  /v1/rule-sets/{key}/versions:
+    get:
+      summary: List published versions for a rule set
+      parameters:
+        - $ref: "#/components/parameters/RuleSetKey"
+      responses:
+        "200":
+          description: Version list without definitions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  versions:
+                    type: array
+                    items:
+                      type: object
+  /v1/rule-sets/{key}/versions/{version}:
+    get:
+      summary: Get one published version
+      parameters:
+        - $ref: "#/components/parameters/RuleSetKey"
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Published version
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    $ref: "#/components/schemas/RuleVersion"
+  /v1/rule-sets/{key}/versions/{version}/diff:
+    get:
+      summary: Diff a published version against the current draft or another version
+      parameters:
+        - $ref: "#/components/parameters/RuleSetKey"
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: compare_to
+          in: query
+          schema:
+            oneOf:
+              - type: integer
+              - type: string
+                enum: [draft]
+            default: draft
+      responses:
+        "200":
+          description: Path-based diff summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  left:
+                    type: object
+                  right:
+                    type: object
+                  diff:
+                    type: array
+                    items:
+                      type: object
+  /v1/rule-sets/{key}/versions/{version}/rollback:
+    post:
+      summary: Restore a published version into the current draft
+      parameters:
+        - $ref: "#/components/parameters/RuleSetKey"
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated draft restored from the published version
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rule_set:
+                    $ref: "#/components/schemas/RuleSetSummary"
+                  draft:
+                    $ref: "#/components/schemas/RuleDefinition"
+  /v1/audit:
+    get:
+      summary: Query the evaluation audit log
+      parameters:
+        - name: decision_key
+          in: query
+          schema:
+            type: string
+        - name: profile_key
+          in: query
+          schema:
+            type: string
+        - name: result
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, csv]
+      responses:
+        "200":
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  audit:
+                    type: array
+                    items:
+                      type: object
+            text/csv:
+              schema:
+                type: string
+  /v1/lookup-tables:
+    get:
+      summary: List lookup tables
+      responses:
+        "200":
+          description: Lookup tables
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lookup_tables:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LookupTable"
+  /v1/lookup-tables/{id}:
+    put:
+      summary: Replace a lookup table
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LookupTableWrite"
+      responses:
+        "200":
+          description: Replaced lookup table
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lookup_table:
+                    $ref: "#/components/schemas/LookupTable"
+  /v1/lookup-tables/{id}/export:
+    get:
+      summary: Export a lookup table as CSV
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [csv]
+      responses:
+        "200":
+          description: Lookup table CSV
+          content:
+            text/csv:
+              schema:
+                type: string
+  /v1/lookup-tables/{id}/versions:
+    get:
+      summary: List lookup table versions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lookup table versions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  versions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LookupTableVersion"
+  /v1/lookup-tables/{id}/versions/{version}:
+    get:
+      summary: Get a lookup table version
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Lookup table version
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lookup_table:
+                    $ref: "#/components/schemas/LookupTable"
+  /v1/schema:
+    get:
+      summary: List cached Meiro schema items
+      parameters:
+        - name: kind
+          in: query
+          schema:
+            type: string
+            enum: [attribute, segment, context]
+      responses:
+        "200":
+          description: Cached schema items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schema:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SchemaItem"
+  /v1/schema/import:
+    post:
+      summary: Manually import Meiro schema items
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SchemaImport"
+      responses:
+        "200":
+          description: Imported schema items by kind
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imported:
+                    type: object
+  /v1/schema/sync:
+    post:
+      summary: Sync schema by sampling a Meiro profile
+      description: Calls the configured Meiro Profile API endpoint with an identifier and infers attribute, segment, and context schema from the returned profile payload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier_type, identifier_value]
+              properties:
+                identifier_type:
+                  type: string
+                identifier_value:
+                  type: string
+                meiro_api_url:
+                  type: string
+                meiro_api_token:
+                  type: string
+      responses:
+        "200":
+          description: Imported schema items inferred from a profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  source:
+                    type: string
+                  imported:
+                    type: object
+                  profile_shape:
+                    type: array
+                    items:
+                      type: string
+  /v1/export:
+    get:
+      summary: Export rule sets and lookup tables as a promotion bundle
+      parameters:
+        - name: include_audit
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Configuration bundle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigBundle"
+  /v1/import:
+    post:
+      summary: Import a promotion bundle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigBundle"
+      responses:
+        "200":
+          description: Import summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imported:
+                    type: object
+                    properties:
+                      rule_sets:
+                        type: integer
+                      lookup_tables:
+                        type: integer
+  /v1/tokens:
+    get:
+      summary: List API tokens
+      responses:
+        "200":
+          description: API tokens without plaintext secret values
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tokens:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApiToken"
+    post:
+      summary: Create an API token
+      description: The plaintext token is returned once and is never shown again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                    enum: [viewer, editor, publisher, admin, evaluate]
+      responses:
+        "201":
+          description: Created token with one-time plaintext value
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    allOf:
+                      - $ref: "#/components/schemas/ApiToken"
+                      - type: object
+                        properties:
+                          token:
+                            type: string
+  /v1/tokens/{id}:
+    delete:
+      summary: Revoke an API token
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Revoked token metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    $ref: "#/components/schemas/ApiToken"
+  /v1/settings:
+    get:
+      summary: Get operational settings
+      responses:
+        "200":
+          description: Settings and runtime metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  settings:
+                    $ref: "#/components/schemas/Settings"
+                  runtime:
+                    type: object
+    put:
+      summary: Update operational settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Settings"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  settings:
+                    $ref: "#/components/schemas/Settings"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    RuleSetKey:
+      name: key
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-z0-9_]+$"
+  responses:
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+    Identifier:
+      type: object
+      required: [typeId, value]
+      properties:
+        typeId:
+          type: string
+        value:
+          type: string
+    AttributeValue:
+      type: object
+      required: [value]
+      properties:
+        value: {}
+    EvaluateRequest:
+      allOf:
+        - type: object
+          required: [decision_key]
+          properties:
+            decision_key:
+              type: string
+            rule_version:
+              type: integer
+              nullable: true
+        - $ref: "#/components/schemas/EvaluateRequestProfile"
+    EvaluateRequestProfile:
+      type: object
+      required: [profile_key, identifiers]
+      properties:
+        profile_key:
+          type: string
+        identifiers:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/Identifier"
+        attributes:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/AttributeValue"
+        segments:
+          type: object
+          additionalProperties:
+            type: boolean
+        context:
+          type: object
+          additionalProperties: true
+    EvaluateResponse:
+      type: object
+      required: [decision_key, profile_key, evaluated_at, rule_version, result, outputs, matched_rules, errors]
+      properties:
+        decision_key:
+          type: string
+        profile_key:
+          type: string
+        evaluated_at:
+          type: string
+          format: date-time
+        rule_version:
+          type: integer
+        result:
+          type: string
+          example: eligible
+        outputs:
+          type: object
+          additionalProperties: true
+        matched_rules:
+          type: array
+          items:
+            type: string
+        errors:
+          type: array
+          items:
+            type: string
+    RuleSetSummary:
+      type: object
+      required: [name, decision_key, status]
+      properties:
+        name:
+          type: string
+        decision_key:
+          type: string
+        description:
+          type: string
+        input_schema:
+          type: object
+        output_schema:
+          type: object
+        type:
+          type: string
+          enum: [decision, inapp_message, experiment]
+        priority:
+          type: integer
+        surface:
+          type: string
+        cache_policy:
+          type: object
+        metadata:
+          type: object
+        author:
+          type: string
+        version:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [draft, published, archived]
+        tags:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        last_published_at:
+          type: string
+          format: date-time
+          nullable: true
+    RuleSetWrite:
+      type: object
+      required: [name, decision_key, draft]
+      properties:
+        name:
+          type: string
+        decision_key:
+          type: string
+        description:
+          type: string
+        input_schema:
+          type: object
+        output_schema:
+          type: object
+        type:
+          type: string
+          enum: [decision, inapp_message, experiment]
+        priority:
+          type: integer
+        surface:
+          type: string
+        cache_policy:
+          type: object
+        metadata:
+          type: object
+        tags:
+          type: array
+          items:
+            type: string
+        draft:
+          $ref: "#/components/schemas/RuleDefinition"
+    RuleDefinition:
+      type: object
+      additionalProperties: true
+      description: Basic branch definition or advanced graph definition. See docs/rule-format.md.
+    RuleVersion:
+      type: object
+      required: [version, published_at, author, definition]
+      properties:
+        version:
+          type: integer
+        published_at:
+          type: string
+          format: date-time
+        author:
+          type: string
+        definition:
+          $ref: "#/components/schemas/RuleDefinition"
+    LookupTable:
+      type: object
+      required: [id, name, key_column, rows, version]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        key_column:
+          type: string
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        updated_at:
+          type: string
+          format: date-time
+        author:
+          type: string
+        version:
+          type: integer
+    LookupTableWrite:
+      type: object
+      properties:
+        name:
+          type: string
+        key_column:
+          type: string
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    LookupTableVersion:
+      type: object
+      required: [id, version, name, key_column, row_count, updated_at, author]
+      properties:
+        id:
+          type: string
+        version:
+          type: integer
+        name:
+          type: string
+        key_column:
+          type: string
+        row_count:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+        author:
+          type: string
+    SchemaItem:
+      type: object
+      required: [kind, name, type]
+      properties:
+        kind:
+          type: string
+          enum: [attribute, segment, context]
+        name:
+          type: string
+        type:
+          type: string
+        dimension:
+          type: string
+        source:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+        author:
+          type: string
+        raw:
+          type: object
+    SchemaImport:
+      type: object
+      properties:
+        attributes:
+          type: array
+          items:
+            type: object
+            required: [name]
+            properties:
+              name:
+                type: string
+              type:
+                type: string
+              dimension:
+                type: string
+        segments:
+          type: array
+          items:
+            type: object
+            required: [name]
+            properties:
+              name:
+                type: string
+              type:
+                type: string
+        context:
+          type: array
+          items:
+            type: object
+            required: [name]
+            properties:
+              name:
+                type: string
+              type:
+                type: string
+    ConfigBundle:
+      type: object
+      required: [kind, rule_sets, lookup_tables]
+      properties:
+        kind:
+          type: string
+          const: meiro-dee-config-bundle
+        exported_at:
+          type: string
+          format: date-time
+        rule_sets:
+          type: array
+          items:
+            type: object
+        lookup_tables:
+          type: array
+          items:
+            $ref: "#/components/schemas/LookupTable"
+    ApiToken:
+      type: object
+      required: [id, name, scopes, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+    Settings:
+      type: object
+      properties:
+        environment_label:
+          type: string
+        audit_retention_days:
+          type: integer
+        meiro_url:
+          type: string
+        meiro_source_slug:
+          type: string
+        meiro_api_url:
+          type: string
+        meiro_api_token:
+          type: string
+        schema_sync_interval_minutes:
+          type: integer
