@@ -2263,9 +2263,10 @@ header {
 
 .lookup-editor-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.86fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
   gap: 12px;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .lookup-table-pane,
@@ -2278,20 +2279,29 @@ header {
 
 .lookup-table-pane,
 .lookup-inspector-pane {
-  height: 100%;
-  max-height: 100%;
+  width: 100%;
+  max-width: 100%;
   overflow: auto;
   padding: 16px;
+}
+
+.lookup-table-pane {
+  height: auto;
+  min-height: 320px;
 }
 
 .lookup-inspector-pane {
   align-content: start;
   display: grid;
   gap: 14px;
+  height: auto;
+  max-height: none;
+  min-height: 240px;
+  overflow: visible;
 }
 
 .lookup-inspector-pane .compact-status-panel {
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .lookup-inspector-pane .status-item {
