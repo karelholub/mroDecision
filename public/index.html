@@ -46,34 +46,40 @@
           </div>
           <button id="refresh-metrics">Refresh</button>
         </header>
-        <div id="metric-cards" class="metric-grid"></div>
-        <div class="overview-grid">
-          <div class="editor">
-            <div class="editor-title">Rule Usage</div>
-            <div id="metrics-rule-usage" class="table compact-table"></div>
+        <div class="overview-workbench">
+          <div class="overview-summary-pane">
+            <div id="metric-cards" class="metric-grid"></div>
+            <div class="editor overview-card">
+              <div class="editor-title">Schema & Configuration</div>
+              <div id="metrics-schema-health" class="status-panel overview-status-panel"></div>
+            </div>
           </div>
-          <div class="editor">
-            <div class="editor-title">Result Distribution</div>
-            <div id="metrics-result-distribution" class="table compact-table"></div>
+          <div class="overview-operations-pane">
+            <div class="editor overview-card">
+              <div class="editor-title">Rule Usage</div>
+              <div id="metrics-rule-usage" class="table compact-table overview-table"></div>
+            </div>
+            <div class="overview-grid">
+              <div class="editor overview-card">
+                <div class="editor-title">Result Distribution</div>
+                <div id="metrics-result-distribution" class="table compact-table overview-table"></div>
+              </div>
+              <div class="editor overview-card">
+                <div class="editor-title">Rules Inventory</div>
+                <div id="metrics-rule-inventory" class="table compact-table overview-table"></div>
+              </div>
+            </div>
           </div>
-        </div>
-        <div class="overview-grid">
-          <div class="editor">
-            <div class="editor-title">Rules Inventory</div>
-            <div id="metrics-rule-inventory" class="table compact-table"></div>
+          <div class="overview-detail-pane">
+            <div class="editor overview-card">
+              <div class="editor-title">Rule Detail</div>
+              <div id="metrics-rule-detail" class="rule-detail-panel"></div>
+            </div>
+            <div class="editor overview-card">
+              <div class="editor-title">Client Event Detail</div>
+              <div id="metrics-client-events" class="rule-detail-panel"></div>
+            </div>
           </div>
-          <div class="editor">
-            <div class="editor-title">Schema & Configuration</div>
-            <div id="metrics-schema-health" class="status-panel"></div>
-          </div>
-        </div>
-        <div class="editor">
-          <div class="editor-title">Rule Detail</div>
-          <div id="metrics-rule-detail" class="rule-detail-panel"></div>
-        </div>
-        <div class="editor">
-          <div class="editor-title">Client Event Detail</div>
-          <div id="metrics-client-events" class="rule-detail-panel"></div>
         </div>
       </section>
 

@@ -325,7 +325,7 @@ header {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 16px;
 }
@@ -357,6 +357,50 @@ header {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
   margin-bottom: 16px;
+}
+
+.overview-workbench {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.75fr) minmax(360px, 1.1fr) minmax(300px, 0.9fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+.overview-summary-pane,
+.overview-operations-pane,
+.overview-detail-pane {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
+}
+
+.overview-card {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.overview-card .table {
+  max-height: 360px;
+}
+
+.overview-status-panel {
+  grid-template-columns: 1fr 1fr;
+}
+
+.overview-status-panel .status-item {
+  min-height: 68px;
+  padding: 10px;
+}
+
+.overview-status-panel .status-item strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.overview-detail-pane .rule-detail-panel {
+  max-height: 520px;
+  overflow: auto;
 }
 
 .lookup-guide {
@@ -1692,7 +1736,8 @@ pre {
   }
 
   .metric-grid,
-  .overview-grid {
+  .overview-grid,
+  .overview-workbench {
     grid-template-columns: 1fr 1fr;
   }
 }
@@ -1716,6 +1761,7 @@ pre {
     .filter-bar,
     .metric-grid,
     .overview-grid,
+    .overview-workbench,
   .lookup-guide,
   .settings-layout,
   .guide-grid,
