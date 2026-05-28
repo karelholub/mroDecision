@@ -137,11 +137,7 @@ document.querySelector("#run-eval-secondary").addEventListener("click", runEvalu
 document.querySelector("#load-preset").addEventListener("click", loadEvaluatePreset);
 document.querySelector("#load-preset-secondary").addEventListener("click", loadEvaluatePreset);
 document.querySelector("#eval-mode").addEventListener("change", renderEvaluateModeLabels);
-document.querySelector("#eval-rule-key").addEventListener("change", () => {
-  const body = readEvaluateInput();
-  body.decision_key = document.querySelector("#eval-rule-key").value;
-  evalInput.value = JSON.stringify(body, null, 2);
-});
+document.querySelector("#eval-rule-key").addEventListener("change", loadEvaluatePresetForSelectedRule);
 document.querySelector("#eval-profile-key").addEventListener("input", () => {
   const body = readEvaluateInput();
   body.profile_key = document.querySelector("#eval-profile-key").value.trim() || body.profile_key;
@@ -2865,6 +2861,7 @@ function renderEvaluateRuleOptions() {
     .map((ruleSet) => `<option value="${escapeHtml(ruleSet.decision_key)}">${escapeHtml(ruleSet.name)} (${escapeHtml(ruleSet.decision_key)})</option>`)
     .join("");
   if (cachedRuleSets.some((ruleSet) => ruleSet.decision_key === current)) select.value = current;
+  else if (cachedRuleSets[0]) select.value = cachedRuleSets[0].decision_key;
 }
 
 function loadEvaluatePreset() {
@@ -2876,11 +2873,33 @@ function loadEvaluatePreset() {
   renderEvaluateModeLabels();
 }
 
+function loadEvaluatePresetForSelectedRule() {
+  const previous = readEvaluateInputSafe();
+  const rule = selectedEvaluateRule();
+  const request = evaluatePresetForRule(rule);
+  request.profile_key = document.querySelector("#eval-profile-key").value.trim() || previous.profile_key || request.profile_key;
+  document.querySelector("#eval-profile-key").value = request.profile_key;
+  evalInput.value = JSON.stringify(request, null, 2);
+  renderEvaluateModeLabels();
+  renderEvaluationSummary(null, document.querySelector("#eval-mode").value);
+  renderEvaluationOutputSummary(null);
+  evalTrace.innerHTML = "";
+  evalOutput.textContent = "";
+}
+
 function readEvaluateInput() {
   const body = JSON.parse(evalInput.value || "{}");
   body.decision_key = document.querySelector("#eval-rule-key").value || body.decision_key;
   body.profile_key = document.querySelector("#eval-profile-key").value.trim() || body.profile_key;
   return body;
+}
+
+function readEvaluateInputSafe() {
+  try {
+    return JSON.parse(evalInput.value || "{}");
+  } catch {
+    return {};
+  }
 }
 
 function formatDecisionOutput(body) {
@@ -3097,6 +3116,69 @@ function evaluatePreset(name) {
     }
   };
   return structuredClone(presets[name] || nboBase);
+}
+
+function selectedEvaluateRule() {
+  const key = document.querySelector("#eval-rule-key").value;
+  return cachedRuleSets.find((ruleSet) => ruleSet.decision_key === key) || { decision_key: key };
+}
+
+function evaluatePresetForRule(rule = {}) {
+  const key = rule.decision_key || "next_best_offer";
+  if (key === "loan_eligibility") return evaluatePreset("loan");
+  if (key === "next_best_offer") return evaluatePreset(document.querySelector("#eval-preset")?.value || "nbo_green");
+  if (rule.type === "inapp_message") return inAppEvaluatePreset(rule);
+  if (rule.type === "experiment") return experimentEvaluatePreset(rule);
+  const request = evaluatePreset("nbo_green");
+  request.decision_key = key;
+  request.profile_key = `preset-${key || "rule"}`;
+  request.context = {
+    channel: rule.surface ? "web" : "email",
+    request_source: "dee_ui",
+    ...(rule.surface ? { surface: rule.surface } : {})
+  };
+  return request;
+}
+
+function inAppEvaluatePreset(rule) {
+  return {
+    decision_key: rule.decision_key,
+    profile_key: `preset-${rule.decision_key}`,
+    identifiers: [{ typeId: "email", value: "user@example.com" }],
+    attributes: {
+      lead_score: [{ value: 82 }],
+      web_engagement_score: [{ value: 74 }],
+      interacted_promotions: [{ value: [] }],
+      churn_risk_score: [{ value: 0.2 }],
+      sustainability_score: [{ value: 70 }]
+    },
+    segments: {},
+    context: {
+      channel: "web",
+      request_source: "dee_ui",
+      surface: rule.surface || "homepage_hero",
+      placement: rule.surface || "homepage_hero"
+    }
+  };
+}
+
+function experimentEvaluatePreset(rule) {
+  return {
+    decision_key: rule.decision_key,
+    profile_key: `preset-${rule.decision_key}`,
+    identifiers: [{ typeId: "email", value: "user@example.com" }],
+    attributes: {
+      lead_score: [{ value: 68 }],
+      web_engagement_score: [{ value: 61 }],
+      customer_lifetime_value: [{ value: 5400 }]
+    },
+    segments: {},
+    context: {
+      channel: "web",
+      request_source: "dee_ui",
+      surface: rule.surface || "default"
+    }
+  };
 }
 
 function mergeAttributes(base, attributes) {
