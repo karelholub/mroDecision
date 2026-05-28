@@ -96,7 +96,8 @@
           </div>
         </header>
         <div class="rule-workbench">
-          <div class="rule-list-pane">
+          <div class="rule-list-pane editor">
+            <div class="editor-title">Decision Rules</div>
             <div class="filter-bar rule-filter-bar">
               <label>
                 Search
@@ -127,7 +128,17 @@
             </div>
             <div id="rule-list" class="table"></div>
           </div>
-          <form id="rule-editor" class="editor rule-editor-pane">
+        </div>
+        <div id="rule-detail-modal" class="rule-detail-modal" hidden>
+          <form id="rule-editor" class="rule-detail-dialog">
+            <div class="rule-detail-header">
+              <div>
+                <strong>Rule Details</strong>
+                <span>Edit rule attributes, inspect draft shape, and open logic authoring.</span>
+              </div>
+              <button type="button" id="close-rule-detail">Close</button>
+            </div>
+            <div class="rule-editor-pane">
             <div class="rule-editor-main">
               <div class="rule-builder-pane">
                 <div class="editor-title">Draft Builder</div>
@@ -288,6 +299,7 @@
               <div class="drawer-panel" data-rule-drawer-panel="output">
                 <pre id="rule-editor-output"></pre>
               </div>
+            </div>
             </div>
             <template id="branch-template">
               <section class="branch-card">

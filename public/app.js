@@ -48,6 +48,7 @@ const inspectorFallback = document.querySelector("#inspector-fallback");
 const inspectorBranches = document.querySelector("#inspector-branches");
 const inspectorNodes = document.querySelector("#inspector-nodes");
 const inspectorMode = document.querySelector("#inspector-mode");
+const ruleDetailModal = document.querySelector("#rule-detail-modal");
 const ruleBuilderModal = document.querySelector("#rule-builder-modal");
 const logicSummaryTitle = document.querySelector("#logic-summary-title");
 const logicSummaryMeta = document.querySelector("#logic-summary-meta");
@@ -147,6 +148,7 @@ document.querySelector("#export-config").addEventListener("click", exportConfig)
 document.querySelector("#sync-json").addEventListener("click", syncJsonFromBuilder);
 document.querySelector("#sync-json-modal").addEventListener("click", syncJsonFromBuilder);
 document.querySelector("#open-rule-builder").addEventListener("click", openRuleBuilder);
+document.querySelector("#close-rule-detail").addEventListener("click", closeRuleDetail);
 document.querySelector("#close-rule-builder").addEventListener("click", closeRuleBuilder);
 document.querySelector("#done-rule-builder").addEventListener("click", () => {
   syncJsonFromBuilder();
@@ -202,13 +204,14 @@ document.querySelector("#settings-form").addEventListener("submit", saveSettings
 document.querySelector("#token-form").addEventListener("submit", createToken);
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !ruleBuilderModal.hidden) closeRuleBuilder();
+  else if (event.key === "Escape" && ruleDetailModal && !ruleDetailModal.hidden) closeRuleDetail();
   if (event.key === "Escape" && lookupDetailModal && !lookupDetailModal.hidden) closeLookupDetail();
   if (event.key === "Escape" && messageDetailModal && !messageDetailModal.hidden) closeMessageDetail();
 });
 
 loadMetrics();
 loadRules();
-newRule();
+newRule({ silent: true });
 newLookup({ silent: true });
 newMessage({ silent: true });
 loadLookups();
@@ -485,6 +488,16 @@ function statusItem(label, value) {
   return `<div class="status-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`;
 }
 
+function openRuleDetail() {
+  if (!ruleDetailModal) return;
+  ruleDetailModal.hidden = false;
+}
+
+function closeRuleDetail() {
+  if (!ruleDetailModal) return;
+  ruleDetailModal.hidden = true;
+}
+
 function openRuleBuilder() {
   renderRuleInspector();
   ruleBuilderModal.hidden = false;
@@ -530,7 +543,7 @@ function renderRuleInspector() {
 
 function renderRuleList() {
   const target = document.querySelector("#rule-list");
-  target.innerHTML = header(["Name", "Decision key", "Status", "Version", "Actions"]);
+  target.innerHTML = header(["Name", "Decision key", "Status", "Type", "Priority", "Version", "Actions"]);
   const filtered = filteredRuleSets();
   target.innerHTML += filtered.map(ruleSetRow).join("");
   document.querySelectorAll("[data-rule-key]").forEach((element) => {
@@ -570,11 +583,13 @@ function ruleSetRow(item) {
     [
       item.name,
       item.decision_key,
-      `${item.status} / ${item.type || "decision"}`,
+      item.status,
+      item.type || "decision",
+      item.priority ?? 0,
       item.version ?? "-",
       actions
     ],
-    { key: item.decision_key, rawColumns: [4] }
+    { key: item.decision_key, rawColumns: [6] }
   );
 }
 
@@ -629,12 +644,13 @@ async function loadRule(key) {
     await loadVersions(key);
     renderRuleInspector();
     editorOutput.textContent = `Loaded ${key}`;
+    openRuleDetail();
   } catch (error) {
     editorOutput.textContent = error.message;
   }
 }
 
-function newRule() {
+function newRule(options = {}) {
   selectedRuleKey = null;
   document.querySelector("#rule-name").value = "New Eligibility Rule";
   document.querySelector("#rule-key").value = "new_eligibility_rule";
@@ -656,6 +672,7 @@ function newRule() {
   syncJsonFromBuilder();
   renderRuleInspector();
   editorOutput.textContent = "Ready for a new draft";
+  if (!options.silent) openRuleDetail();
 }
 
 async function saveDraft(event) {
