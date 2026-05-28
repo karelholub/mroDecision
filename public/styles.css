@@ -1682,7 +1682,9 @@ header {
 }
 
 .evaluate-response {
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto auto;
+  align-content: start;
+  overflow: auto;
 }
 
 .evaluate-response .compact-status-panel {
@@ -1700,13 +1702,16 @@ header {
 }
 
 .evaluate-response pre {
+  height: auto;
+  min-height: 320px;
+  overflow: visible;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .evaluate-response .eval-trace {
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
 }
 
 .eval-payload-modal {
