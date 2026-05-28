@@ -80,27 +80,28 @@
               <div id="metrics-rule-inventory" class="inventory-panel"></div>
             </div>
           </div>
-          <div class="overview-side-pane">
-            <div class="editor overview-card">
-              <div class="overview-card-head">
-                <div>
-                  <div class="editor-title">Rule Detail</div>
-                  <p>Select a rule in Rule Usage to inspect recent decisions.</p>
-                </div>
+          <div class="editor overview-card overview-event-card">
+            <div class="overview-card-head">
+              <div>
+                <div class="editor-title">Client Event Detail</div>
+                <p>Rules, messages, surfaces, and latest client-side events.</p>
               </div>
-              <div id="metrics-rule-detail" class="rule-detail-panel"></div>
             </div>
-            <div class="editor overview-card">
-              <div class="overview-card-head">
-                <div>
-                  <div class="editor-title">Client Event Detail</div>
-                  <p>Rules, messages, surfaces, and latest client-side events.</p>
-                </div>
-              </div>
-              <div id="metrics-client-events" class="rule-detail-panel"></div>
-            </div>
+            <div id="metrics-client-events" class="rule-detail-panel"></div>
           </div>
           <div id="overview-service-footer" class="overview-service-footer"></div>
+        </div>
+        <div id="overview-rule-detail-modal" class="overview-rule-detail-modal" hidden>
+          <div class="overview-rule-detail-dialog">
+            <div class="overview-rule-detail-header">
+              <div>
+                <strong>Rule Detail</strong>
+                <span>Recent decisions, fallback rate, and matched branch frequency.</span>
+              </div>
+              <button type="button" id="close-overview-rule-detail">Close</button>
+            </div>
+            <div id="metrics-rule-detail" class="rule-detail-panel"></div>
+          </div>
         </div>
       </section>
 

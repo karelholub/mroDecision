@@ -522,7 +522,7 @@ header {
 
 .overview-workbench {
   display: grid;
-  grid-template-columns: minmax(0, 1.9fr) minmax(340px, 0.86fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   min-width: 0;
 }
@@ -596,8 +596,7 @@ header {
   line-height: 1;
 }
 
-.overview-primary-pane,
-.overview-side-pane {
+.overview-primary-pane {
   display: grid;
   align-content: start;
   gap: 16px;
@@ -609,6 +608,7 @@ header {
 }
 
 .overview-rule-card {
+  grid-column: 1 / -1;
   min-height: 360px;
 }
 
@@ -620,6 +620,10 @@ header {
 .overview-result-card,
 .overview-inventory-card {
   min-height: 250px;
+}
+
+.overview-event-card {
+  grid-column: 1 / -1;
 }
 
 .overview-card {
@@ -651,14 +655,14 @@ header {
 
 .rule-usage-card {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 72px 56px minmax(82px, 0.7fr) minmax(70px, 0.8fr) 42px;
-  gap: 10px;
+  grid-template-columns: minmax(220px, 1.35fr) 96px 80px minmax(118px, 0.8fr) minmax(160px, 1fr) 52px;
+  gap: 14px;
   align-items: center;
-  min-height: 48px;
+  min-height: 54px;
   border: 0;
   border-bottom: 1px solid var(--line);
   border-radius: 0;
-  padding: 10px 6px;
+  padding: 12px 8px;
   background: transparent;
   text-align: left;
 }
@@ -717,11 +721,6 @@ header {
 .overview-status-panel .status-item strong {
   font-size: 14px;
   overflow-wrap: anywhere;
-}
-
-.overview-side-pane .rule-detail-panel {
-  max-height: 560px;
-  overflow: auto;
 }
 
 .request-trend-panel {
@@ -877,21 +876,36 @@ header {
   overflow-wrap: anywhere;
 }
 
-.client-event-grid {
+.client-event-subsections {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
 .client-event-section {
+  display: grid;
+  gap: 10px;
   min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--panel-soft);
 }
 
 .client-event-list {
   display: grid;
   gap: 8px;
-  max-height: 260px;
+  max-height: 320px;
   overflow: auto;
+}
+
+.recent-events-section {
+  grid-column: 1 / -1;
+}
+
+.recent-events-section .client-event-list {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  max-height: 380px;
 }
 
 .client-event-card {
@@ -901,7 +915,7 @@ header {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
-  background: var(--panel-soft);
+  background: var(--panel);
 }
 
 .client-event-card strong {
@@ -928,6 +942,68 @@ header {
   color: var(--ink);
   font-size: 12px;
   font-style: normal;
+}
+
+.overview-rule-detail-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 24;
+  display: grid;
+  padding: 22px;
+  background: rgba(17, 24, 39, 0.5);
+}
+
+.overview-rule-detail-modal[hidden] {
+  display: none;
+}
+
+.overview-rule-detail-dialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  width: min(1180px, 100%);
+  height: min(780px, 100%);
+  align-self: center;
+  justify-self: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 20px 45px rgba(16, 24, 40, 0.24);
+  overflow: hidden;
+}
+
+.overview-rule-detail-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-soft);
+}
+
+.overview-rule-detail-header div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.overview-rule-detail-header strong {
+  font-size: 18px;
+}
+
+.overview-rule-detail-header span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.overview-rule-detail-dialog .rule-detail-panel {
+  display: grid;
+  gap: 16px;
+  min-height: 0;
+  padding: 16px;
+  overflow: auto;
 }
 
 .lookup-guide {
@@ -2524,11 +2600,6 @@ pre {
   .overview-workbench {
     grid-template-columns: minmax(0, 1fr);
   }
-
-  .overview-side-pane {
-    grid-column: 1 / -1;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
 }
 
 @media (max-width: 980px) {
@@ -2611,7 +2682,6 @@ pre {
 
   .overview-workbench,
   .overview-primary-pane,
-  .overview-side-pane,
   .overview-service-footer {
     grid-template-columns: 1fr;
   }
@@ -2628,6 +2698,10 @@ pre {
 
   .metric-card:nth-last-child(-n+2) {
     border-bottom: 0;
+  }
+
+  .rule-usage-card {
+    grid-template-columns: minmax(180px, 1.4fr) 84px 70px minmax(110px, 0.8fr) minmax(120px, 1fr) 48px;
   }
 }
 
@@ -2651,8 +2725,8 @@ pre {
     .metric-grid,
     .overview-workbench,
     .overview-primary-pane,
-    .overview-side-pane,
     .overview-service-footer,
+    .client-event-subsections,
     .distribution-panel,
     .inventory-panel,
   .lookup-guide,
@@ -2695,6 +2769,10 @@ pre {
     padding: 10px;
   }
 
+  .overview-rule-detail-modal {
+    padding: 10px;
+  }
+
   .message-detail-dialog {
     height: min(100%, 900px);
   }
@@ -2707,13 +2785,27 @@ pre {
     height: min(100%, 900px);
   }
 
+  .overview-rule-detail-dialog {
+    height: min(100%, 900px);
+  }
+
   .message-detail-header,
   .message-detail-footer,
   .lookup-detail-header,
   .lookup-detail-footer,
-  .rule-detail-header {
+  .rule-detail-header,
+  .overview-rule-detail-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .rule-usage-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .rule-usage-card small,
+  .rule-usage-card i {
+    grid-column: 1 / -1;
   }
 
   .message-editor-pane,

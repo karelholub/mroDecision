@@ -40,6 +40,7 @@ const ruleDetailPanel = document.querySelector("#metrics-rule-detail");
 const clientEventsPanel = document.querySelector("#metrics-client-events");
 const requestTrendPanel = document.querySelector("#metrics-request-trend");
 const overviewServiceFooter = document.querySelector("#overview-service-footer");
+const overviewRuleDetailModal = document.querySelector("#overview-rule-detail-modal");
 const topbarTitle = document.querySelector("#topbar-title");
 const topbarSubtitle = document.querySelector("#topbar-subtitle");
 const topbarEnv = document.querySelector("#topbar-env");
@@ -151,6 +152,7 @@ document.querySelector("#new-lookup").addEventListener("click", newLookup);
 document.querySelector("#new-message").addEventListener("click", newMessage);
 document.querySelector("#close-lookup-detail").addEventListener("click", closeLookupDetail);
 document.querySelector("#close-message-detail").addEventListener("click", closeMessageDetail);
+document.querySelector("#close-overview-rule-detail")?.addEventListener("click", closeOverviewRuleDetail);
 document.querySelector("#export-config").addEventListener("click", exportConfig);
 document.querySelector("#sync-json").addEventListener("click", syncJsonFromBuilder);
 document.querySelector("#sync-json-modal").addEventListener("click", syncJsonFromBuilder);
@@ -214,6 +216,7 @@ document.addEventListener("keydown", (event) => {
   else if (event.key === "Escape" && ruleDetailModal && !ruleDetailModal.hidden) closeRuleDetail();
   if (event.key === "Escape" && lookupDetailModal && !lookupDetailModal.hidden) closeLookupDetail();
   if (event.key === "Escape" && messageDetailModal && !messageDetailModal.hidden) closeMessageDetail();
+  if (event.key === "Escape" && overviewRuleDetailModal && !overviewRuleDetailModal.hidden) closeOverviewRuleDetail();
 });
 
 loadMetrics();
@@ -334,15 +337,15 @@ async function loadClientEventMetrics() {
 
 function renderClientEventMetrics(metrics) {
   clientEventsPanel.innerHTML = `
-    <div class="client-event-grid">
+    <div class="client-event-subsections">
       ${clientEventGroup("Rules", metrics.by_rule)}
       ${clientEventGroup("Variants", metrics.by_variant)}
       ${clientEventGroup("Messages", metrics.by_message)}
       ${clientEventGroup("Surfaces", metrics.by_surface)}
-    </div>
-    <div>
-      <div class="editor-title">Recent Events</div>
-      <div class="client-event-list recent-client-events">${clientEventRows(metrics.recent_events)}</div>
+      <div class="client-event-section recent-events-section">
+        <div class="editor-title">Recent Events</div>
+        <div class="client-event-list recent-client-events">${clientEventRows(metrics.recent_events)}</div>
+      </div>
     </div>
   `;
 }
@@ -402,7 +405,10 @@ function renderRuleUsage(items) {
     ? items.map((item) => ruleUsageCard(item, total)).join("")
     : `<div class="status-line">No rule traffic yet</div>`;
   target.querySelectorAll("[data-metric-rule-key]").forEach((element) => {
-    element.addEventListener("click", () => loadRuleMetrics(element.dataset.metricRuleKey));
+    element.addEventListener("click", async () => {
+      await loadRuleMetrics(element.dataset.metricRuleKey);
+      openOverviewRuleDetail();
+    });
   });
 }
 
@@ -427,6 +433,16 @@ async function loadRuleMetrics(key) {
   } catch (error) {
     ruleDetailPanel.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
   }
+}
+
+function openOverviewRuleDetail() {
+  if (!overviewRuleDetailModal) return;
+  overviewRuleDetailModal.hidden = false;
+}
+
+function closeOverviewRuleDetail() {
+  if (!overviewRuleDetailModal) return;
+  overviewRuleDetailModal.hidden = true;
 }
 
 function renderRuleMetricsDetail(metrics) {
