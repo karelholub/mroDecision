@@ -28,6 +28,7 @@ let builderBranches = [];
 let graphBuilder = { entry: "input", nodes: [] };
 let cachedRuleSets = [];
 let cachedLookupTables = [];
+let cachedMessages = [];
 let cachedSettings = {};
 let cachedSchema = [];
 
@@ -667,6 +668,7 @@ async function loadLookups() {
       element.addEventListener("click", () => loadLookup(element.dataset.lookupId, body.lookup_tables));
     });
     renderBranchEditor();
+    if (document.querySelector("#builder-mode")?.value === "graph") renderGraphBuilder();
   } catch (error) {
     target.innerHTML += row([error.message, "", "", "", ""]);
   }
@@ -677,12 +679,14 @@ async function loadMessages() {
   target.innerHTML = header(["Name", "ID", "Surface", "Status", "Updated"]);
   try {
     const body = await api("/v1/messages");
+    cachedMessages = body.messages || [];
     target.innerHTML += body.messages.length
       ? body.messages.map((item) => row([item.name, item.id, item.surface || "-", item.status, item.updated_at], { messageId: item.id })).join("")
       : row(["No messages", "", "", "", ""]);
     document.querySelectorAll("[data-message-id]").forEach((element) => {
       element.addEventListener("click", () => loadMessage(element.dataset.messageId, body.messages));
     });
+    if (document.querySelector("#builder-mode")?.value === "graph") renderGraphBuilder();
   } catch (error) {
     target.innerHTML += row([error.message, "", "", "", ""]);
   }
@@ -1169,7 +1173,10 @@ function renderGraphBuilder() {
   graphNodeEditor.innerHTML = (graphBuilder.nodes || []).map((node, index) => graphNodeEditorCard(node, index)).join("");
   graphNodeEditor.querySelectorAll("[data-graph-field]").forEach((input) => {
     input.addEventListener("input", () => updateGraphNodeField(Number(input.dataset.nodeIndex), input.dataset.graphField, input.value));
-    input.addEventListener("change", syncJsonFromBuilder);
+    input.addEventListener("change", () => {
+      if (["table", "message_id", "type"].includes(input.dataset.graphField)) renderGraphBuilder();
+      syncJsonFromBuilder();
+    });
   });
   graphNodeEditor.querySelectorAll("[data-remove-graph-node]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1210,12 +1217,19 @@ function graphNodeEditorCard(node, index) {
 }
 
 function graphNodeSpecificFields(node, index) {
-  const field = (name, label, value = node[name] ?? "") => `
+  const field = (name, label, value = node[name] ?? "", attrs = "") => `
     <label>
       ${label}
-      <input data-node-index="${index}" data-graph-field="${name}" value="${escapeHtml(formatOutputValue(value))}" />
+      <input data-node-index="${index}" data-graph-field="${name}" value="${escapeHtml(formatOutputValue(value))}" ${attrs} />
     </label>
   `;
+  const lookupTableList = graphDatalist(`graph-lookup-tables-${index}`, cachedLookupTables.map((item) => item.id));
+  const lookupColumnList = graphDatalist(`graph-lookup-columns-${index}`, lookupColumns(lookupTableById(node.table)));
+  const lookupExpressionList = graphDatalist(`graph-lookup-expressions-${index}`, graphLookupExpressionSuggestions(node));
+  const messageList = graphDatalist(`graph-messages-${index}`, cachedMessages.map((item) => item.id));
+  const surfaceList = graphDatalist(`graph-surfaces-${index}`, graphSurfaceSuggestions());
+  const ruleList = graphDatalist(`graph-decisions-${index}`, cachedRuleSets.map((item) => item.decision_key));
+  const eventList = graphDatalist(`graph-event-types-${index}`, ["impression", "exposure"]);
   if (node.type === "condition") {
     return [
       field("expression", "Expression"),
@@ -1231,20 +1245,29 @@ function graphNodeSpecificFields(node, index) {
   }
   if (node.type === "lookup") {
     return [
-      field("table", "Reference table"),
-      field("key_expression", "Key expression"),
-      field("column", "Field to return"),
-      field("output_key", "Store as context")
+      field("table", "Reference table", node.table, `list="graph-lookup-tables-${index}"`),
+      field("key_expression", "Key expression", node.key_expression, `list="graph-lookup-expressions-${index}"`),
+      field("column", "Field to return", node.column, `list="graph-lookup-columns-${index}"`),
+      field("output_key", "Store as context"),
+      lookupTableList,
+      lookupColumnList,
+      lookupExpressionList
     ].join("");
   }
   if (node.type === "frequency_cap") {
     return [
+      field("event_type", "Event type", node.event_type || "impression", `list="graph-event-types-${index}"`),
       field("max", "Max events"),
       field("window_days", "Window days"),
-      field("message_id", "Message ID"),
-      field("surface", "Surface"),
+      field("decision_key", "Decision key", node.decision_key || "", `list="graph-decisions-${index}"`),
+      field("message_id", "Message ID", node.message_id, `list="graph-messages-${index}"`),
+      field("surface", "Surface", node.surface, `list="graph-surfaces-${index}"`),
       field("capped", "Capped route"),
-      field("output_key", "Store count as")
+      field("output_key", "Store count as"),
+      eventList,
+      ruleList,
+      messageList,
+      surfaceList
     ].join("");
   }
   if (["output", "fallback", "error"].includes(node.type)) {
@@ -1271,8 +1294,44 @@ function updateGraphNodeField(index, field, rawValue) {
   } else {
     node[field] = field === "id" ? rawValue.trim() : rawValue;
   }
+  applyGraphNodeHelpers(node, field);
   if (field === "type") Object.assign(node, graphNodeDefaults(node.type, node.id));
   renderRuleGraph();
+}
+
+function applyGraphNodeHelpers(node, field) {
+  if (node.type === "lookup" && field === "table") {
+    const table = lookupTableById(node.table);
+    const column = firstLookupValueColumn(table);
+    if (column && !node.column) node.column = column;
+    if (table && (!node.key_expression || node.key_expression === "\"\"")) node.key_expression = defaultLookupKeyExpression(table, {});
+  }
+  if (node.type === "frequency_cap" && field === "message_id") {
+    const message = cachedMessages.find((item) => item.id === node.message_id);
+    if (message?.surface && !node.surface) node.surface = message.surface;
+  }
+}
+
+function graphDatalist(id, values) {
+  const unique = [...new Set((values || []).filter((value) => value != null && String(value).trim() !== "").map(String))];
+  return `<datalist id="${escapeHtml(id)}">${unique.map((value) => `<option value="${escapeHtml(value)}"></option>`).join("")}</datalist>`;
+}
+
+function graphLookupExpressionSuggestions(node) {
+  const table = lookupTableById(node.table);
+  const tableKey = table?.key_column;
+  return [
+    ...(tableKey ? [`attribute("${tableKey}")`, `context("${tableKey}")`] : []),
+    ...schemaItemsForSource("attribute").slice(0, 25).map((item) => `attribute("${item.name}")`),
+    ...schemaItemsForSource("context").slice(0, 25).map((item) => `context("${item.name}")`)
+  ];
+}
+
+function graphSurfaceSuggestions() {
+  return [
+    ...cachedMessages.map((item) => item.surface),
+    ...cachedRuleSets.map((item) => item.surface)
+  ];
 }
 
 function addGraphNode() {
@@ -1300,8 +1359,31 @@ function graphNodeDefaults(type, id) {
   if (type === "input") return { ...base, next: "" };
   if (type === "condition") return { ...base, expression: "attribute(\"lead_score\") >= 50", true: "", false: "" };
   if (type === "score") return { ...base, label: id, rules: [], next: "" };
-  if (type === "lookup") return { ...base, table: "", key_expression: "\"\"", column: "", output_key: id, next: "" };
-  if (type === "frequency_cap") return { ...base, max: 3, window_days: 7, next: "", capped: "" };
+  if (type === "lookup") {
+    const table = preferredLookupTable();
+    return {
+      ...base,
+      table: table?.id || "",
+      key_expression: defaultLookupKeyExpression(table, {}) || "\"\"",
+      column: firstLookupValueColumn(table) || "",
+      output_key: id,
+      next: ""
+    };
+  }
+  if (type === "frequency_cap") {
+    const message = cachedMessages.find((item) => item.status !== "archived") || cachedMessages[0];
+    return {
+      ...base,
+      event_type: "impression",
+      max: 3,
+      window_days: 7,
+      decision_key: "",
+      message_id: message?.id || "",
+      surface: message?.surface || "",
+      next: "",
+      capped: ""
+    };
+  }
   return { ...base, result: type === "fallback" ? "deferred" : "eligible", outputs: {} };
 }
 

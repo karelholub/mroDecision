@@ -86,7 +86,7 @@ Goal: support the full v2 graph model without forcing engineers to edit JSON.
 
 Open decision: ship a pragmatic graph editor first, then polish minimap/drag behavior, rather than blocking on a full canvas experience.
 
-Status: first-pass graph authoring is implemented with Branch/Graph mode switching, node cards for input, condition, score, lookup, frequency cap, output, fallback, and error nodes, visual route preview, JSON sync, route/reachability validation, and draft/published evaluation trace cards. Drag/drop positioning and richer per-node helpers remain.
+Status: first-pass graph authoring is implemented with Branch/Graph mode switching, node cards for input, condition, score, lookup, frequency cap, output, fallback, and error nodes, visual route preview, JSON sync, route/reachability validation, draft/published evaluation trace cards, and guided helpers for lookup and frequency-cap nodes. Drag/drop positioning remains.
 
 ## Phase 4: Client-Facing In-App and Experiment APIs
 
@@ -141,5 +141,5 @@ Status: readiness, request IDs, request logs, guarded bootstrap-token disablemen
 ## Recommended Next Sprint
 
 1. Add broader Meiro catalog sync if/when segment schema APIs are confirmed.
-2. Add richer graph editor helpers for lookup and frequency-cap nodes.
+2. Add drag/drop layout polish for the graph editor.
 3. Add managed database adapter implementation if production scale requires multiple replicas.
