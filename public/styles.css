@@ -518,6 +518,218 @@ header {
   min-width: 0;
 }
 
+.rule-workbench {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 2.4fr);
+  gap: 16px;
+  height: calc(100vh - 184px);
+  min-height: 660px;
+  min-width: 0;
+}
+
+.rule-list-pane,
+.rule-editor-pane,
+.rule-editor-main,
+.rule-builder-pane,
+.rule-inspector,
+.rule-bottom-drawer {
+  min-width: 0;
+  min-height: 0;
+}
+
+.rule-list-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+}
+
+.rule-filter-bar {
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+}
+
+.rule-list-pane #rule-list {
+  height: 100%;
+  overflow: auto;
+}
+
+.rule-list-pane .row {
+  grid-template-columns: 1fr;
+  gap: 5px;
+  align-items: start;
+}
+
+.rule-list-pane .row:first-child {
+  display: none;
+}
+
+.rule-list-pane .row > div:first-child {
+  font-weight: 700;
+}
+
+.rule-list-pane .row > div:nth-child(2) {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.rule-list-pane .row > div:nth-child(3),
+.rule-list-pane .row > div:nth-child(4) {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rule-list-pane .row > div:nth-child(5) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.rule-list-pane .row > div:nth-child(5):empty {
+  display: none;
+}
+
+.rule-editor-pane {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto minmax(230px, 0.38fr);
+  gap: 12px;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.rule-editor-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 300px);
+  gap: 12px;
+  overflow: hidden;
+}
+
+.rule-editor-main > .rule-builder-pane,
+.rule-editor-main > .rule-inspector {
+  height: 100%;
+  max-height: 100%;
+}
+
+.rule-builder-pane,
+.rule-inspector,
+.rule-bottom-drawer {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.rule-builder-pane,
+.rule-inspector {
+  overflow: auto;
+  padding: 16px;
+}
+
+.rule-inspector {
+  align-content: start;
+  display: grid;
+  gap: 14px;
+}
+
+.compact-status-panel {
+  grid-template-columns: 1fr 1fr;
+}
+
+.inspector-section {
+  display: grid;
+  gap: 10px;
+}
+
+.inspector-section h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.inspector-lines {
+  display: grid;
+  gap: 8px;
+}
+
+.inspector-lines div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.inspector-lines span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.inspector-lines strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workbench-actions {
+  margin: 0;
+  padding: 0 2px;
+}
+
+.rule-bottom-drawer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.drawer-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-soft);
+}
+
+.drawer-tabs button {
+  background: transparent;
+  color: var(--muted);
+  border-color: transparent;
+}
+
+.drawer-tabs button.active {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.drawer-panel {
+  display: none;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.drawer-panel.active {
+  display: block;
+}
+
+.drawer-panel .table,
+.drawer-panel pre,
+.drawer-panel textarea {
+  height: 100%;
+  min-height: 190px;
+  margin: 0;
+}
+
+.drawer-panel textarea {
+  resize: none;
+}
+
 .row {
   min-height: 44px;
   display: grid;
@@ -571,6 +783,15 @@ textarea {
   background: var(--panel);
   box-shadow: var(--shadow);
   min-width: 0;
+}
+
+#rules #rule-editor.rule-editor-pane {
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .editor-title {
@@ -955,6 +1176,11 @@ pre {
     min-height: 0;
   }
 
+  .rule-workbench {
+    height: auto;
+    min-height: 0;
+  }
+
   .metric-grid,
   .overview-grid {
     grid-template-columns: 1fr 1fr;
@@ -966,11 +1192,13 @@ pre {
     padding: 18px;
   }
 
-  .row,
-  .split,
-  .filter-bar,
-  .metric-grid,
-  .overview-grid,
+    .row,
+    .split,
+    .rule-workbench,
+    .rule-editor-main,
+    .filter-bar,
+    .metric-grid,
+    .overview-grid,
   .lookup-guide,
   .settings-layout,
   .guide-grid,
@@ -986,8 +1214,19 @@ pre {
   .branch-head,
   .condition-row,
   .output-field-row,
-  .lookup-output-grid {
+    .lookup-output-grid {
     grid-template-columns: 1fr;
+  }
+
+  .rule-editor-pane {
+    height: auto;
+    overflow: visible;
+  }
+
+  .rule-builder-pane,
+  .rule-inspector,
+  .rule-bottom-drawer {
+    overflow: visible;
   }
 
   header {

@@ -25,6 +25,14 @@ const topbarTitle = document.querySelector("#topbar-title");
 const topbarSubtitle = document.querySelector("#topbar-subtitle");
 const topbarEnv = document.querySelector("#topbar-env");
 const topbarHealth = document.querySelector("#topbar-health");
+const ruleInspectorSummary = document.querySelector("#rule-inspector-summary");
+const inspectorKey = document.querySelector("#inspector-key");
+const inspectorSurface = document.querySelector("#inspector-surface");
+const inspectorCache = document.querySelector("#inspector-cache");
+const inspectorFallback = document.querySelector("#inspector-fallback");
+const inspectorBranches = document.querySelector("#inspector-branches");
+const inspectorNodes = document.querySelector("#inspector-nodes");
+const inspectorMode = document.querySelector("#inspector-mode");
 let selectedRuleKey = null;
 let selectedLookupId = null;
 let selectedMessageId = null;
@@ -52,6 +60,14 @@ document.querySelectorAll("[data-settings-tab]").forEach((button) => {
     document.querySelectorAll("[data-settings-tab], [data-settings-panel]").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
     document.querySelector(`[data-settings-panel="${button.dataset.settingsTab}"]`)?.classList.add("active");
+  });
+});
+
+document.querySelectorAll("[data-rule-drawer-tab]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll("[data-rule-drawer-tab], [data-rule-drawer-panel]").forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
+    document.querySelector(`[data-rule-drawer-panel="${button.dataset.ruleDrawerTab}"]`)?.classList.add("active");
   });
 });
 
@@ -108,6 +124,10 @@ document.querySelector("#graph-entry").addEventListener("input", () => {
 document.querySelector("#publish-rule").addEventListener("click", publishSelectedRule);
 document.querySelector("#rule-editor").addEventListener("submit", saveDraft);
 document.querySelector("#rule-draft").addEventListener("change", syncBuilderFromJson);
+["#rule-name", "#rule-key", "#rule-type", "#rule-priority", "#rule-surface", "#rule-client-ttl", "#rule-cache-scope", "#rule-description"].forEach((selector) => {
+  document.querySelector(selector).addEventListener("input", renderRuleInspector);
+  document.querySelector(selector).addEventListener("change", renderRuleInspector);
+});
 document.querySelector("#fallback-result").addEventListener("input", syncJsonFromBuilder);
 document.querySelector("#fallback-outputs").addEventListener("change", syncJsonFromBuilder);
 document.querySelector("#lookup-editor").addEventListener("submit", saveLookup);
@@ -171,6 +191,7 @@ async function loadRules() {
     cachedRuleSets = body.rule_sets;
     renderEvaluateRuleOptions();
     renderRuleList();
+    renderRuleInspector();
   } catch (error) {
     const target = document.querySelector("#rule-list");
     target.innerHTML = header(["Name", "Decision key", "Status", "Version", "Actions"]);
@@ -389,6 +410,32 @@ function statusItem(label, value) {
   return `<div class="status-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`;
 }
 
+function renderRuleInspector() {
+  if (!ruleInspectorSummary) return;
+  const key = document.querySelector("#rule-key").value.trim() || "new_eligibility_rule";
+  const selected = cachedRuleSets.find((item) => item.decision_key === selectedRuleKey || item.decision_key === key);
+  const type = document.querySelector("#rule-type").value || "decision";
+  const priority = document.querySelector("#rule-priority").value || 0;
+  const surface = document.querySelector("#rule-surface").value.trim() || "-";
+  const mode = document.querySelector("#builder-mode").value;
+  const ttl = Number(document.querySelector("#rule-client-ttl").value || 0);
+  const scope = document.querySelector("#rule-cache-scope").value;
+  const fallback = mode === "graph" ? "graph output" : (document.querySelector("#fallback-result").value.trim() || "deferred");
+  ruleInspectorSummary.innerHTML = [
+    statusItem("Status", selected?.status || (selectedRuleKey ? "draft" : "new")),
+    statusItem("Version", selected?.version ?? "-"),
+    statusItem("Type", type),
+    statusItem("Priority", priority)
+  ].join("");
+  inspectorKey.textContent = key;
+  inspectorSurface.textContent = surface;
+  inspectorCache.textContent = ttl > 0 ? `${ttl}s / ${scope === "none" ? "profile" : scope}` : "No cache hint";
+  inspectorFallback.textContent = fallback;
+  inspectorBranches.textContent = String(builderBranches.length || 0);
+  inspectorNodes.textContent = String(graphBuilder.nodes?.length || 0);
+  inspectorMode.textContent = mode === "graph" ? "Advanced graph" : "Branch rules";
+}
+
 function renderRuleList() {
   const target = document.querySelector("#rule-list");
   target.innerHTML = header(["Name", "Decision key", "Status", "Version", "Actions"]);
@@ -488,6 +535,7 @@ async function loadRule(key) {
     );
     syncBuilderFromJson();
     await loadVersions(key);
+    renderRuleInspector();
     editorOutput.textContent = `Loaded ${key}`;
   } catch (error) {
     editorOutput.textContent = error.message;
@@ -514,6 +562,7 @@ function newRule() {
   renderBranchEditor();
   renderBuilderMode();
   syncJsonFromBuilder();
+  renderRuleInspector();
   editorOutput.textContent = "Ready for a new draft";
 }
 
@@ -533,6 +582,7 @@ async function saveDraft(event) {
     document.querySelector("#rule-key").disabled = true;
     editorOutput.textContent = `${JSON.stringify(body, null, 2)}${formatSchemaWarnings(warnings)}`;
     await loadRules();
+    renderRuleInspector();
   } catch (error) {
     editorOutput.textContent = error.message;
   }
@@ -553,6 +603,7 @@ async function publishSelectedRule() {
     editorOutput.textContent = JSON.stringify(body, null, 2);
     await loadRules();
     await loadVersions(selectedRuleKey);
+    renderRuleInspector();
   } catch (error) {
     editorOutput.textContent = error.message;
   }
@@ -1008,6 +1059,7 @@ function renderBuilderMode() {
   document.querySelector("#fallback-outputs").closest("label").hidden = graphMode;
   if (graphMode) renderGraphBuilder();
   renderRuleGraph();
+  renderRuleInspector();
 }
 
 function bindOutputFieldEditor(node, branchIndex) {
@@ -1682,6 +1734,7 @@ function syncJsonFromBuilder() {
     validateDraft(draft);
     document.querySelector("#rule-draft").value = JSON.stringify(draft, null, 2);
     renderRuleGraph();
+    renderRuleInspector();
     editorOutput.textContent = `Draft synced${formatSchemaWarnings(schemaReferenceWarnings(draft))}`;
   } catch (error) {
     editorOutput.textContent = error.message;
@@ -1709,6 +1762,7 @@ function syncBuilderFromJson() {
       renderBranchEditor();
       renderBuilderMode();
     }
+    renderRuleInspector();
     editorOutput.textContent = "Builder synced";
   } catch (error) {
     editorOutput.textContent = error.message;

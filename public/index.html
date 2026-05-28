@@ -89,143 +89,177 @@
             <button id="refresh-rules">Refresh</button>
           </div>
         </header>
-        <div class="filter-bar">
-          <label>
-            Search
-            <input id="rule-filter-search" placeholder="name or key" />
-          </label>
-          <label>
-            Status
-            <select id="rule-filter-status">
-              <option value="">All</option>
-              <option value="draft">Draft</option>
-              <option value="published">Published</option>
-              <option value="archived">Archived</option>
-            </select>
-          </label>
-          <label>
-            Type
-            <select id="rule-filter-type">
-              <option value="">All</option>
-              <option value="decision">Decision</option>
-              <option value="inapp_message">In-app message</option>
-              <option value="experiment">Experiment</option>
-            </select>
-          </label>
-          <label>
-            Tag
-            <input id="rule-filter-tag" placeholder="nbo" />
-          </label>
-        </div>
-        <div class="split">
-          <div id="rule-list" class="table"></div>
-          <form id="rule-editor" class="editor">
-            <div class="editor-title">Draft Editor</div>
-            <div class="grid-two">
+        <div class="rule-workbench">
+          <div class="rule-list-pane">
+            <div class="filter-bar rule-filter-bar">
               <label>
-                Name
-                <input id="rule-name" required />
+                Search
+                <input id="rule-filter-search" placeholder="name or key" />
               </label>
               <label>
-                Decision key
-                <input id="rule-key" required pattern="[a-z0-9_]+" />
+                Status
+                <select id="rule-filter-status">
+                  <option value="">All</option>
+                  <option value="draft">Draft</option>
+                  <option value="published">Published</option>
+                  <option value="archived">Archived</option>
+                </select>
               </label>
-            </div>
-            <div class="grid-three">
               <label>
                 Type
-                <select id="rule-type">
+                <select id="rule-filter-type">
+                  <option value="">All</option>
                   <option value="decision">Decision</option>
                   <option value="inapp_message">In-app message</option>
                   <option value="experiment">Experiment</option>
                 </select>
               </label>
               <label>
-                Priority
-                <input id="rule-priority" type="number" value="0" />
-              </label>
-              <label>
-                Surface
-                <input id="rule-surface" placeholder="homepage_hero" />
+                Tag
+                <input id="rule-filter-tag" placeholder="nbo" />
               </label>
             </div>
-            <div class="grid-two">
-              <label>
-                Response TTL seconds
-                <input id="rule-client-ttl" type="number" min="0" placeholder="300" />
-              </label>
-              <label>
-                TTL scope
-                <select id="rule-cache-scope">
-                  <option value="none">No cache hint</option>
-                  <option value="profile">Profile decision</option>
-                  <option value="session">Session decision</option>
-                  <option value="global">Global response</option>
-                  <option value="request">Exact request</option>
-                </select>
-              </label>
-            </div>
-            <label>
-              Description
-              <input id="rule-description" />
-            </label>
-            <div class="builder-shell">
-              <div class="builder-bar">
-                <label>
-                  Builder mode
-                  <select id="builder-mode">
-                    <option value="branches">Branch rules</option>
-                    <option value="graph">Advanced graph</option>
-                  </select>
-                </label>
-                <label>
-                  Fallback result
-                  <input id="fallback-result" value="ineligible" />
-                </label>
-                <label>
-                  Fallback outputs JSON
-                  <input id="fallback-outputs" value="{}" />
-                </label>
-                <button type="button" id="add-branch">Add Branch</button>
-              </div>
-              <div id="rule-graph" class="rule-graph"></div>
-              <div id="branch-editor" class="branch-list"></div>
-              <div id="graph-editor" class="graph-editor" hidden>
-                <div class="graph-toolbar">
+            <div id="rule-list" class="table"></div>
+          </div>
+          <form id="rule-editor" class="editor rule-editor-pane">
+            <div class="rule-editor-main">
+              <div class="rule-builder-pane">
+                <div class="editor-title">Draft Builder</div>
+                <div class="grid-two">
                   <label>
-                    Entry node
-                    <input id="graph-entry" value="input" />
+                    Name
+                    <input id="rule-name" required />
                   </label>
                   <label>
-                    New node type
-                    <select id="graph-new-node-type">
-                      <option value="condition">Condition</option>
-                      <option value="score">Score</option>
-                      <option value="lookup">Reference lookup</option>
-                      <option value="frequency_cap">Frequency cap</option>
-                      <option value="output">Output</option>
+                    Decision key
+                    <input id="rule-key" required pattern="[a-z0-9_]+" />
+                  </label>
+                </div>
+                <div class="grid-three">
+                  <label>
+                    Type
+                    <select id="rule-type">
+                      <option value="decision">Decision</option>
+                      <option value="inapp_message">In-app message</option>
+                      <option value="experiment">Experiment</option>
                     </select>
                   </label>
-                  <button type="button" id="add-graph-node">Add Node</button>
-                  <button type="button" id="create-graph-template">Create Template</button>
+                  <label>
+                    Priority
+                    <input id="rule-priority" type="number" value="0" />
+                  </label>
+                  <label>
+                    Surface
+                    <input id="rule-surface" placeholder="homepage_hero" />
+                  </label>
                 </div>
-                <div id="graph-node-editor" class="graph-node-editor"></div>
+                <div class="grid-two">
+                  <label>
+                    Response TTL seconds
+                    <input id="rule-client-ttl" type="number" min="0" placeholder="300" />
+                  </label>
+                  <label>
+                    TTL scope
+                    <select id="rule-cache-scope">
+                      <option value="none">No cache hint</option>
+                      <option value="profile">Profile decision</option>
+                      <option value="session">Session decision</option>
+                      <option value="global">Global response</option>
+                      <option value="request">Exact request</option>
+                    </select>
+                  </label>
+                </div>
+                <label>
+                  Description
+                  <input id="rule-description" />
+                </label>
+                <div class="builder-shell">
+                  <div class="builder-bar">
+                    <label>
+                      Builder mode
+                      <select id="builder-mode">
+                        <option value="branches">Branch rules</option>
+                        <option value="graph">Advanced graph</option>
+                      </select>
+                    </label>
+                    <label>
+                      Fallback result
+                      <input id="fallback-result" value="ineligible" />
+                    </label>
+                    <label>
+                      Fallback outputs JSON
+                      <input id="fallback-outputs" value="{}" />
+                    </label>
+                    <button type="button" id="add-branch">Add Branch</button>
+                  </div>
+                  <div id="rule-graph" class="rule-graph"></div>
+                  <div id="branch-editor" class="branch-list"></div>
+                  <div id="graph-editor" class="graph-editor" hidden>
+                    <div class="graph-toolbar">
+                      <label>
+                        Entry node
+                        <input id="graph-entry" value="input" />
+                      </label>
+                      <label>
+                        New node type
+                        <select id="graph-new-node-type">
+                          <option value="condition">Condition</option>
+                          <option value="score">Score</option>
+                          <option value="lookup">Reference lookup</option>
+                          <option value="frequency_cap">Frequency cap</option>
+                          <option value="output">Output</option>
+                        </select>
+                      </label>
+                      <button type="button" id="add-graph-node">Add Node</button>
+                      <button type="button" id="create-graph-template">Create Template</button>
+                    </div>
+                    <div id="graph-node-editor" class="graph-node-editor"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="rule-inspector">
+                <div class="editor-title">Inspector</div>
+                <div id="rule-inspector-summary" class="status-panel compact-status-panel"></div>
+                <div class="inspector-section">
+                  <h3>Execution</h3>
+                  <div class="inspector-lines">
+                    <div><span>Decision key</span><strong id="inspector-key">-</strong></div>
+                    <div><span>Surface</span><strong id="inspector-surface">-</strong></div>
+                    <div><span>Cache hint</span><strong id="inspector-cache">No cache hint</strong></div>
+                    <div><span>Fallback</span><strong id="inspector-fallback">ineligible</strong></div>
+                  </div>
+                </div>
+                <div class="inspector-section">
+                  <h3>Draft Shape</h3>
+                  <div class="inspector-lines">
+                    <div><span>Branches</span><strong id="inspector-branches">0</strong></div>
+                    <div><span>Graph nodes</span><strong id="inspector-nodes">0</strong></div>
+                    <div><span>Mode</span><strong id="inspector-mode">Branch rules</strong></div>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="actions left">
+            <div class="actions left workbench-actions">
               <button type="button" id="sync-json">Sync JSON</button>
               <button type="submit" id="save-draft">Save Draft</button>
               <button type="button" id="publish-rule">Publish</button>
             </div>
-            <details>
-              <summary>Draft JSON</summary>
-              <textarea id="rule-draft" spellcheck="false"></textarea>
-            </details>
-            <details open>
-              <summary>Version History</summary>
-              <div id="version-list" class="table"></div>
-            </details>
-            <pre id="rule-editor-output"></pre>
+            <div class="rule-bottom-drawer">
+              <div class="drawer-tabs">
+                <button type="button" class="active" data-rule-drawer-tab="versions">Versions</button>
+                <button type="button" data-rule-drawer-tab="json">Draft JSON</button>
+                <button type="button" data-rule-drawer-tab="output">Output</button>
+              </div>
+              <div class="drawer-panel active" data-rule-drawer-panel="versions">
+                <div id="version-list" class="table"></div>
+              </div>
+              <div class="drawer-panel" data-rule-drawer-panel="json">
+                <textarea id="rule-draft" spellcheck="false"></textarea>
+              </div>
+              <div class="drawer-panel" data-rule-drawer-panel="output">
+                <pre id="rule-editor-output"></pre>
+              </div>
+            </div>
             <template id="branch-template">
               <section class="branch-card">
                 <div class="branch-head">
