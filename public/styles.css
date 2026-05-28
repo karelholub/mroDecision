@@ -695,9 +695,26 @@ button.graph-node:hover {
 
 .condition-row {
   display: grid;
-  grid-template-columns: minmax(95px, 0.7fr) minmax(120px, 1fr) minmax(140px, 1fr) minmax(120px, 1fr) auto;
+  grid-template-columns:
+    minmax(95px, 0.7fr)
+    minmax(120px, 1fr)
+    minmax(140px, 1fr)
+    minmax(120px, 1fr)
+    minmax(95px, 0.7fr)
+    minmax(110px, 0.8fr)
+    minmax(120px, 1fr)
+    auto;
   gap: 8px;
   align-items: end;
+}
+
+.condition-row.value-mode [data-role^="value-source"] {
+  display: none;
+}
+
+.condition-row.field-mode [data-field="value"] {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 .output-helper {

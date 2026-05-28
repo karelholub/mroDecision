@@ -309,6 +309,25 @@
                   Value
                   <input data-field="value" />
                 </label>
+                <label>
+                  Compare to
+                  <select data-field="compare_mode">
+                    <option value="value">Value</option>
+                    <option value="field">Field</option>
+                  </select>
+                </label>
+                <label data-role="value-source-source">
+                  Compare source
+                  <select data-field="value_source_source">
+                    <option value="attribute">Attribute</option>
+                    <option value="segment">Segment</option>
+                    <option value="context">Context</option>
+                  </select>
+                </label>
+                <label data-role="value-source-key">
+                  Compare key
+                  <input data-field="value_source_key" />
+                </label>
                 <button type="button" data-action="remove-condition">Remove</button>
               </div>
             </template>

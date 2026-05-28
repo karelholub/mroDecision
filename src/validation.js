@@ -198,6 +198,9 @@ function collectConditionReferences(group, declared, missing) {
   if (declared[group.source]?.size && !declared[group.source].has(group.key)) {
     missing.push(`${group.source}.${group.key}`);
   }
+  if (group.value_source && declared[group.value_source.source]?.size && !declared[group.value_source.source].has(group.value_source.key)) {
+    missing.push(`${group.value_source.source}.${group.value_source.key}`);
+  }
 }
 
 function validateConditionGroup(group, label, depth = 1) {
@@ -222,6 +225,11 @@ function validateConditionGroup(group, label, depth = 1) {
   if (!allowedSources.has(group.source)) validationError(`${label} has unsupported source: ${group.source}`);
   if (!group.key) validationError(`${label} condition key is required`);
   if (!allowedOperators.has(group.operator)) validationError(`${label} has unsupported operator: ${group.operator}`);
+  if (group.value_source != null) {
+    if (!isPlainObject(group.value_source)) validationError(`${label} value source must be an object`);
+    if (!allowedSources.has(group.value_source.source)) validationError(`${label} has unsupported value source: ${group.value_source.source}`);
+    if (!group.value_source.key) validationError(`${label} value source key is required`);
+  }
 }
 
 function validateGraph(graph) {

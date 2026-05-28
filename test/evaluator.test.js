@@ -173,6 +173,46 @@ test("evaluates contains operators for promotion history arrays", () => {
   assert.equal(result.outputs.offer_id, "solar_green_energy");
 });
 
+test("evaluates value-source comparisons", () => {
+  const result = evaluateDecision({
+    now: new Date("2026-05-28T00:00:00.000Z"),
+    lookupTables: [],
+    request: {
+      decision_key: "value_source_check",
+      profile_key: "abc-123",
+      identifiers: [{ typeId: "email", value: "user@example.com" }],
+      attributes: {
+        requested_amount: [{ value: 5000 }],
+        approved_limit: [{ value: 7000 }]
+      },
+      segments: {},
+      context: {}
+    },
+    version: {
+      version: 1,
+      definition: {
+        fallback: { result: "deferred", outputs: {} },
+        branches: [
+          {
+            id: "within_limit",
+            when: {
+              source: "attribute",
+              key: "requested_amount",
+              operator: "less_than_or_equal",
+              value_source: { source: "attribute", key: "approved_limit" }
+            },
+            result: "eligible",
+            outputs: {}
+          }
+        ]
+      }
+    }
+  });
+
+  assert.equal(result.result, "eligible");
+  assert.deepEqual(result.matched_rules, ["within_limit"]);
+});
+
 test("evaluates graph frequency cap nodes from client events", () => {
   const base = {
     now: new Date("2026-05-27T00:00:00.000Z"),

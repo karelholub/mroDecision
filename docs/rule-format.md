@@ -53,6 +53,17 @@ Condition groups support `all`, `any`, and `not`. Leaf conditions support:
 
 Sources are `attribute`, `segment`, `context`, and `score`.
 
+Leaf conditions can compare to either a literal `value` or another profile/context field with `value_source`:
+
+```json
+{
+  "source": "attribute",
+  "key": "requested_amount",
+  "operator": "less_than_or_equal",
+  "value_source": { "source": "attribute", "key": "approved_limit" }
+}
+```
+
 Output values beginning with `=` are evaluated as safe expressions. This is the preferred way to enrich a decision from lookup tables while keeping rule branches readable.
 
 ## Advanced Graph

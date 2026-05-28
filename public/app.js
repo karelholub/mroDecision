@@ -915,7 +915,10 @@ function renderBranchEditor() {
         source: "attribute",
         key: "",
         operator: "equals",
-        value: ""
+        value: "",
+        compare_mode: "value",
+        value_source_source: "attribute",
+        value_source_key: ""
       });
       renderBranchEditor();
       syncJsonFromBuilder();
@@ -935,7 +938,12 @@ function renderBranchEditor() {
       bindConditionField(conditionNode, branchIndex, conditionIndex, "key");
       bindConditionField(conditionNode, branchIndex, conditionIndex, "operator");
       bindConditionField(conditionNode, branchIndex, conditionIndex, "value");
+      bindConditionField(conditionNode, branchIndex, conditionIndex, "compare_mode");
+      bindConditionField(conditionNode, branchIndex, conditionIndex, "value_source_source");
+      bindConditionField(conditionNode, branchIndex, conditionIndex, "value_source_key");
       bindSchemaKeySuggestions(conditionNode, branchIndex, conditionIndex);
+      bindValueSourceSuggestions(conditionNode, branchIndex, conditionIndex);
+      renderConditionCompareMode(conditionNode, builderBranches[branchIndex].conditions[conditionIndex]);
       conditionNode.querySelector("[data-action='remove-condition']").addEventListener("click", () => {
         builderBranches[branchIndex].conditions.splice(conditionIndex, 1);
         renderBranchEditor();
@@ -1582,10 +1590,15 @@ function bindConditionField(node, branchIndex, conditionIndex, field) {
       builderBranches[branchIndex].conditions[conditionIndex].key = "";
       renderBranchEditor();
     }
+    if (field === "value_source_source") {
+      builderBranches[branchIndex].conditions[conditionIndex].value_source_key = "";
+      renderBranchEditor();
+    }
+    if (field === "compare_mode") renderConditionCompareMode(node, builderBranches[branchIndex].conditions[conditionIndex]);
     syncJsonFromBuilder();
   });
   input.addEventListener("change", () => {
-    if (field === "source") renderBranchEditor();
+    if (["source", "value_source_source", "compare_mode"].includes(field)) renderBranchEditor();
     syncJsonFromBuilder();
   });
 }
@@ -1605,6 +1618,29 @@ function bindSchemaKeySuggestions(node, branchIndex, conditionIndex) {
     .join("");
   keyInput.setAttribute("list", list.id);
   keyInput.after(list);
+}
+
+function bindValueSourceSuggestions(node, branchIndex, conditionIndex) {
+  const keyInput = node.querySelector("[data-field='value_source_key']");
+  const source = builderBranches[branchIndex].conditions[conditionIndex].value_source_source || "attribute";
+  const items = schemaItemsForSource(source);
+  if (!items.length) {
+    keyInput.removeAttribute("list");
+    return;
+  }
+  const list = document.createElement("datalist");
+  list.id = `value-source-options-${branchIndex}-${conditionIndex}`;
+  list.innerHTML = items
+    .map((item) => `<option value="${escapeHtml(item.name)}" label="${escapeHtml([item.type, item.dimension].filter(Boolean).join(" / "))}"></option>`)
+    .join("");
+  keyInput.setAttribute("list", list.id);
+  keyInput.after(list);
+}
+
+function renderConditionCompareMode(node, condition) {
+  const mode = condition.compare_mode || "value";
+  node.classList.toggle("field-mode", mode === "field");
+  node.classList.toggle("value-mode", mode !== "field");
 }
 
 function syncJsonFromBuilder() {
@@ -1674,9 +1710,16 @@ function conditionFromBuilder(condition) {
     operator: condition.operator || "equals"
   };
   if (!["is_blank", "is_not_blank"].includes(output.operator)) {
-    output.value = condition.operator === "in" || condition.operator === "not_in"
-      ? String(condition.value || "").split(",").map((item) => parseLiteral(item.trim()))
-      : parseLiteral(String(condition.value ?? "").trim());
+    if (condition.compare_mode === "field") {
+      output.value_source = {
+        source: condition.value_source_source || "attribute",
+        key: condition.value_source_key || ""
+      };
+    } else {
+      output.value = condition.operator === "in" || condition.operator === "not_in"
+        ? String(condition.value || "").split(",").map((item) => parseLiteral(item.trim()))
+        : parseLiteral(String(condition.value ?? "").trim());
+    }
   }
   return output;
 }
@@ -1693,7 +1736,10 @@ function branchToBuilder(branch, index) {
       source: condition.source || "attribute",
       key: condition.key || "",
       operator: condition.operator || "equals",
-      value: Array.isArray(condition.value) ? condition.value.join(", ") : condition.value ?? ""
+      value: Array.isArray(condition.value) ? condition.value.join(", ") : condition.value ?? "",
+      compare_mode: condition.value_source ? "field" : "value",
+      value_source_source: condition.value_source?.source || "attribute",
+      value_source_key: condition.value_source?.key || ""
     }))
   };
 }
@@ -1762,6 +1808,9 @@ function validateConditionGroup(group, label, depth) {
     return;
   }
   if (!group.source || !group.key || !group.operator) throw new Error(`${label} has an incomplete condition`);
+  if (group.value_source && (!group.value_source.source || !group.value_source.key)) {
+    throw new Error(`${label} has an incomplete compare field`);
+  }
 }
 
 function schemaItemsForSource(source) {
@@ -1792,6 +1841,12 @@ function collectSchemaWarnings(group, label, warnings) {
   const items = schemaItemsForSource(group.source);
   if (items.length && !items.some((item) => item.name === group.key)) {
     warnings.push(`${label}: ${group.source}.${group.key || "(empty)"} is not in cached schema`);
+  }
+  if (group.value_source) {
+    const valueItems = schemaItemsForSource(group.value_source.source);
+    if (valueItems.length && !valueItems.some((item) => item.name === group.value_source.key)) {
+      warnings.push(`${label}: ${group.value_source.source}.${group.value_source.key || "(empty)"} is not in cached schema`);
+    }
   }
 }
 

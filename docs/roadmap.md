@@ -20,6 +20,7 @@ Implemented:
 - Meiro Profile API schema sync from a sample identifier.
 - Scheduled Meiro Profile API schema sync when API settings and sample identifier are configured.
 - Rule Builder key suggestions from cached attributes, segments, and context keys.
+- Branch builder value-source comparisons for field-to-field checks.
 - Client-side broken-reference warnings with publish blocking when cached schema references are invalid.
 - In-process client response caching based on rule TTL and cache scope.
 - Rule-set list search/filter controls with duplicate and archive actions.
@@ -86,7 +87,7 @@ Goal: support the full v2 graph model without forcing engineers to edit JSON.
 
 Open decision: ship a pragmatic graph editor first, then polish minimap/drag behavior, rather than blocking on a full canvas experience.
 
-Status: first-pass graph authoring is implemented with Branch/Graph mode switching, node cards for input, condition, score, lookup, frequency cap, output, fallback, and error nodes, visual route preview, JSON sync, route/reachability validation, draft/published evaluation trace cards, and guided helpers for lookup and frequency-cap nodes. Drag/drop positioning remains.
+Status: first-pass graph authoring is implemented with Branch/Graph mode switching, node cards for input, condition, score, lookup, frequency cap, output, fallback, and error nodes, visual route preview, JSON sync, route/reachability validation, draft/published evaluation trace cards, branch value-source comparisons, and guided helpers for lookup and frequency-cap nodes. Drag/drop positioning remains.
 
 ## Phase 4: Client-Facing In-App and Experiment APIs
 

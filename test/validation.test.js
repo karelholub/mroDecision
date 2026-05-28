@@ -70,6 +70,30 @@ test("blocks undeclared input references when an input schema is provided", () =
   );
 });
 
+test("blocks undeclared value-source references", () => {
+  assert.throws(
+    () =>
+      validateRuleDefinition(
+        {
+          branches: [
+            {
+              id: "limit_check",
+              result: "eligible",
+              when: {
+                source: "attribute",
+                key: "requested_amount",
+                operator: "less_than_or_equal",
+                value_source: { source: "attribute", key: "approvedlimit" }
+              }
+            }
+          ]
+        },
+        { attributes: { requested_amount: "number", approved_limit: "number" } }
+      ),
+    /undeclared inputs/
+  );
+});
+
 test("validates graph routes and reachability", () => {
   assert.doesNotThrow(() =>
     validateRuleDefinition({
