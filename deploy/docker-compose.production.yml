@@ -1,0 +1,41 @@
+services:
+  dee:
+    image: ${DEE_IMAGE:-meiro-decision-engine:latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: ${DEE_PORT:-8080}
+      DEE_DATA_DIR: ${DEE_DATA_DIR:-/app/data}
+      DEE_DB_PATH: ${DEE_DB_PATH:-/app/data/dee.sqlite}
+      DEE_AUDIT_RETENTION_DAYS: ${DEE_AUDIT_RETENTION_DAYS:-90}
+      DEE_CLIENT_EVENT_RETENTION_DAYS: ${DEE_CLIENT_EVENT_RETENTION_DAYS:-180}
+      DEE_BOOTSTRAP_TOKENS_ENABLED: ${DEE_BOOTSTRAP_TOKENS_ENABLED:-false}
+      DEE_TOKENS: ${DEE_TOKENS:-[]}
+    volumes:
+      - dee-data:${DEE_DATA_DIR:-/app/data}
+    expose:
+      - "${DEE_PORT:-8080}"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || 8080) + '/v1/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      dee:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    environment:
+      DEE_PUBLIC_HOST: ${DEE_PUBLIC_HOST:-localhost}
+      DEE_PORT: ${DEE_PORT:-8080}
+    volumes:
+      - ./nginx.conf:/etc/nginx/templates/default.conf.template:ro
+
+volumes:
+  dee-data:
+

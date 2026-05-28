@@ -34,3 +34,6 @@ jobs:
 
       - name: Build image
         run: docker build -t meiro-decision-engine:ci .
+
+      - name: Validate production Compose template
+        run: docker compose --env-file deploy/.env.example -f deploy/docker-compose.production.yml config

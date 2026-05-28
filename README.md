@@ -140,6 +140,8 @@ For production, create at least one database-backed token with the `admin` scope
 
 For Docker deployments, place the service behind an HTTPS reverse proxy and mount `data/` on durable storage. Back up SQLite by snapshotting `data/dee.sqlite` together with its WAL/SHM sidecar files while the container is stopped, or by using SQLite online backup tooling from the host. Restore by replacing those files before starting the container.
 
+See [docs/deployment.md](docs/deployment.md) for production Compose, nginx, backup, token-hardening, and managed-database migration guidance.
+
 Run a simple local latency check against the Docker service with:
 
 ```bash
