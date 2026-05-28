@@ -661,74 +661,86 @@
           </div>
         </header>
         <div class="lookup-workbench">
-          <div class="lookup-list-pane">
+          <div class="lookup-list-pane editor">
+            <div class="editor-title">Reference Tables</div>
             <div id="lookup-list" class="table lookup-list"></div>
           </div>
-          <form id="lookup-editor" class="editor lookup-editor-pane">
-            <div class="lookup-editor-main">
-              <div class="lookup-table-pane">
-                <div class="editor-title">Table Editor</div>
-                <div class="grid-three">
-                  <label>
-                    Table ID
-                    <input id="lookup-id" required pattern="[a-zA-Z0-9_-]+" />
-                  </label>
-                  <label>
-                    Name
-                    <input id="lookup-name" required />
-                  </label>
-                  <label>
-                    Match column
-                    <input id="lookup-key-column" value="key" required />
-                  </label>
-                </div>
-                <div class="reference-grid-shell">
-                  <div class="reference-grid-actions">
-                    <button type="button" id="add-reference-row">Add Row</button>
-                    <button type="button" id="add-reference-column">Add Column</button>
-                    <button type="button" id="sync-reference-json">Sync JSON</button>
+        </div>
+        <div id="lookup-detail-modal" class="lookup-detail-modal" hidden>
+          <form id="lookup-editor" class="lookup-detail-dialog">
+            <div class="lookup-detail-header">
+              <div>
+                <strong>Reference Table Details</strong>
+                <span>Edit rows, import CSV, inspect usage, and review versions.</span>
+              </div>
+              <button type="button" id="close-lookup-detail">Close</button>
+            </div>
+            <div class="lookup-editor-pane">
+              <div class="lookup-editor-main">
+                <div class="lookup-table-pane">
+                  <div class="editor-title">Table Editor</div>
+                  <div class="grid-three">
+                    <label>
+                      Table ID
+                      <input id="lookup-id" required pattern="[a-zA-Z0-9_-]+" />
+                    </label>
+                    <label>
+                      Name
+                      <input id="lookup-name" required />
+                    </label>
+                    <label>
+                      Match column
+                      <input id="lookup-key-column" value="key" required />
+                    </label>
                   </div>
-                  <div id="reference-grid" class="reference-grid"></div>
+                  <div class="reference-grid-shell">
+                    <div class="reference-grid-actions">
+                      <button type="button" id="add-reference-row">Add Row</button>
+                      <button type="button" id="add-reference-column">Add Column</button>
+                      <button type="button" id="sync-reference-json">Sync JSON</button>
+                    </div>
+                    <div id="reference-grid" class="reference-grid"></div>
+                  </div>
+                </div>
+                <div class="lookup-inspector-pane">
+                  <div class="editor-title">Inspector</div>
+                  <div id="lookup-inspector-summary" class="status-panel compact-status-panel"></div>
+                  <div class="inspector-section">
+                    <h3>How Rules Use It</h3>
+                    <div class="inspector-lines">
+                      <div><span>Reference table</span><strong id="lookup-help-table">product_catalog</strong></div>
+                      <div><span>Match column</span><strong id="lookup-help-key">product_code</strong></div>
+                      <div><span>Output expression</span><strong id="lookup-help-expression">=lookup("table", key, "field")</strong></div>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div class="lookup-inspector-pane">
-                <div class="editor-title">Inspector</div>
-                <div id="lookup-inspector-summary" class="status-panel compact-status-panel"></div>
-                <div class="inspector-section">
-                  <h3>How Rules Use It</h3>
-                  <div class="inspector-lines">
-                    <div><span>Reference table</span><strong id="lookup-help-table">product_catalog</strong></div>
-                    <div><span>Match column</span><strong id="lookup-help-key">product_code</strong></div>
-                    <div><span>Output expression</span><strong id="lookup-help-expression">=lookup("table", key, "field")</strong></div>
+              <div class="rule-bottom-drawer lookup-bottom-drawer">
+                <div class="drawer-tabs">
+                  <button type="button" class="active" data-lookup-drawer-tab="versions">Versions</button>
+                  <button type="button" data-lookup-drawer-tab="json">Rows JSON</button>
+                  <button type="button" data-lookup-drawer-tab="csv">CSV Import</button>
+                  <button type="button" data-lookup-drawer-tab="output">Output</button>
+                </div>
+                <div class="drawer-panel active" data-lookup-drawer-panel="versions">
+                  <div id="lookup-version-list" class="table"></div>
+                </div>
+                <div class="drawer-panel" data-lookup-drawer-panel="json">
+                  <textarea id="lookup-rows" spellcheck="false"></textarea>
+                </div>
+                <div class="drawer-panel" data-lookup-drawer-panel="csv">
+                  <textarea id="lookup-csv" spellcheck="false" placeholder="country,tier&#10;CZ,A&#10;SK,B"></textarea>
+                  <div class="actions left">
+                    <button type="button" id="import-lookup-csv">Import CSV</button>
                   </div>
+                </div>
+                <div class="drawer-panel" data-lookup-drawer-panel="output">
+                  <pre id="lookup-output"></pre>
                 </div>
               </div>
             </div>
-            <div class="actions left workbench-actions">
-              <button type="submit" id="save-lookup">Save Reference Table</button>
-            </div>
-            <div class="rule-bottom-drawer lookup-bottom-drawer">
-              <div class="drawer-tabs">
-                <button type="button" class="active" data-lookup-drawer-tab="versions">Versions</button>
-                <button type="button" data-lookup-drawer-tab="json">Rows JSON</button>
-                <button type="button" data-lookup-drawer-tab="csv">CSV Import</button>
-                <button type="button" data-lookup-drawer-tab="output">Output</button>
-              </div>
-              <div class="drawer-panel active" data-lookup-drawer-panel="versions">
-                <div id="lookup-version-list" class="table"></div>
-              </div>
-              <div class="drawer-panel" data-lookup-drawer-panel="json">
-                <textarea id="lookup-rows" spellcheck="false"></textarea>
-              </div>
-              <div class="drawer-panel" data-lookup-drawer-panel="csv">
-                <textarea id="lookup-csv" spellcheck="false" placeholder="country,tier&#10;CZ,A&#10;SK,B"></textarea>
-                <div class="actions left">
-                  <button type="button" id="import-lookup-csv">Import CSV</button>
-                </div>
-              </div>
-              <div class="drawer-panel" data-lookup-drawer-panel="output">
-                <pre id="lookup-output"></pre>
-              </div>
+            <div class="lookup-detail-footer">
+              <button type="submit" id="save-lookup" class="primary">Save Reference Table</button>
             </div>
           </form>
         </div>

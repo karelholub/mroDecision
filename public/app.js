@@ -11,6 +11,7 @@ const ruleGraph = document.querySelector("#rule-graph");
 const graphEditor = document.querySelector("#graph-editor");
 const graphNodeEditor = document.querySelector("#graph-node-editor");
 const lookupOutput = document.querySelector("#lookup-output");
+const lookupDetailModal = document.querySelector("#lookup-detail-modal");
 const messageOutput = document.querySelector("#message-output");
 const messagePreview = document.querySelector("#message-preview");
 const messageDetailModal = document.querySelector("#message-detail-modal");
@@ -140,6 +141,7 @@ document.querySelector("#eval-profile-key").addEventListener("input", () => {
 document.querySelector("#new-rule").addEventListener("click", newRule);
 document.querySelector("#new-lookup").addEventListener("click", newLookup);
 document.querySelector("#new-message").addEventListener("click", newMessage);
+document.querySelector("#close-lookup-detail").addEventListener("click", closeLookupDetail);
 document.querySelector("#close-message-detail").addEventListener("click", closeMessageDetail);
 document.querySelector("#export-config").addEventListener("click", exportConfig);
 document.querySelector("#sync-json").addEventListener("click", syncJsonFromBuilder);
@@ -200,13 +202,14 @@ document.querySelector("#settings-form").addEventListener("submit", saveSettings
 document.querySelector("#token-form").addEventListener("submit", createToken);
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !ruleBuilderModal.hidden) closeRuleBuilder();
+  if (event.key === "Escape" && lookupDetailModal && !lookupDetailModal.hidden) closeLookupDetail();
   if (event.key === "Escape" && messageDetailModal && !messageDetailModal.hidden) closeMessageDetail();
 });
 
 loadMetrics();
 loadRules();
 newRule();
-newLookup();
+newLookup({ silent: true });
 newMessage({ silent: true });
 loadLookups();
 loadMessages();
@@ -868,12 +871,12 @@ async function exportAuditCsv() {
 
 async function loadLookups() {
   const target = document.querySelector("#lookup-list");
-  target.innerHTML = header(["Name", "ID", "Match column", "Rows", "Version"]);
+  target.innerHTML = header(["Name", "ID", "Match column", "Rows", "Version", "Columns"]);
   try {
     const body = await api("/v1/lookup-tables");
     cachedLookupTables = body.lookup_tables || [];
     target.innerHTML += body.lookup_tables
-      .map((item) => row([item.name, item.id, item.key_column, item.rows.length, item.version], { lookupId: item.id }))
+      .map((item) => lookupCatalogRow(item))
       .join("");
     document.querySelectorAll("[data-lookup-id]").forEach((element) => {
       element.addEventListener("click", () => loadLookup(element.dataset.lookupId, body.lookup_tables));
@@ -881,8 +884,26 @@ async function loadLookups() {
     renderBranchEditor();
     if (document.querySelector("#builder-mode")?.value === "graph") renderGraphBuilder();
   } catch (error) {
-    target.innerHTML += row([error.message, "", "", "", ""]);
+    target.innerHTML += row([error.message, "", "", "", "", ""]);
   }
+}
+
+function lookupCatalogRow(item) {
+  const columns = referenceColumnsFromRowsForTable(item);
+  return row([
+    item.name,
+    item.id,
+    item.key_column || "key",
+    formatNumber(item.rows?.length || 0),
+    item.version || "-",
+    columns.join(", ") || "-"
+  ], { lookupId: item.id });
+}
+
+function referenceColumnsFromRowsForTable(table) {
+  const keyColumn = table.key_column || "key";
+  const discovered = [...new Set((table.rows || []).flatMap((rowItem) => Object.keys(rowItem || {})))];
+  return [keyColumn, ...discovered.filter((column) => column !== keyColumn)];
 }
 
 async function loadMessages() {
@@ -2163,7 +2184,17 @@ function slug(value) {
     .replace(/^_+|_+$/g, "") || "branch";
 }
 
-function newLookup() {
+function openLookupDetail() {
+  if (!lookupDetailModal) return;
+  lookupDetailModal.hidden = false;
+}
+
+function closeLookupDetail() {
+  if (!lookupDetailModal) return;
+  lookupDetailModal.hidden = true;
+}
+
+function newLookup(options = {}) {
   selectedLookupId = null;
   document.querySelector("#lookup-id").value = "reference_table";
   document.querySelector("#lookup-id").disabled = false;
@@ -2182,6 +2213,7 @@ function newLookup() {
   loadLookupVersions(null);
   renderLookupInspector();
   lookupOutput.textContent = "Ready for a new reference table";
+  if (!options.silent) openLookupDetail();
 }
 
 function referenceRowsFromJson() {
@@ -2395,6 +2427,7 @@ function loadLookup(id, tables) {
   loadLookupVersions(id);
   renderLookupInspector();
   lookupOutput.textContent = `Loaded ${id}`;
+  openLookupDetail();
 }
 
 async function loadLookupVersion(id, version) {
