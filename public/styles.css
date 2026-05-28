@@ -1297,7 +1297,7 @@ header {
 }
 
 .evaluate-response {
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
 }
 
 .evaluate-response .compact-status-panel {
@@ -1322,6 +1322,56 @@ header {
 .evaluate-response .eval-trace {
   min-height: 0;
   overflow: auto;
+}
+
+.eval-output-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 8px;
+  min-height: 0;
+  max-height: 210px;
+  overflow: auto;
+}
+
+.eval-output-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel-soft);
+}
+
+.eval-output-card.primary {
+  border-color: #a7d7cd;
+  background: #f0faf7;
+}
+
+.eval-output-card.warning {
+  border-color: #f0cf75;
+  background: var(--warning-soft);
+}
+
+.eval-output-card span,
+.eval-output-card small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.eval-output-card strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.eval-empty-state {
+  grid-column: 1 / -1;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  padding: 14px;
+  color: var(--muted);
+  background: var(--panel-soft);
 }
 
 .eval-trace:empty {

@@ -3,6 +3,7 @@ const evalInput = document.querySelector("#eval-input");
 const evalOutput = document.querySelector("#eval-output");
 const evalTrace = document.querySelector("#eval-trace");
 const evalSummary = document.querySelector("#eval-summary");
+const evalOutputSummary = document.querySelector("#eval-output-summary");
 const evalEndpointLabel = document.querySelector("#eval-endpoint-label");
 const evalAuditLabel = document.querySelector("#eval-audit-label");
 const editorOutput = document.querySelector("#rule-editor-output");
@@ -221,6 +222,7 @@ loadSettings();
 loadSchema({ silent: true });
 loadEvaluatePreset();
 renderEvaluationSummary(null, document.querySelector("#eval-mode").value);
+renderEvaluationOutputSummary(null);
 loadIntegration();
 loadRuntimeStatus();
 
@@ -1167,12 +1169,14 @@ async function runEvaluate() {
       body: JSON.stringify(request)
     });
     renderEvaluationSummary(body, mode);
+    renderEvaluationOutputSummary(body);
     renderEvaluationTrace(body);
     evalOutput.textContent = formatDecisionOutput(body);
     loadAudit();
     loadMetrics();
   } catch (error) {
     renderEvaluationSummary(null, document.querySelector("#eval-mode").value, error);
+    renderEvaluationOutputSummary(null, error);
     evalTrace.innerHTML = "";
     evalOutput.textContent = error.message;
   }
@@ -2679,6 +2683,49 @@ function renderEvaluationSummary(body, mode, error) {
     statusItem("Result", body.result || "-"),
     statusItem("Matched", body.matched_rules?.join(", ") || "fallback")
   ].join("");
+}
+
+function renderEvaluationOutputSummary(body, error = null) {
+  if (!evalOutputSummary) return;
+  if (error) {
+    evalOutputSummary.innerHTML = `<div class="eval-empty-state">Evaluation failed. Review the response panel for details.</div>`;
+    return;
+  }
+  if (!body) {
+    evalOutputSummary.innerHTML = `<div class="eval-empty-state">Run an evaluation to inspect outputs, matched rules, and response warnings.</div>`;
+    return;
+  }
+  const outputEntries = Object.entries(body.outputs || {});
+  const errors = Array.isArray(body.errors) ? body.errors : [];
+  evalOutputSummary.innerHTML = `
+    <div class="eval-output-card primary">
+      <span>Result</span>
+      <strong>${escapeHtml(body.result || "-")}</strong>
+      <small>${escapeHtml(body.decision_key || "decision")}</small>
+    </div>
+    <div class="eval-output-card">
+      <span>Matched rules</span>
+      <strong>${escapeHtml(body.matched_rules?.join(", ") || "fallback")}</strong>
+      <small>${escapeHtml(body.rule_version ? `version ${body.rule_version}` : body.tested_version ? "draft test" : "published")}</small>
+    </div>
+    ${outputEntries.length
+      ? outputEntries.map(([key, value]) => `
+        <div class="eval-output-card">
+          <span>${escapeHtml(key)}</span>
+          <strong>${escapeHtml(formatDecisionValue(value))}</strong>
+        </div>
+      `).join("")
+      : `<div class="eval-output-card"><span>Outputs</span><strong>No outputs</strong></div>`}
+    ${errors.length
+      ? `<div class="eval-output-card warning"><span>Errors</span><strong>${escapeHtml(errors.join(", "))}</strong></div>`
+      : ""}
+  `;
+}
+
+function formatDecisionValue(value) {
+  if (value == null) return "-";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }
 
 function renderEvaluationTrace(body) {
