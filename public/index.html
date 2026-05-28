@@ -434,39 +434,57 @@
             <h2>Audit</h2>
             <p class="page-subtitle">Inspect decision outcomes, matched rules, and payload summaries.</p>
           </div>
-          <button id="refresh-audit">Refresh</button>
+          <div class="actions">
+            <button id="refresh-audit">Refresh</button>
+            <button id="export-audit-csv">Export CSV</button>
+          </div>
         </header>
-        <div class="filter-bar">
-          <label>
-            Decision key
-            <input id="audit-decision-key" placeholder="next_best_offer" />
-          </label>
-          <label>
-            Profile key
-            <input id="audit-profile-key" />
-          </label>
-          <label>
-            Result
-            <input id="audit-result" placeholder="eligible" />
-          </label>
-          <label>
-            From
-            <input id="audit-from" type="datetime-local" />
-          </label>
-          <label>
-            To
-            <input id="audit-to" type="datetime-local" />
-          </label>
-          <label>
-            Limit
-            <input id="audit-limit" type="number" min="1" max="1000" value="100" />
-          </label>
-          <button id="export-audit-csv">Export CSV</button>
-        </div>
-        <div class="split">
-          <div id="audit-list" class="table"></div>
-          <div class="editor">
-            <div class="editor-title">Audit Detail</div>
+        <div class="audit-workbench">
+          <div class="audit-filter-pane editor">
+            <div class="editor-title">Filters</div>
+            <div class="audit-filter-grid">
+              <label>
+                Decision key
+                <input id="audit-decision-key" placeholder="next_best_offer" />
+              </label>
+              <label>
+                Profile key
+                <input id="audit-profile-key" />
+              </label>
+              <label>
+                Result
+                <input id="audit-result" placeholder="eligible" />
+              </label>
+              <label>
+                From
+                <input id="audit-from" type="datetime-local" />
+              </label>
+              <label>
+                To
+                <input id="audit-to" type="datetime-local" />
+              </label>
+              <label>
+                Limit
+                <input id="audit-limit" type="number" min="1" max="1000" value="100" />
+              </label>
+            </div>
+            <div class="actions left">
+              <button type="button" id="clear-audit-filters">Clear</button>
+            </div>
+          </div>
+          <div class="audit-results-pane">
+            <div class="audit-results-head">
+              <div>
+                <div class="editor-title">Events</div>
+                <span id="audit-count">No events loaded</span>
+              </div>
+              <span id="audit-range">Latest first</span>
+            </div>
+            <div id="audit-list" class="table audit-list"></div>
+          </div>
+          <div class="audit-detail-pane editor">
+            <div class="editor-title">Detail</div>
+            <div id="audit-detail-summary" class="status-panel compact-status-panel"></div>
             <pre id="audit-detail"></pre>
           </div>
         </div>

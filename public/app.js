@@ -11,6 +11,9 @@ const lookupOutput = document.querySelector("#lookup-output");
 const messageOutput = document.querySelector("#message-output");
 const referenceGrid = document.querySelector("#reference-grid");
 const auditDetail = document.querySelector("#audit-detail");
+const auditDetailSummary = document.querySelector("#audit-detail-summary");
+const auditCount = document.querySelector("#audit-count");
+const auditRange = document.querySelector("#audit-range");
 const versionList = document.querySelector("#version-list");
 const lookupVersionList = document.querySelector("#lookup-version-list");
 const settingsOutput = document.querySelector("#settings-output");
@@ -78,6 +81,7 @@ document.querySelector("#rule-filter-status").addEventListener("change", renderR
 document.querySelector("#rule-filter-type").addEventListener("change", renderRuleList);
 document.querySelector("#rule-filter-tag").addEventListener("input", renderRuleList);
 document.querySelector("#refresh-audit").addEventListener("click", loadAudit);
+document.querySelector("#clear-audit-filters").addEventListener("click", clearAuditFilters);
 document.querySelector("#refresh-lookups").addEventListener("click", loadLookups);
 document.querySelector("#refresh-messages").addEventListener("click", loadMessages);
 document.querySelector("#export-lookup-csv").addEventListener("click", exportLookupCsv);
@@ -691,19 +695,58 @@ async function loadAudit() {
   try {
     const params = auditParams();
     const body = await api(`/v1/audit${params.toString() ? `?${params}` : ""}`);
-    target.innerHTML += body.audit
-      .map((item, index) => row([item.evaluated_at, item.decision_key, item.profile_key, item.result, item.matched_rules.join(", ")], { auditIndex: index }))
-      .join("");
+    const audit = body.audit || [];
+    target.innerHTML += audit.length
+      ? audit.map((item, index) => row([formatTime(item.evaluated_at), item.decision_key, item.profile_key, item.result, item.matched_rules.join(", ") || "fallback"], { auditIndex: index })).join("")
+      : row(["No audit entries match the current filters", "", "", "", ""]);
+    renderAuditSummary(audit);
     document.querySelectorAll("[data-audit-index]").forEach((element) => {
       element.addEventListener("click", () => {
-        auditDetail.textContent = JSON.stringify(body.audit[Number(element.dataset.auditIndex)], null, 2);
+        renderAuditDetail(audit[Number(element.dataset.auditIndex)]);
       });
     });
-    auditDetail.textContent = body.audit[0] ? JSON.stringify(body.audit[0], null, 2) : "No audit entries match the current filters";
+    renderAuditDetail(audit[0]);
   } catch (error) {
     target.innerHTML += row([error.message, "", "", "", ""]);
+    renderAuditSummary([]);
     auditDetail.textContent = error.message;
   }
+}
+
+function renderAuditSummary(audit) {
+  const count = audit.length;
+  auditCount.textContent = `${formatNumber(count)} event${count === 1 ? "" : "s"}`;
+  const first = audit[0]?.evaluated_at ? formatTime(audit[0].evaluated_at) : "Latest first";
+  const last = audit.at(-1)?.evaluated_at ? formatTime(audit.at(-1).evaluated_at) : "";
+  auditRange.textContent = last ? `${first} to ${last}` : first;
+}
+
+function renderAuditDetail(entry) {
+  if (!entry) {
+    auditDetailSummary.innerHTML = [
+      statusItem("Decision", "-"),
+      statusItem("Result", "-"),
+      statusItem("Profile", "-"),
+      statusItem("Matched", "-")
+    ].join("");
+    auditDetail.textContent = "No audit entries match the current filters";
+    return;
+  }
+  auditDetailSummary.innerHTML = [
+    statusItem("Decision", entry.decision_key || "-"),
+    statusItem("Result", entry.result || "-"),
+    statusItem("Profile", entry.profile_key || "-"),
+    statusItem("Matched", entry.matched_rules?.join(", ") || "fallback")
+  ].join("");
+  auditDetail.textContent = JSON.stringify(entry, null, 2);
+}
+
+function clearAuditFilters() {
+  ["audit-decision-key", "audit-profile-key", "audit-result", "audit-from", "audit-to"].forEach((id) => {
+    document.querySelector(`#${id}`).value = "";
+  });
+  document.querySelector("#audit-limit").value = "100";
+  loadAudit();
 }
 
 function auditParams() {

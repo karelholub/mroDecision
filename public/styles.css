@@ -730,6 +730,115 @@ header {
   resize: none;
 }
 
+.audit-workbench {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.7fr) minmax(360px, 1.15fr) minmax(360px, 1.15fr);
+  gap: 16px;
+  height: calc(100vh - 184px);
+  min-height: 620px;
+  min-width: 0;
+}
+
+.audit-filter-pane,
+.audit-results-pane,
+.audit-detail-pane {
+  min-width: 0;
+  min-height: 0;
+}
+
+.audit-filter-pane {
+  align-content: start;
+  display: grid;
+  gap: 14px;
+  height: 100%;
+  overflow: auto;
+}
+
+.audit-filter-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.audit-results-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.audit-results-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.audit-results-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.audit-list {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+.audit-list .row {
+  grid-template-columns: 1fr;
+  gap: 5px;
+  align-items: start;
+}
+
+.audit-list .row:first-child {
+  display: none;
+}
+
+.audit-list .row > div:nth-child(1) {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.audit-list .row > div:nth-child(2),
+.audit-list .row > div:nth-child(4) {
+  font-weight: 700;
+}
+
+.audit-list .row > div:nth-child(3),
+.audit-list .row > div:nth-child(5) {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.audit-detail-pane {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  height: 100%;
+  overflow: hidden;
+}
+
+.audit-detail-pane .status-item {
+  min-height: 74px;
+}
+
+.audit-detail-pane .status-item strong {
+  overflow-wrap: anywhere;
+}
+
+.audit-detail-pane .compact-status-panel {
+  grid-template-columns: 1fr;
+}
+
+.audit-detail-pane pre {
+  height: 100%;
+  margin: 0;
+  overflow: auto;
+}
+
 .row {
   min-height: 44px;
   display: grid;
@@ -1181,6 +1290,11 @@ pre {
     min-height: 0;
   }
 
+  .audit-workbench {
+    height: auto;
+    min-height: 0;
+  }
+
   .metric-grid,
   .overview-grid {
     grid-template-columns: 1fr 1fr;
@@ -1196,6 +1310,7 @@ pre {
     .split,
     .rule-workbench,
     .rule-editor-main,
+    .audit-workbench,
     .filter-bar,
     .metric-grid,
     .overview-grid,
@@ -1225,7 +1340,10 @@ pre {
 
   .rule-builder-pane,
   .rule-inspector,
-  .rule-bottom-drawer {
+  .rule-bottom-drawer,
+  .audit-filter-pane,
+  .audit-results-pane,
+  .audit-detail-pane {
     overflow: visible;
   }
 
