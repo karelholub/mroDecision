@@ -26,6 +26,7 @@ Implemented:
 - Version history panel with published-version diff and rollback into draft.
 - Audit date filtering and CSV export.
 - Overview rule usage drilldown with fallback rate, matched branch distribution, and recent decisions.
+- Evaluate panel trace cards for matched branch checks and graph node paths.
 - Embedded UI for rule sets, draft testing, evaluation, audit, lookups, settings, tokens, and Meiro request templates.
 - OpenAPI and Meiro Pipes integration templates.
 - Readiness endpoint, request IDs, request logs, bootstrap-token disablement, CI checks, and basic deployment/backup guidance.
@@ -85,7 +86,7 @@ Goal: support the full v2 graph model without forcing engineers to edit JSON.
 
 Open decision: ship a pragmatic graph editor first, then polish minimap/drag behavior, rather than blocking on a full canvas experience.
 
-Status: first-pass graph authoring is implemented with Branch/Graph mode switching, node cards for input, condition, score, lookup, frequency cap, output, fallback, and error nodes, visual route preview, JSON sync, and route/reachability validation. Drag/drop positioning and richer per-node helpers remain.
+Status: first-pass graph authoring is implemented with Branch/Graph mode switching, node cards for input, condition, score, lookup, frequency cap, output, fallback, and error nodes, visual route preview, JSON sync, route/reachability validation, and draft/published evaluation trace cards. Drag/drop positioning and richer per-node helpers remain.
 
 ## Phase 4: Client-Facing In-App and Experiment APIs
 
@@ -139,7 +140,6 @@ Status: readiness, request IDs, request logs, guarded bootstrap-token disablemen
 
 ## Recommended Next Sprint
 
-1. Add matched graph node path details to the draft test panel.
-2. Add managed database migration guidance.
-3. Add deployment templates for hosted environments.
-4. Add broader Meiro catalog sync if/when segment schema APIs are confirmed.
+1. Add managed database migration guidance.
+2. Add deployment templates for hosted environments.
+3. Add broader Meiro catalog sync if/when segment schema APIs are confirmed.

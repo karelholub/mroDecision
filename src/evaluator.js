@@ -3,6 +3,7 @@ import { evaluateExpression } from "./expression.js";
 export function evaluateDecision({ request, version, lookupTables, now = new Date(), clientEventCounter = () => 0 }) {
   const errors = [];
   const matchedRules = [];
+  const trace = [];
   const scores = new Map();
   const definition = version.definition;
   const env = buildEnv(request, lookupTables, scores, errors, now, clientEventCounter);
@@ -10,11 +11,12 @@ export function evaluateDecision({ request, version, lookupTables, now = new Dat
 
   try {
     outcome = definition.graph
-      ? evaluateGraph(definition.graph, env, matchedRules, errors)
-      : evaluateBranches(definition, env, matchedRules, errors);
+      ? evaluateGraph(definition.graph, env, matchedRules, errors, trace)
+      : evaluateBranches(definition, env, matchedRules, errors, trace);
   } catch (error) {
     errors.push(error.message);
     outcome = definition.fallback || { result: "deferred", outputs: {} };
+    trace.push({ type: "error", message: error.message });
   }
 
   return {
@@ -25,14 +27,22 @@ export function evaluateDecision({ request, version, lookupTables, now = new Dat
     result: outcome.result || "deferred",
     outputs: outcome.outputs || {},
     matched_rules: matchedRules,
+    trace,
     errors
   };
 }
 
-function evaluateBranches(definition, env, matchedRules, errors) {
+function evaluateBranches(definition, env, matchedRules, errors, trace) {
   for (const branch of definition.branches || []) {
     try {
-      if (evaluateConditionGroup(branch.when, env)) {
+      const matched = evaluateConditionGroup(branch.when, env);
+      trace.push({
+        type: "branch",
+        id: branch.id || branch.label || "branch",
+        matched,
+        result: matched ? branch.result : null
+      });
+      if (matched) {
         matchedRules.push(branch.id || branch.label || "branch");
         return {
           result: branch.result,
@@ -41,13 +51,15 @@ function evaluateBranches(definition, env, matchedRules, errors) {
       }
     } catch (error) {
       errors.push(`${branch.id || branch.label || "branch"}: ${error.message}`);
+      trace.push({ type: "branch_error", id: branch.id || branch.label || "branch", message: error.message });
     }
   }
   matchedRules.push("fallback");
+  trace.push({ type: "fallback", result: definition.fallback?.result || "deferred" });
   return definition.fallback || { result: "deferred", outputs: {} };
 }
 
-function evaluateGraph(graph, env, matchedRules, errors) {
+function evaluateGraph(graph, env, matchedRules, errors, trace) {
   const nodes = new Map((graph.nodes || []).map((node) => [node.id, node]));
   let current = graph.entry;
   const visited = new Set();
@@ -62,20 +74,48 @@ function evaluateGraph(graph, env, matchedRules, errors) {
 
     if (node.type === "input") {
       applyDefaults(node.defaults || {}, env);
+      trace.push({ type: "graph_node", node_id: node.id, node_type: node.type, next: node.next || null });
       current = node.next;
     } else if (node.type === "condition") {
       const passed = Boolean(evaluateExpression(node.expression || "false", env));
-      current = passed ? node.true : node.false;
+      const next = passed ? node.true : node.false;
+      trace.push({
+        type: "graph_node",
+        node_id: node.id,
+        node_type: node.type,
+        expression: node.expression || "false",
+        passed,
+        next
+      });
+      current = next;
     } else if (node.type === "score") {
       let total = Number(env.score(node.label || node.id) || 0);
       for (const rule of node.rules || []) {
         if (evaluateExpression(rule.when || "false", env)) total += Number(rule.points || 0);
       }
       env.setScore(node.label || node.id, total);
+      trace.push({
+        type: "graph_node",
+        node_id: node.id,
+        node_type: node.type,
+        score_label: node.label || node.id,
+        score_total: total,
+        next: node.next || null
+      });
       current = node.next;
     } else if (node.type === "lookup") {
       const value = env.lookup(node.table, evaluateExpression(node.key_expression, env), node.column);
       env.setContext(node.output_key || node.id, value);
+      trace.push({
+        type: "graph_node",
+        node_id: node.id,
+        node_type: node.type,
+        table: node.table,
+        column: node.column,
+        output_key: node.output_key || node.id,
+        value,
+        next: node.next || null
+      });
       current = node.next;
     } else if (node.type === "frequency_cap") {
       const count = env.clientEventCount({
@@ -87,13 +127,27 @@ function evaluateGraph(graph, env, matchedRules, errors) {
         window_days: Number(node.window_days || 30)
       });
       if (node.output_key) env.setContext(node.output_key, count);
-      current = count < Number(node.max || 1) ? node.next : node.capped || node.false || node.fallback;
+      const capped = count >= Number(node.max || 1);
+      const next = capped ? node.capped || node.false || node.fallback : node.next;
+      trace.push({
+        type: "graph_node",
+        node_id: node.id,
+        node_type: node.type,
+        event_count: count,
+        max: Number(node.max || 1),
+        capped,
+        next: next || null
+      });
+      current = next;
     } else if (node.type === "sub-decision") {
       errors.push(`Sub-decision node ${node.id} is declared but external dependency execution is not enabled in this runtime`);
+      trace.push({ type: "graph_node", node_id: node.id, node_type: node.type, next: node.fallback || node.next || null });
       current = node.fallback || node.next;
     } else if (node.type === "error" || node.type === "fallback") {
+      trace.push({ type: "graph_node", node_id: node.id, node_type: node.type, terminal: true, result: node.result || "deferred" });
       return { result: node.result || "deferred", outputs: resolveOutputs(node.outputs || {}, env) };
     } else if (node.type === "output") {
+      trace.push({ type: "graph_node", node_id: node.id, node_type: node.type, terminal: true, result: node.result || "deferred" });
       return { result: node.result || "deferred", outputs: resolveOutputs(node.outputs || {}, env) };
     } else {
       throw new Error(`Unsupported graph node type: ${node.type}`);

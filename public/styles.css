@@ -596,6 +596,68 @@ button.graph-node:hover {
   font-size: 12px;
 }
 
+.eval-trace {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.trace-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel);
+}
+
+.trace-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.trace-card-header strong {
+  overflow-wrap: anywhere;
+}
+
+.trace-badge {
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.trace-path {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.trace-step {
+  display: grid;
+  gap: 3px;
+  max-width: 220px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--panel-soft);
+  min-width: 110px;
+}
+
+.trace-step strong,
+.trace-step span {
+  overflow-wrap: anywhere;
+}
+
+.trace-step span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .branch-card.highlight {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.15);

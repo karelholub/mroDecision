@@ -40,6 +40,7 @@ test("evaluates basic branch rule sets", () => {
   assert.equal(result.result, "eligible");
   assert.deepEqual(result.outputs, { offer_tier: "premium", max_loan_amount: 25000 });
   assert.deepEqual(result.matched_rules, ["vip_check"]);
+  assert.deepEqual(result.trace.map((item) => item.id || item.type), ["vip_check"]);
 });
 
 test("evaluates graph score and output nodes", () => {
@@ -87,6 +88,10 @@ test("evaluates graph score and output nodes", () => {
 
   assert.equal(result.result, "eligible");
   assert.deepEqual(result.outputs, { tier: "A", score: 20 });
+  assert.deepEqual(result.matched_rules, ["input", "score_age", "condition", "eligible"]);
+  assert.deepEqual(result.trace.map((item) => item.node_id), ["input", "score_age", "condition", "eligible"]);
+  assert.equal(result.trace.find((item) => item.node_id === "score_age").score_total, 20);
+  assert.equal(result.trace.find((item) => item.node_id === "condition").passed, true);
 });
 
 test("evaluates date and list operators with deterministic clock", () => {

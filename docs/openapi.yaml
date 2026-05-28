@@ -1128,6 +1128,12 @@ components:
           type: array
           items:
             type: string
+        trace:
+          type: array
+          description: Ordered evaluation trace. Graph decisions include node-level path details; branch decisions include branch checks.
+          items:
+            type: object
+            additionalProperties: true
         errors:
           type: array
           items:
@@ -1203,6 +1209,12 @@ components:
           type: array
           items:
             type: string
+        trace:
+          type: array
+          description: Ordered evaluation trace. Graph decisions include node-level path details; branch decisions include branch checks.
+          items:
+            type: object
+            additionalProperties: true
         errors:
           type: array
           items:

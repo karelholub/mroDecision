@@ -1,6 +1,7 @@
 const tokenInput = document.querySelector("#token");
 const evalInput = document.querySelector("#eval-input");
 const evalOutput = document.querySelector("#eval-output");
+const evalTrace = document.querySelector("#eval-trace");
 const editorOutput = document.querySelector("#rule-editor-output");
 const branchEditor = document.querySelector("#branch-editor");
 const ruleGraph = document.querySelector("#rule-graph");
@@ -798,10 +799,12 @@ async function runEvaluate() {
       method: "POST",
       body: JSON.stringify(request)
     });
+    renderEvaluationTrace(body);
     evalOutput.textContent = formatDecisionOutput(body);
     loadAudit();
     loadMetrics();
   } catch (error) {
+    evalTrace.innerHTML = "";
     evalOutput.textContent = error.message;
   }
 }
@@ -2085,11 +2088,76 @@ function formatDecisionOutput(body) {
       promotion_category: body.outputs?.promotion_category,
       suppression_reason: body.outputs?.suppression_reason,
       matched_rules: body.matched_rules,
+      trace: body.trace,
       errors: body.errors,
       tested_version: body.tested_version || "published"
     },
     response: body
   }, null, 2);
+}
+
+function renderEvaluationTrace(body) {
+  const trace = Array.isArray(body.trace) ? body.trace : [];
+  if (!trace.length) {
+    evalTrace.innerHTML = "";
+    return;
+  }
+  const graphTrace = trace.filter((item) => item.type === "graph_node");
+  const title = graphTrace.length ? "Graph Path" : "Branch Evaluation";
+  const badge = graphTrace.length ? `${graphTrace.length} nodes` : `${trace.length} checks`;
+  evalTrace.innerHTML = `
+    <div class="trace-card">
+      <div class="trace-card-header">
+        <strong>${escapeHtml(title)}</strong>
+        <span class="trace-badge">${escapeHtml(badge)}</span>
+      </div>
+      <div class="trace-path">
+        ${trace.map(traceStepHtml).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function traceStepHtml(step) {
+  if (step.type === "graph_node") {
+    return `
+      <div class="trace-step">
+        <strong>${escapeHtml(step.node_id || "node")}</strong>
+        <span>${escapeHtml(traceGraphStepMeta(step))}</span>
+      </div>
+    `;
+  }
+  if (step.type === "branch") {
+    return `
+      <div class="trace-step">
+        <strong>${escapeHtml(step.id || "branch")}</strong>
+        <span>${escapeHtml(step.matched ? `matched / ${step.result || "result"}` : "not matched")}</span>
+      </div>
+    `;
+  }
+  if (step.type === "fallback") {
+    return `
+      <div class="trace-step">
+        <strong>fallback</strong>
+        <span>${escapeHtml(step.result || "deferred")}</span>
+      </div>
+    `;
+  }
+  return `
+    <div class="trace-step">
+      <strong>${escapeHtml(step.type || "trace")}</strong>
+      <span>${escapeHtml(step.message || "")}</span>
+    </div>
+  `;
+}
+
+function traceGraphStepMeta(step) {
+  if (step.terminal) return `${step.node_type} / ${step.result || "terminal"}`;
+  if (step.node_type === "condition") return `${step.passed ? "true" : "false"} -> ${step.next || "-"}`;
+  if (step.node_type === "score") return `${step.score_label}: ${step.score_total} -> ${step.next || "-"}`;
+  if (step.node_type === "lookup") return `${step.output_key || step.column || "lookup"} -> ${step.next || "-"}`;
+  if (step.node_type === "frequency_cap") return `${step.event_count}/${step.max} ${step.capped ? "capped" : "allowed"} -> ${step.next || "-"}`;
+  return `${step.node_type || "node"} -> ${step.next || "-"}`;
 }
 
 function evaluatePreset(name) {
