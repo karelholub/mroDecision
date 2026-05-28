@@ -1186,6 +1186,23 @@ header {
   font-size: 12px;
 }
 
+.audit-insights {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.audit-insights .status-item {
+  min-height: 58px;
+  padding: 8px;
+  background: var(--panel-soft);
+}
+
+.audit-insights .status-item strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
 .audit-list {
   height: 100%;
   border: 0;
@@ -2263,6 +2280,7 @@ pre {
   .token-workspace,
   .guide-grid,
   .status-panel,
+  .audit-insights,
   .detail-summary,
   .grid-two,
   .grid-three,

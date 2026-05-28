@@ -25,6 +25,7 @@ const auditDetail = document.querySelector("#audit-detail");
 const auditDetailSummary = document.querySelector("#audit-detail-summary");
 const auditCount = document.querySelector("#audit-count");
 const auditRange = document.querySelector("#audit-range");
+const auditInsights = document.querySelector("#audit-insights");
 const versionList = document.querySelector("#version-list");
 const lookupVersionList = document.querySelector("#lookup-version-list");
 const settingsOutput = document.querySelector("#settings-output");
@@ -824,6 +825,38 @@ function renderAuditSummary(audit) {
   const first = audit[0]?.evaluated_at ? formatTime(audit[0].evaluated_at) : "Latest first";
   const last = audit.at(-1)?.evaluated_at ? formatTime(audit.at(-1).evaluated_at) : "";
   auditRange.textContent = last ? `${first} to ${last}` : first;
+  renderAuditInsights(audit);
+}
+
+function renderAuditInsights(audit) {
+  if (!auditInsights) return;
+  if (!audit.length) {
+    auditInsights.innerHTML = [
+      statusItem("Top decision", "-"),
+      statusItem("Top result", "-"),
+      statusItem("Matched rate", "0%"),
+      statusItem("Profiles", "0")
+    ].join("");
+    return;
+  }
+  const topDecision = topCount(audit.map((item) => item.decision_key || "-"));
+  const topResult = topCount(audit.map((item) => item.result || "-"));
+  const matched = audit.filter((item) => (item.matched_rules || []).length).length;
+  const profiles = new Set(audit.map((item) => item.profile_key).filter(Boolean)).size;
+  auditInsights.innerHTML = [
+    statusItem("Top decision", `${topDecision.key} (${formatNumber(topDecision.count)})`),
+    statusItem("Top result", `${topResult.key} (${formatNumber(topResult.count)})`),
+    statusItem("Matched rate", `${Math.round((matched / audit.length) * 100)}%`),
+    statusItem("Profiles", formatNumber(profiles))
+  ].join("");
+}
+
+function topCount(values) {
+  const counts = new Map();
+  for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || String(left[0]).localeCompare(String(right[0])))
+    .map(([key, count]) => ({ key, count }))[0] || { key: "-", count: 0 };
 }
 
 function renderAuditDetail(entry) {
