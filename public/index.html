@@ -629,6 +629,20 @@
                           <option value="archived">Archived</option>
                         </select>
                       </label>
+                      <label>
+                        Template type
+                        <select id="message-template-type">
+                          <option value="banner">Banner</option>
+                          <option value="alert">Alert</option>
+                          <option value="modal">Modal</option>
+                          <option value="inline">In page</option>
+                          <option value="toast">Toast</option>
+                        </select>
+                      </label>
+                      <label>
+                        Placement
+                        <input id="message-placement" placeholder="homepage.hero.top" />
+                      </label>
                     </div>
                   </div>
                   <div class="message-editor-section">
@@ -639,8 +653,8 @@
                         <input id="message-preview-title" placeholder="Special offer" />
                       </label>
                       <label>
-                        CTA label
-                        <input id="message-preview-cta" placeholder="View offer" />
+                        Image URL
+                        <input id="message-preview-image" placeholder="https://..." />
                       </label>
                     </div>
                     <label>
@@ -648,9 +662,30 @@
                       <textarea id="message-preview-body" spellcheck="false"></textarea>
                     </label>
                     <label>
-                      Image URL
-                      <input id="message-preview-image" placeholder="https://..." />
+                      Footer
+                      <textarea id="message-preview-footer" spellcheck="false" placeholder="Optional fine print, disclaimer, or secondary context"></textarea>
                     </label>
+                  </div>
+                  <div class="message-editor-section">
+                    <div class="editor-title">Actions</div>
+                    <div class="message-field-grid">
+                      <label>
+                        Primary CTA label
+                        <input id="message-primary-cta-label" placeholder="View offer" />
+                      </label>
+                      <label>
+                        Primary CTA URL
+                        <input id="message-primary-cta-url" placeholder="https://..." />
+                      </label>
+                      <label>
+                        Secondary CTA label
+                        <input id="message-secondary-cta-label" placeholder="Maybe later" />
+                      </label>
+                      <label>
+                        Secondary CTA URL
+                        <input id="message-secondary-cta-url" placeholder="https://..." />
+                      </label>
+                    </div>
                   </div>
                 </div>
                 <div class="message-preview-pane">

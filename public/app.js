@@ -194,7 +194,21 @@ document.querySelector("#lookup-editor").addEventListener("submit", saveLookup);
 document.querySelector("#message-editor").addEventListener("submit", saveMessage);
 document.querySelector("#sync-message-json").addEventListener("click", syncMessageJsonFromPreview);
 document.querySelector("#format-message-json").addEventListener("click", formatActiveMessageJson);
-["#message-name", "#message-surface", "#message-status", "#message-preview-title", "#message-preview-body", "#message-preview-cta", "#message-preview-image"].forEach((selector) => {
+[
+  "#message-name",
+  "#message-surface",
+  "#message-status",
+  "#message-template-type",
+  "#message-placement",
+  "#message-preview-title",
+  "#message-preview-body",
+  "#message-preview-footer",
+  "#message-preview-image",
+  "#message-primary-cta-label",
+  "#message-primary-cta-url",
+  "#message-secondary-cta-label",
+  "#message-secondary-cta-url"
+].forEach((selector) => {
   document.querySelector(selector).addEventListener("input", renderMessagePreview);
   document.querySelector(selector).addEventListener("change", renderMessagePreview);
 });
@@ -1118,14 +1132,15 @@ async function loadMessages() {
 function messageCatalogRow(item) {
   const content = item.default_content || {};
   const title = content.title || content.headline || "-";
-  const cta = content.cta_label ? ` · ${content.cta_label}` : "";
+  const template = content.template_type || item.metadata?.template_type || "-";
+  const cta = content.ctas?.[0]?.label || content.cta_label;
   return row([
     item.name,
     item.id,
     item.surface || "-",
     item.status || "active",
     item.updated_at ? formatTime(item.updated_at) : "-",
-    `${title}${cta}`
+    `${template} · ${title}${cta ? ` · ${cta}` : ""}`
   ], { messageId: item.id });
 }
 
@@ -1146,17 +1161,31 @@ function newMessage(options = {}) {
   document.querySelector("#message-name").value = "Hero Offer";
   document.querySelector("#message-surface").value = "homepage_hero";
   document.querySelector("#message-status").value = "active";
+  document.querySelector("#message-template-type").value = "banner";
+  document.querySelector("#message-placement").value = "homepage.hero.top";
   document.querySelector("#message-content").value = JSON.stringify({
+    template_type: "banner",
+    placement: "homepage.hero.top",
     title: "Special offer",
     body: "A personalized offer is ready.",
+    footer: "",
     cta_label: "View offer",
-    image_url: ""
+    cta_url: "",
+    image_url: "",
+    ctas: [
+      { label: "View offer", url: "", style: "primary" }
+    ]
   }, null, 2);
   document.querySelector("#message-schema").value = JSON.stringify({
+    template_type: "banner|alert|modal|inline|toast",
+    placement: "string",
     title: "string",
     body: "string",
+    footer: "string",
     cta_label: "string",
-    image_url: "url"
+    cta_url: "url",
+    image_url: "url",
+    ctas: [{ label: "string", url: "url", style: "primary|secondary" }]
   }, null, 2);
   document.querySelector("#message-metadata").value = JSON.stringify({}, null, 2);
   syncMessagePreviewFromJson();
@@ -1213,10 +1242,17 @@ async function saveMessage(event) {
 function syncMessagePreviewFromJson() {
   try {
     const content = JSON.parse(document.querySelector("#message-content").value || "{}");
+    const ctas = normalizeMessageCtas(content);
+    document.querySelector("#message-template-type").value = messageTemplateType(content.template_type || content.type || "banner");
+    document.querySelector("#message-placement").value = content.placement || "";
     document.querySelector("#message-preview-title").value = content.title || "";
     document.querySelector("#message-preview-body").value = content.body || "";
-    document.querySelector("#message-preview-cta").value = content.cta_label || "";
+    document.querySelector("#message-preview-footer").value = content.footer || "";
     document.querySelector("#message-preview-image").value = content.image_url || "";
+    document.querySelector("#message-primary-cta-label").value = ctas[0]?.label || "";
+    document.querySelector("#message-primary-cta-url").value = ctas[0]?.url || "";
+    document.querySelector("#message-secondary-cta-label").value = ctas[1]?.label || "";
+    document.querySelector("#message-secondary-cta-url").value = ctas[1]?.url || "";
     renderMessagePreview();
   } catch (error) {
     messageOutput.textContent = error.message;
@@ -1225,13 +1261,30 @@ function syncMessagePreviewFromJson() {
 
 function syncMessageJsonFromPreview() {
   const current = parseJsonSafe(document.querySelector("#message-content").value || "{}");
+  const ctas = [
+    {
+      label: document.querySelector("#message-primary-cta-label").value.trim(),
+      url: document.querySelector("#message-primary-cta-url").value.trim(),
+      style: "primary"
+    },
+    {
+      label: document.querySelector("#message-secondary-cta-label").value.trim(),
+      url: document.querySelector("#message-secondary-cta-url").value.trim(),
+      style: "secondary"
+    }
+  ].filter((cta) => cta.label || cta.url);
   const content = {
     ...current,
+    template_type: document.querySelector("#message-template-type").value,
+    placement: document.querySelector("#message-placement").value.trim(),
     title: document.querySelector("#message-preview-title").value.trim(),
     body: document.querySelector("#message-preview-body").value.trim(),
-    cta_label: document.querySelector("#message-preview-cta").value.trim(),
-    image_url: document.querySelector("#message-preview-image").value.trim()
+    footer: document.querySelector("#message-preview-footer").value.trim(),
+    image_url: document.querySelector("#message-preview-image").value.trim(),
+    ctas
   };
+  content.cta_label = ctas[0]?.label || "";
+  content.cta_url = ctas[0]?.url || "";
   document.querySelector("#message-content").value = JSON.stringify(content, null, 2);
   renderMessagePreview();
   messageOutput.textContent = "Message JSON synced";
@@ -1255,27 +1308,68 @@ function formatActiveMessageJson() {
 
 function renderMessagePreview() {
   if (!messagePreview) return;
+  const templateType = messageTemplateType(document.querySelector("#message-template-type").value);
+  const placement = document.querySelector("#message-placement").value.trim();
   const title = document.querySelector("#message-preview-title").value.trim() || document.querySelector("#message-name").value.trim() || "Untitled message";
   const body = document.querySelector("#message-preview-body").value.trim() || "No message body yet.";
-  const cta = document.querySelector("#message-preview-cta").value.trim();
+  const footer = document.querySelector("#message-preview-footer").value.trim();
   const imageUrl = document.querySelector("#message-preview-image").value.trim();
   const surface = document.querySelector("#message-surface").value.trim() || "-";
   const status = document.querySelector("#message-status").value || "active";
+  const ctas = [
+    {
+      label: document.querySelector("#message-primary-cta-label").value.trim(),
+      url: document.querySelector("#message-primary-cta-url").value.trim(),
+      style: "primary"
+    },
+    {
+      label: document.querySelector("#message-secondary-cta-label").value.trim(),
+      url: document.querySelector("#message-secondary-cta-url").value.trim(),
+      style: "secondary"
+    }
+  ].filter((cta) => cta.label || cta.url);
+  messagePreview.dataset.template = templateType;
   messagePreview.innerHTML = `
     ${imageUrl ? `<div class="message-preview-image" style="background-image:url('${escapeHtml(imageUrl)}')"></div>` : ""}
     <div class="message-preview-body">
-      <span>${escapeHtml(surface)}</span>
+      <span>${escapeHtml([templateType, placement || surface].filter(Boolean).join(" · "))}</span>
       <strong>${escapeHtml(title)}</strong>
       <p>${escapeHtml(body)}</p>
-      ${cta ? `<button type="button">${escapeHtml(cta)}</button>` : ""}
+      ${ctas.length ? `<div class="message-preview-actions">${ctas.map((cta) => `<a class="${cta.style === "secondary" ? "secondary" : "primary"}" href="${escapeHtml(cta.url || "#")}" target="_blank" rel="noopener">${escapeHtml(cta.label || cta.url)}</a>`).join("")}</div>` : ""}
+      ${footer ? `<small>${escapeHtml(footer)}</small>` : ""}
     </div>
   `;
   messageInspectorSummary.innerHTML = [
     statusItem("Status", status),
+    statusItem("Template", templateType),
+    statusItem("Placement", placement || "-"),
     statusItem("Surface", surface),
     statusItem("Message ID", document.querySelector("#message-id").value.trim() || "-"),
     statusItem("Schema fields", Object.keys(parseJsonSafe(document.querySelector("#message-schema").value || "{}")).length)
   ].join("");
+}
+
+function normalizeMessageCtas(content) {
+  if (Array.isArray(content.ctas)) {
+    return content.ctas
+      .filter((cta) => cta && (cta.label || cta.url))
+      .map((cta, index) => ({
+        label: String(cta.label || ""),
+        url: String(cta.url || cta.href || ""),
+        style: cta.style || (index === 0 ? "primary" : "secondary")
+      }));
+  }
+  return [
+    {
+      label: String(content.cta_label || ""),
+      url: String(content.cta_url || content.cta_href || ""),
+      style: "primary"
+    }
+  ].filter((cta) => cta.label || cta.url);
+}
+
+function messageTemplateType(value) {
+  return ["banner", "alert", "modal", "inline", "toast"].includes(value) ? value : "banner";
 }
 
 async function loadLookupVersions(id) {

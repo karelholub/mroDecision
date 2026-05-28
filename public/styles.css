@@ -2035,6 +2035,27 @@ header {
   overflow: hidden;
 }
 
+.message-preview-card[data-template="alert"] {
+  border-left: 5px solid #d99f08;
+  background: #fffbeb;
+}
+
+.message-preview-card[data-template="modal"] {
+  max-width: 440px;
+  border-radius: 10px;
+  box-shadow: 0 22px 55px rgba(15, 23, 42, 0.18);
+}
+
+.message-preview-card[data-template="inline"] {
+  box-shadow: none;
+}
+
+.message-preview-card[data-template="toast"] {
+  max-width: 360px;
+  border-radius: 10px;
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.16);
+}
+
 .message-preview-card[data-device="tablet"] {
   max-width: 460px;
 }
@@ -2073,12 +2094,41 @@ header {
   overflow-wrap: anywhere;
 }
 
-.message-preview-body button {
-  justify-self: start;
+.message-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.message-preview-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.message-preview-actions a.primary {
   border-color: #d99f08;
   background: #f7b718;
   color: #ffffff;
-  font-weight: 700;
+}
+
+.message-preview-actions a.secondary {
+  background: var(--panel-soft);
+}
+
+.message-preview-body small {
+  color: var(--muted);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .message-preview-pane .status-item {
