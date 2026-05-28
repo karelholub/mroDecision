@@ -14,6 +14,10 @@ const lookupOutput = document.querySelector("#lookup-output");
 const messageOutput = document.querySelector("#message-output");
 const messagePreview = document.querySelector("#message-preview");
 const messageInspectorSummary = document.querySelector("#message-inspector-summary");
+const lookupInspectorSummary = document.querySelector("#lookup-inspector-summary");
+const lookupHelpTable = document.querySelector("#lookup-help-table");
+const lookupHelpKey = document.querySelector("#lookup-help-key");
+const lookupHelpExpression = document.querySelector("#lookup-help-expression");
 const referenceGrid = document.querySelector("#reference-grid");
 const auditDetail = document.querySelector("#audit-detail");
 const auditDetailSummary = document.querySelector("#audit-detail-summary");
@@ -84,6 +88,14 @@ document.querySelectorAll("[data-message-drawer-tab]").forEach((button) => {
     document.querySelectorAll("[data-message-drawer-tab], [data-message-drawer-panel]").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
     document.querySelector(`[data-message-drawer-panel="${button.dataset.messageDrawerTab}"]`)?.classList.add("active");
+  });
+});
+
+document.querySelectorAll("[data-lookup-drawer-tab]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll("[data-lookup-drawer-tab], [data-lookup-drawer-panel]").forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
+    document.querySelector(`[data-lookup-drawer-panel="${button.dataset.lookupDrawerTab}"]`)?.classList.add("active");
   });
 });
 
@@ -163,7 +175,13 @@ document.querySelector("#add-reference-row").addEventListener("click", addRefere
 document.querySelector("#add-reference-column").addEventListener("click", addReferenceColumn);
 document.querySelector("#sync-reference-json").addEventListener("click", syncReferenceGridFromJson);
 document.querySelector("#lookup-rows").addEventListener("change", syncReferenceGridFromJson);
-document.querySelector("#lookup-key-column").addEventListener("change", renderReferenceGrid);
+document.querySelector("#lookup-key-column").addEventListener("change", () => {
+  renderReferenceGrid();
+  renderLookupInspector();
+});
+["#lookup-id", "#lookup-name"].forEach((selector) => {
+  document.querySelector(selector).addEventListener("input", renderLookupInspector);
+});
 document.querySelector("#settings-form").addEventListener("submit", saveSettings);
 document.querySelector("#token-form").addEventListener("submit", createToken);
 
@@ -2092,6 +2110,7 @@ function newLookup() {
   renderReferenceGrid();
   document.querySelector("#lookup-csv").value = "";
   loadLookupVersions(null);
+  renderLookupInspector();
   lookupOutput.textContent = "Ready for a new reference table";
 }
 
@@ -2108,8 +2127,12 @@ function referenceRowsFromJson() {
 }
 
 function referenceColumns(rows = referenceRowsFromJson()) {
+  return referenceColumnsFromRows(rows);
+}
+
+function referenceColumnsFromRows(rows) {
   const keyColumn = document.querySelector("#lookup-key-column").value.trim() || "key";
-  const discovered = [...new Set(rows.flatMap((rowItem) => Object.keys(rowItem || {})))];
+  const discovered = [...new Set((rows || []).flatMap((rowItem) => Object.keys(rowItem || {})))];
   return [keyColumn, ...discovered.filter((column) => column !== keyColumn)];
 }
 
@@ -2158,6 +2181,30 @@ function renderReferenceGrid() {
   referenceGrid.querySelectorAll("[data-remove-column]").forEach((button) => {
     button.addEventListener("click", () => removeReferenceColumn(button.dataset.removeColumn));
   });
+  renderLookupInspector(rows);
+}
+
+function renderLookupInspector(rows = null) {
+  if (!lookupInspectorSummary) return;
+  let currentRows = rows;
+  try {
+    currentRows = currentRows || referenceRowsFromJson();
+  } catch {
+    currentRows = [];
+  }
+  const columns = referenceColumnsFromRows(currentRows);
+  const keyColumn = document.querySelector("#lookup-key-column").value.trim() || "key";
+  const tableId = document.querySelector("#lookup-id").value.trim() || "reference_table";
+  const firstReturnColumn = columns.find((column) => column !== keyColumn) || keyColumn;
+  lookupInspectorSummary.innerHTML = [
+    statusItem("Rows", formatNumber(currentRows.length)),
+    statusItem("Columns", formatNumber(columns.length)),
+    statusItem("Match column", keyColumn),
+    statusItem("Version", selectedLookupId ? "current" : "new")
+  ].join("");
+  lookupHelpTable.textContent = tableId;
+  lookupHelpKey.textContent = keyColumn;
+  lookupHelpExpression.textContent = `=lookup("${tableId}", attributes.${keyColumn}, "${firstReturnColumn}")`;
 }
 
 function formatReferenceCell(value) {
@@ -2276,6 +2323,7 @@ function loadLookup(id, tables) {
   renderReferenceGrid();
   document.querySelector("#lookup-csv").value = "";
   loadLookupVersions(id);
+  renderLookupInspector();
   lookupOutput.textContent = `Loaded ${id}`;
 }
 
@@ -2287,6 +2335,7 @@ async function loadLookupVersion(id, version) {
     document.querySelector("#lookup-key-column").value = table.key_column;
     document.querySelector("#lookup-rows").value = JSON.stringify(table.rows || [], null, 2);
     renderReferenceGrid();
+    renderLookupInspector();
     lookupOutput.textContent = `Loaded ${id} version ${version} into the editor. Save Reference Table to restore it as the current version.`;
   } catch (error) {
     lookupOutput.textContent = error.message;
@@ -2324,6 +2373,7 @@ async function saveLookup(event) {
     lookupOutput.textContent = JSON.stringify(body, null, 2);
     await loadLookups();
     await loadLookupVersions(selectedLookupId);
+    renderLookupInspector(rows);
   } catch (error) {
     lookupOutput.textContent = error.message;
   }
@@ -2358,6 +2408,7 @@ function importLookupCsv() {
       document.querySelector("#lookup-key-column").value = headers[0] || "key";
     }
     renderReferenceGrid();
+    renderLookupInspector(rows);
     lookupOutput.textContent = `Imported ${rows.length} CSV rows`;
   } catch (error) {
     document.querySelector("#lookup-csv").classList.add("invalid");

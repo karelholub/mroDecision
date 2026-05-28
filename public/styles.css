@@ -1092,6 +1092,134 @@ header {
   overflow-wrap: anywhere;
 }
 
+.lookup-workbench {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(0, 2.25fr);
+  gap: 16px;
+  height: calc(100vh - 184px);
+  min-height: 660px;
+  min-width: 0;
+}
+
+.lookup-list-pane,
+.lookup-editor-pane,
+.lookup-editor-main,
+.lookup-table-pane,
+.lookup-inspector-pane,
+.lookup-bottom-drawer {
+  min-width: 0;
+  min-height: 0;
+}
+
+.lookup-list {
+  height: 100%;
+}
+
+.lookup-list .row {
+  grid-template-columns: 1fr;
+  gap: 5px;
+  align-items: start;
+}
+
+.lookup-list .row:first-child {
+  display: none;
+}
+
+.lookup-list .row > div:first-child {
+  font-weight: 700;
+}
+
+.lookup-list .row > div:nth-child(n+2) {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.lookup-editor-pane {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto minmax(230px, 0.38fr);
+  gap: 12px;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+#lookups #lookup-editor.lookup-editor-pane {
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.lookup-editor-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.86fr);
+  gap: 12px;
+  overflow: hidden;
+}
+
+.lookup-table-pane,
+.lookup-inspector-pane,
+.lookup-bottom-drawer {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.lookup-table-pane,
+.lookup-inspector-pane {
+  height: 100%;
+  max-height: 100%;
+  overflow: auto;
+  padding: 16px;
+}
+
+.lookup-inspector-pane {
+  align-content: start;
+  display: grid;
+  gap: 14px;
+}
+
+.lookup-inspector-pane .compact-status-panel {
+  grid-template-columns: 1fr 1fr;
+}
+
+.lookup-inspector-pane .status-item {
+  min-height: 56px;
+  padding: 8px;
+}
+
+.lookup-inspector-pane .status-item strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.lookup-inspector-pane .inspector-lines {
+  gap: 6px;
+}
+
+.lookup-inspector-pane .inspector-lines strong {
+  font-size: 13px;
+}
+
+.lookup-bottom-drawer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.lookup-bottom-drawer .drawer-panel textarea,
+.lookup-bottom-drawer .drawer-panel pre {
+  width: 100%;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .row {
   min-height: 44px;
   display: grid;
@@ -1558,6 +1686,11 @@ pre {
     min-height: 0;
   }
 
+  .lookup-workbench {
+    height: auto;
+    min-height: 0;
+  }
+
   .metric-grid,
   .overview-grid {
     grid-template-columns: 1fr 1fr;
@@ -1578,6 +1711,8 @@ pre {
     .message-workbench,
     .message-editor-main,
     .message-field-grid,
+    .lookup-workbench,
+    .lookup-editor-main,
     .filter-bar,
     .metric-grid,
     .overview-grid,
@@ -1617,7 +1752,11 @@ pre {
   .message-form-pane,
   .message-preview-pane,
   .message-bottom-drawer,
-  .message-editor-pane {
+  .message-editor-pane,
+  .lookup-table-pane,
+  .lookup-inspector-pane,
+  .lookup-bottom-drawer,
+  .lookup-editor-pane {
     overflow: visible;
   }
 
