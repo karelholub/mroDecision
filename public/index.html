@@ -47,39 +47,60 @@
           <button id="refresh-metrics">Refresh</button>
         </header>
         <div class="overview-workbench">
-          <div class="overview-summary-pane">
-            <div id="metric-cards" class="metric-grid"></div>
-            <div class="editor overview-card">
+          <div id="metric-cards" class="metric-grid overview-kpi-strip"></div>
+          <div class="overview-primary-pane">
+            <div class="editor overview-card overview-rule-card">
+              <div class="overview-card-head">
+                <div>
+                  <div class="editor-title">Rule Usage</div>
+                  <p>Requests by rule in the current metrics window.</p>
+                </div>
+              </div>
+              <div id="metrics-rule-usage" class="overview-usage-list"></div>
+            </div>
+            <div class="editor overview-card overview-trend-card">
+              <div class="overview-card-head">
+                <div>
+                  <div class="editor-title">Request Mix</div>
+                  <p>Published evaluations, draft state, and recent activity.</p>
+                </div>
+              </div>
+              <div id="metrics-request-trend" class="request-trend-panel"></div>
+            </div>
+            <div class="editor overview-card overview-schema-card">
               <div class="editor-title">Schema & Configuration</div>
               <div id="metrics-schema-health" class="status-panel overview-status-panel"></div>
             </div>
-          </div>
-          <div class="overview-operations-pane">
-            <div class="editor overview-card">
-              <div class="editor-title">Rule Usage</div>
-              <div id="metrics-rule-usage" class="table compact-table overview-table"></div>
+            <div class="editor overview-card overview-result-card">
+              <div class="editor-title">Result Distribution</div>
+              <div id="metrics-result-distribution" class="distribution-panel"></div>
             </div>
-            <div class="overview-grid">
-              <div class="editor overview-card">
-                <div class="editor-title">Result Distribution</div>
-                <div id="metrics-result-distribution" class="table compact-table overview-table"></div>
-              </div>
-              <div class="editor overview-card">
-                <div class="editor-title">Rules Inventory</div>
-                <div id="metrics-rule-inventory" class="table compact-table overview-table"></div>
-              </div>
+            <div class="editor overview-card overview-inventory-card">
+              <div class="editor-title">Rules Inventory</div>
+              <div id="metrics-rule-inventory" class="inventory-panel"></div>
             </div>
           </div>
-          <div class="overview-detail-pane">
+          <div class="overview-side-pane">
             <div class="editor overview-card">
-              <div class="editor-title">Rule Detail</div>
+              <div class="overview-card-head">
+                <div>
+                  <div class="editor-title">Rule Detail</div>
+                  <p>Select a rule in Rule Usage to inspect recent decisions.</p>
+                </div>
+              </div>
               <div id="metrics-rule-detail" class="rule-detail-panel"></div>
             </div>
             <div class="editor overview-card">
-              <div class="editor-title">Client Event Detail</div>
+              <div class="overview-card-head">
+                <div>
+                  <div class="editor-title">Client Event Detail</div>
+                  <p>Rules, messages, surfaces, and latest client-side events.</p>
+                </div>
+              </div>
               <div id="metrics-client-events" class="rule-detail-panel"></div>
             </div>
           </div>
+          <div id="overview-service-footer" class="overview-service-footer"></div>
         </div>
       </section>
 

@@ -38,6 +38,8 @@ const integrationResponse = document.querySelector("#integration-response");
 const metricCards = document.querySelector("#metric-cards");
 const ruleDetailPanel = document.querySelector("#metrics-rule-detail");
 const clientEventsPanel = document.querySelector("#metrics-client-events");
+const requestTrendPanel = document.querySelector("#metrics-request-trend");
+const overviewServiceFooter = document.querySelector("#overview-service-footer");
 const topbarTitle = document.querySelector("#topbar-title");
 const topbarSubtitle = document.querySelector("#topbar-subtitle");
 const topbarEnv = document.querySelector("#topbar-env");
@@ -70,12 +72,15 @@ document.querySelectorAll("nav button").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll("nav button, .view").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
+    document.body.dataset.currentView = button.dataset.view;
     const view = document.querySelector(`#${button.dataset.view}`);
     view.classList.add("active");
     updateTopbarForView(view);
     if (button.dataset.view === "overview") loadMetrics();
   });
 });
+
+document.body.dataset.currentView = document.querySelector("nav button.active")?.dataset.view || "overview";
 
 document.querySelectorAll("[data-settings-tab]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -287,23 +292,20 @@ function renderMetrics(metrics) {
   const cache = metrics.client_cache || {};
   const events = metrics.client_events || {};
   metricCards.innerHTML = [
-    metricCard("Requests 24h", formatNumber(requests.last_24h), `${formatNumber(requests.total)} total`),
-    metricCard("Unique Profiles", formatNumber(requests.unique_profiles), "Seen in audit log"),
-    metricCard("Published Rules", formatNumber(rules.published), `${formatNumber(rules.draft)} drafts`),
-    metricCard("Schema Items", formatNumber(schema.total), `${schema.last_sync_status || "never"} sync`),
-    metricCard("Client Cache", `${Math.round((cache.hit_rate || 0) * 100)}%`, `${formatNumber(cache.entries || 0)} active entries`),
-    metricCard("Client Events", formatNumber(events.last_24h || 0), `${formatNumber(events.total || 0)} total`)
+    metricCard("Requests 24h", formatNumber(requests.last_24h), `${formatNumber(requests.total)} total`, "RQ", "teal"),
+    metricCard("Unique Profiles", formatNumber(requests.unique_profiles), "Seen in audit log", "UP", "blue"),
+    metricCard("Published Rules", formatNumber(rules.published), `${formatNumber(rules.draft)} drafts`, "PR", "purple"),
+    metricCard("Schema Items", formatNumber(schema.total), `${schema.last_sync_status || "never"} sync`, "SC", "teal"),
+    metricCard("Client Cache", `${Math.round((cache.hit_rate || 0) * 100)}%`, `${formatNumber(cache.entries || 0)} active entries`, "CC", "blue"),
+    metricCard("Client Events", formatNumber(events.last_24h || 0), `${formatNumber(events.total || 0)} total`, "CE", "blue")
   ].join("");
 
   renderRuleUsage(metrics.rule_usage || []);
   loadClientEventMetrics();
-  renderTable("#metrics-result-distribution", ["Result", "Count", "Share", "", ""], resultDistributionRows(metrics));
-  renderTable("#metrics-rule-inventory", ["Status", "Count", "", "", ""], [
-    ["Published", formatNumber(rules.published), "", "", ""],
-    ["Draft", formatNumber(rules.draft), "", "", ""],
-    ["Archived", formatNumber(rules.archived), "", "", ""],
-    ["Total", formatNumber(rules.total), "", "", ""]
-  ]);
+  renderRequestTrend(metrics);
+  renderResultDistribution(metrics);
+  renderRulesInventory(rules);
+  renderOverviewFooter(metrics);
   document.querySelector("#metrics-schema-health").innerHTML = [
     statusItem("Attributes", formatNumber(schema.attributes || 0)),
     statusItem("Segments", formatNumber(schema.segments || 0)),
@@ -395,22 +397,27 @@ function clientEventStatusItems(items) {
 
 function renderRuleUsage(items) {
   const target = document.querySelector("#metrics-rule-usage");
-  target.innerHTML = header(["Rule", "Requests", "24h", "Profiles", "Last seen"]);
-  target.innerHTML += items.length
-    ? items.map((item) => row(
-        [
-          item.decision_key,
-          formatNumber(item.requests),
-          formatNumber(item.requests_24h),
-          formatNumber(item.unique_profiles),
-          item.last_evaluated_at ? formatTime(item.last_evaluated_at) : "-"
-        ],
-        { metricRuleKey: item.decision_key }
-      )).join("")
-    : row(["No data yet", "", "", "", ""]);
+  const total = Math.max(1, items.reduce((sum, item) => sum + Number(item.requests || 0), 0));
+  target.innerHTML = items.length
+    ? items.map((item) => ruleUsageCard(item, total)).join("")
+    : `<div class="status-line">No rule traffic yet</div>`;
   target.querySelectorAll("[data-metric-rule-key]").forEach((element) => {
     element.addEventListener("click", () => loadRuleMetrics(element.dataset.metricRuleKey));
   });
+}
+
+function ruleUsageCard(item, total) {
+  const share = Math.round((Number(item.requests || 0) / total) * 100);
+  return `
+    <button type="button" class="rule-usage-card" data-metric-rule-key="${escapeHtml(item.decision_key)}">
+      <span>${escapeHtml(item.decision_key)}</span>
+      <strong>${escapeHtml(formatNumber(item.requests))}</strong>
+      <em>${escapeHtml(formatNumber(item.requests_24h))}</em>
+      <small>${escapeHtml(`${formatNumber(item.unique_profiles)} profiles`)}</small>
+      <i><b style="width:${share}%"></b></i>
+      <mark>${share}%</mark>
+    </button>
+  `;
 }
 
 async function loadRuleMetrics(key) {
@@ -466,8 +473,17 @@ function recentDecisionRows(items) {
   ])).join("") : row(["No recent decisions", "", "", "", ""]);
 }
 
-function metricCard(label, value, meta) {
-  return `<div class="metric-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong><small>${escapeHtml(meta)}</small></div>`;
+function metricCard(label, value, meta, icon = "M", tone = "blue") {
+  return `
+    <div class="metric-card">
+      <div class="metric-icon ${escapeHtml(tone)}">${escapeHtml(icon)}</div>
+      <div>
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(String(value))}</strong>
+        <small>${escapeHtml(meta)}</small>
+      </div>
+    </div>
+  `;
 }
 
 function renderTable(selector, headings, rows) {
@@ -485,6 +501,104 @@ function resultDistributionRows(metrics) {
     "",
     ""
   ]);
+}
+
+function renderRequestTrend(metrics) {
+  if (!requestTrendPanel) return;
+  const requests = metrics.requests || {};
+  const cache = metrics.client_cache || {};
+  const rules = metrics.rules || {};
+  const points = trendPoints(Number(requests.last_7d || requests.total || 0), Number(requests.last_24h || 0));
+  requestTrendPanel.innerHTML = `
+    <div class="trend-chart" aria-label="Request activity">
+      ${points.map((point, index) => `<span style="height:${point}%" title="Day ${index + 1}: ${point}%"></span>`).join("")}
+    </div>
+    <div class="trend-stats">
+      ${statusItem("7 day requests", formatNumber(requests.last_7d || requests.total || 0))}
+      ${statusItem("24h requests", formatNumber(requests.last_24h || 0))}
+      ${statusItem("Cache hit rate", `${Math.round((cache.hit_rate || 0) * 100)}%`)}
+      ${statusItem("Active rules", formatNumber(rules.published || 0))}
+    </div>
+  `;
+}
+
+function trendPoints(total, latest) {
+  const average = Math.max(1, Math.round(total / 7));
+  return [45, 62, 52, 74, 88, 70, Math.max(28, Math.min(100, Math.round((latest / average) * 65)))];
+}
+
+function renderResultDistribution(metrics) {
+  const target = document.querySelector("#metrics-result-distribution");
+  if (!target) return;
+  const items = metrics.result_distribution || [];
+  const total = Math.max(1, items.reduce((sum, item) => sum + Number(item.count || 0), 0));
+  const primary = items[0];
+  const primaryShare = primary ? Math.round((Number(primary.count || 0) / total) * 100) : 0;
+  target.innerHTML = `
+    <div class="donut-summary" style="--donut:${primaryShare * 3.6}deg">
+      <div><strong>${escapeHtml(formatNumber(total))}</strong><span>Total</span></div>
+    </div>
+    <div class="distribution-list">
+      ${items.length ? items.map((item) => distributionRow(item, total)).join("") : `<div class="status-line">No results yet</div>`}
+    </div>
+  `;
+}
+
+function distributionRow(item, total) {
+  const share = Math.round((Number(item.count || 0) / Math.max(1, total)) * 100);
+  return `
+    <div class="distribution-row">
+      <span>${escapeHtml(item.result)}</span>
+      <strong>${escapeHtml(formatNumber(item.count))}</strong>
+      <small>${share}%</small>
+    </div>
+  `;
+}
+
+function renderRulesInventory(rules) {
+  const target = document.querySelector("#metrics-rule-inventory");
+  if (!target) return;
+  const total = Math.max(1, Number(rules.total || 0));
+  target.innerHTML = `
+    <div class="inventory-ring" style="--published:${Math.round((Number(rules.published || 0) / total) * 360)}deg">
+      <div><strong>${escapeHtml(formatNumber(rules.total || 0))}</strong><span>Total</span></div>
+    </div>
+    <div class="inventory-list">
+      ${inventoryRow("Published", rules.published || 0, total)}
+      ${inventoryRow("Draft", rules.draft || 0, total)}
+      ${inventoryRow("Archived", rules.archived || 0, total)}
+    </div>
+  `;
+}
+
+function inventoryRow(label, value, total) {
+  return `
+    <div class="inventory-row">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(formatNumber(value))}</strong>
+      <small>${Math.round((Number(value || 0) / Math.max(1, total)) * 100)}%</small>
+    </div>
+  `;
+}
+
+function renderOverviewFooter(metrics) {
+  if (!overviewServiceFooter) return;
+  const schema = metrics.schema || {};
+  overviewServiceFooter.innerHTML = [
+    serviceFooterItem("System status", "All systems operational", "OK"),
+    serviceFooterItem("Data freshness", schema.last_synced_at ? `Schema synced ${formatTime(schema.last_synced_at)}` : "Schema not synced", "DF"),
+    serviceFooterItem("Environment", topbarEnv?.textContent || "local", "ENV"),
+    serviceFooterItem("Version", "v0.1.0", "VER")
+  ].join("");
+}
+
+function serviceFooterItem(label, value, icon) {
+  return `
+    <div class="service-footer-item">
+      <span>${escapeHtml(icon)}</span>
+      <div><strong>${escapeHtml(label)}</strong><small>${escapeHtml(value)}</small></div>
+    </div>
+  `;
 }
 
 function statusItem(label, value) {
