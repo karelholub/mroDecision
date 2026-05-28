@@ -152,6 +152,7 @@ document.querySelector("#new-lookup").addEventListener("click", newLookup);
 document.querySelector("#new-message").addEventListener("click", newMessage);
 document.querySelector("#close-lookup-detail").addEventListener("click", closeLookupDetail);
 document.querySelector("#close-message-detail").addEventListener("click", closeMessageDetail);
+document.querySelector("#cancel-message-detail").addEventListener("click", closeMessageDetail);
 document.querySelector("#close-overview-rule-detail")?.addEventListener("click", closeOverviewRuleDetail);
 document.querySelector("#export-config").addEventListener("click", exportConfig);
 document.querySelector("#sync-json").addEventListener("click", syncJsonFromBuilder);
@@ -192,9 +193,17 @@ document.querySelector("#fallback-outputs").addEventListener("change", syncJsonF
 document.querySelector("#lookup-editor").addEventListener("submit", saveLookup);
 document.querySelector("#message-editor").addEventListener("submit", saveMessage);
 document.querySelector("#sync-message-json").addEventListener("click", syncMessageJsonFromPreview);
+document.querySelector("#format-message-json").addEventListener("click", formatActiveMessageJson);
 ["#message-name", "#message-surface", "#message-status", "#message-preview-title", "#message-preview-body", "#message-preview-cta", "#message-preview-image"].forEach((selector) => {
   document.querySelector(selector).addEventListener("input", renderMessagePreview);
   document.querySelector(selector).addEventListener("change", renderMessagePreview);
+});
+document.querySelectorAll("[data-message-preview-device]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll("[data-message-preview-device]").forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
+    messagePreview?.setAttribute("data-device", button.dataset.messagePreviewDevice);
+  });
 });
 document.querySelector("#message-content").addEventListener("change", syncMessagePreviewFromJson);
 document.querySelector("#import-lookup-csv").addEventListener("click", importLookupCsv);
@@ -1226,6 +1235,22 @@ function syncMessageJsonFromPreview() {
   document.querySelector("#message-content").value = JSON.stringify(content, null, 2);
   renderMessagePreview();
   messageOutput.textContent = "Message JSON synced";
+}
+
+function formatActiveMessageJson() {
+  const activePanel = document.querySelector(".message-bottom-drawer .drawer-panel.active");
+  const textarea = activePanel?.querySelector("textarea");
+  if (!textarea) {
+    messageOutput.textContent = "Select a JSON tab to format";
+    return;
+  }
+  try {
+    textarea.value = JSON.stringify(JSON.parse(textarea.value || "{}"), null, 2);
+    if (textarea.id === "message-content") syncMessagePreviewFromJson();
+    messageOutput.textContent = "JSON formatted";
+  } catch (error) {
+    messageOutput.textContent = error.message;
+  }
 }
 
 function renderMessagePreview() {
