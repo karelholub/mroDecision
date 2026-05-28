@@ -13,6 +13,7 @@ const graphNodeEditor = document.querySelector("#graph-node-editor");
 const lookupOutput = document.querySelector("#lookup-output");
 const messageOutput = document.querySelector("#message-output");
 const messagePreview = document.querySelector("#message-preview");
+const messageDetailModal = document.querySelector("#message-detail-modal");
 const messageInspectorSummary = document.querySelector("#message-inspector-summary");
 const lookupInspectorSummary = document.querySelector("#lookup-inspector-summary");
 const lookupHelpTable = document.querySelector("#lookup-help-table");
@@ -139,6 +140,7 @@ document.querySelector("#eval-profile-key").addEventListener("input", () => {
 document.querySelector("#new-rule").addEventListener("click", newRule);
 document.querySelector("#new-lookup").addEventListener("click", newLookup);
 document.querySelector("#new-message").addEventListener("click", newMessage);
+document.querySelector("#close-message-detail").addEventListener("click", closeMessageDetail);
 document.querySelector("#export-config").addEventListener("click", exportConfig);
 document.querySelector("#sync-json").addEventListener("click", syncJsonFromBuilder);
 document.querySelector("#sync-json-modal").addEventListener("click", syncJsonFromBuilder);
@@ -198,13 +200,14 @@ document.querySelector("#settings-form").addEventListener("submit", saveSettings
 document.querySelector("#token-form").addEventListener("submit", createToken);
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !ruleBuilderModal.hidden) closeRuleBuilder();
+  if (event.key === "Escape" && messageDetailModal && !messageDetailModal.hidden) closeMessageDetail();
 });
 
 loadMetrics();
 loadRules();
 newRule();
 newLookup();
-newMessage();
+newMessage({ silent: true });
 loadLookups();
 loadMessages();
 loadSettings();
@@ -884,23 +887,47 @@ async function loadLookups() {
 
 async function loadMessages() {
   const target = document.querySelector("#message-list");
-  target.innerHTML = header(["Name", "ID", "Surface", "Status", "Updated"]);
+  target.innerHTML = header(["Name", "ID", "Surface", "Status", "Updated", "Content"]);
   try {
     const body = await api("/v1/messages");
     cachedMessages = body.messages || [];
     target.innerHTML += body.messages.length
-      ? body.messages.map((item) => row([item.name, item.id, item.surface || "-", item.status, item.updated_at], { messageId: item.id })).join("")
-      : row(["No messages", "", "", "", ""]);
+      ? body.messages.map((item) => messageCatalogRow(item)).join("")
+      : row(["No messages", "", "", "", "", ""]);
     document.querySelectorAll("[data-message-id]").forEach((element) => {
       element.addEventListener("click", () => loadMessage(element.dataset.messageId, body.messages));
     });
     if (document.querySelector("#builder-mode")?.value === "graph") renderGraphBuilder();
   } catch (error) {
-    target.innerHTML += row([error.message, "", "", "", ""]);
+    target.innerHTML += row([error.message, "", "", "", "", ""]);
   }
 }
 
-function newMessage() {
+function messageCatalogRow(item) {
+  const content = item.default_content || {};
+  const title = content.title || content.headline || "-";
+  const cta = content.cta_label ? ` · ${content.cta_label}` : "";
+  return row([
+    item.name,
+    item.id,
+    item.surface || "-",
+    item.status || "active",
+    item.updated_at ? formatTime(item.updated_at) : "-",
+    `${title}${cta}`
+  ], { messageId: item.id });
+}
+
+function openMessageDetail() {
+  if (!messageDetailModal) return;
+  messageDetailModal.hidden = false;
+}
+
+function closeMessageDetail() {
+  if (!messageDetailModal) return;
+  messageDetailModal.hidden = true;
+}
+
+function newMessage(options = {}) {
   selectedMessageId = null;
   document.querySelector("#message-id").value = "hero_offer";
   document.querySelector("#message-id").disabled = false;
@@ -922,6 +949,7 @@ function newMessage() {
   document.querySelector("#message-metadata").value = JSON.stringify({}, null, 2);
   syncMessagePreviewFromJson();
   messageOutput.textContent = "Ready for a new message";
+  if (!options.silent) openMessageDetail();
 }
 
 function loadMessage(id, messages) {
@@ -941,6 +969,7 @@ function loadMessage(id, messages) {
   document.querySelector("#message-metadata").value = JSON.stringify(message.metadata || {}, null, 2);
   syncMessagePreviewFromJson();
   messageOutput.textContent = `Loaded ${id}`;
+  openMessageDetail();
 }
 
 async function saveMessage(event) {

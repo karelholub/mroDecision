@@ -554,82 +554,95 @@
           </div>
         </header>
         <div class="message-workbench">
-          <div class="message-list-pane">
+          <div class="message-list-pane editor">
+            <div class="editor-title">Defined Messages</div>
             <div id="message-list" class="table message-list"></div>
           </div>
-          <form id="message-editor" class="editor message-editor-pane">
-            <div class="message-editor-main">
-              <div class="message-form-pane">
-                <div class="editor-title">Message Content</div>
-                <div class="grid-two">
-                  <label>
-                    Message ID
-                    <input id="message-id" required pattern="[a-zA-Z0-9_-]+" />
-                  </label>
-                  <label>
-                    Name
-                    <input id="message-name" required />
-                  </label>
-                  <label>
-                    Surface
-                    <input id="message-surface" placeholder="homepage_hero" />
-                  </label>
-                  <label>
-                    Status
-                    <select id="message-status">
-                      <option value="active">Active</option>
-                      <option value="archived">Archived</option>
-                    </select>
-                  </label>
-                </div>
-                <div class="message-field-grid">
-                  <label>
-                    Title
-                    <input id="message-preview-title" placeholder="Special offer" />
-                  </label>
-                  <label>
-                    CTA label
-                    <input id="message-preview-cta" placeholder="View offer" />
-                  </label>
-                </div>
-                <label>
-                  Body
-                  <textarea id="message-preview-body" spellcheck="false"></textarea>
-                </label>
-                <label>
-                  Image URL
-                  <input id="message-preview-image" placeholder="https://..." />
-                </label>
+        </div>
+        <div id="message-detail-modal" class="message-detail-modal" hidden>
+          <form id="message-editor" class="message-detail-dialog">
+            <div class="message-detail-header">
+              <div>
+                <strong>Message Details</strong>
+                <span>Edit content, schema, metadata, and preview.</span>
               </div>
-              <div class="message-preview-pane">
-                <div class="editor-title">Preview</div>
-                <div id="message-preview" class="message-preview-card"></div>
-                <div id="message-inspector-summary" class="status-panel compact-status-panel"></div>
+              <button type="button" id="close-message-detail">Close</button>
+            </div>
+            <div class="message-editor-pane">
+              <div class="message-editor-main">
+                <div class="message-form-pane">
+                  <div class="editor-title">Attributes</div>
+                  <div class="grid-two">
+                    <label>
+                      Message ID
+                      <input id="message-id" required pattern="[a-zA-Z0-9_-]+" />
+                    </label>
+                    <label>
+                      Name
+                      <input id="message-name" required />
+                    </label>
+                    <label>
+                      Surface
+                      <input id="message-surface" placeholder="homepage_hero" />
+                    </label>
+                    <label>
+                      Status
+                      <select id="message-status">
+                        <option value="active">Active</option>
+                        <option value="archived">Archived</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="editor-title compact-title">Content</div>
+                  <div class="message-field-grid">
+                    <label>
+                      Title
+                      <input id="message-preview-title" placeholder="Special offer" />
+                    </label>
+                    <label>
+                      CTA label
+                      <input id="message-preview-cta" placeholder="View offer" />
+                    </label>
+                  </div>
+                  <label>
+                    Body
+                    <textarea id="message-preview-body" spellcheck="false"></textarea>
+                  </label>
+                  <label>
+                    Image URL
+                    <input id="message-preview-image" placeholder="https://..." />
+                  </label>
+                </div>
+                <div class="message-preview-pane">
+                  <div class="editor-title">Preview</div>
+                  <div id="message-preview" class="message-preview-card"></div>
+                  <div id="message-inspector-summary" class="status-panel compact-status-panel"></div>
+                </div>
+              </div>
+              <div class="rule-bottom-drawer message-bottom-drawer">
+                <div class="drawer-tabs">
+                  <button type="button" class="active" data-message-drawer-tab="content">Content JSON</button>
+                  <button type="button" data-message-drawer-tab="schema">Schema</button>
+                  <button type="button" data-message-drawer-tab="metadata">Metadata</button>
+                  <button type="button" data-message-drawer-tab="output">Output</button>
+                </div>
+                <div class="drawer-panel active" data-message-drawer-panel="content">
+                  <textarea id="message-content" spellcheck="false"></textarea>
+                </div>
+                <div class="drawer-panel" data-message-drawer-panel="schema">
+                  <textarea id="message-schema" spellcheck="false"></textarea>
+                </div>
+                <div class="drawer-panel" data-message-drawer-panel="metadata">
+                  <textarea id="message-metadata" spellcheck="false"></textarea>
+                </div>
+                <div class="drawer-panel" data-message-drawer-panel="output">
+                  <pre id="message-output"></pre>
+                </div>
               </div>
             </div>
-            <div class="actions left workbench-actions">
+            <div class="message-detail-footer">
               <button type="button" id="sync-message-json">Sync JSON</button>
-              <button type="submit">Save Message</button>
-            </div>
-            <div class="rule-bottom-drawer message-bottom-drawer">
-              <div class="drawer-tabs">
-                <button type="button" class="active" data-message-drawer-tab="content">Content JSON</button>
-                <button type="button" data-message-drawer-tab="schema">Schema</button>
-                <button type="button" data-message-drawer-tab="metadata">Metadata</button>
-                <button type="button" data-message-drawer-tab="output">Output</button>
-              </div>
-              <div class="drawer-panel active" data-message-drawer-panel="content">
-                <textarea id="message-content" spellcheck="false"></textarea>
-              </div>
-              <div class="drawer-panel" data-message-drawer-panel="schema">
-                <textarea id="message-schema" spellcheck="false"></textarea>
-              </div>
-              <div class="drawer-panel" data-message-drawer-panel="metadata">
-                <textarea id="message-metadata" spellcheck="false"></textarea>
-              </div>
-              <div class="drawer-panel" data-message-drawer-panel="output">
-                <pre id="message-output"></pre>
-              </div>
+              <button type="submit" class="primary">Save Message</button>
             </div>
           </form>
         </div>
