@@ -45,6 +45,10 @@ const inspectorFallback = document.querySelector("#inspector-fallback");
 const inspectorBranches = document.querySelector("#inspector-branches");
 const inspectorNodes = document.querySelector("#inspector-nodes");
 const inspectorMode = document.querySelector("#inspector-mode");
+const ruleBuilderModal = document.querySelector("#rule-builder-modal");
+const logicSummaryTitle = document.querySelector("#logic-summary-title");
+const logicSummaryMeta = document.querySelector("#logic-summary-meta");
+const logicModalSubtitle = document.querySelector("#logic-modal-subtitle");
 let selectedRuleKey = null;
 let selectedLookupId = null;
 let selectedMessageId = null;
@@ -136,6 +140,13 @@ document.querySelector("#new-lookup").addEventListener("click", newLookup);
 document.querySelector("#new-message").addEventListener("click", newMessage);
 document.querySelector("#export-config").addEventListener("click", exportConfig);
 document.querySelector("#sync-json").addEventListener("click", syncJsonFromBuilder);
+document.querySelector("#sync-json-modal").addEventListener("click", syncJsonFromBuilder);
+document.querySelector("#open-rule-builder").addEventListener("click", openRuleBuilder);
+document.querySelector("#close-rule-builder").addEventListener("click", closeRuleBuilder);
+document.querySelector("#done-rule-builder").addEventListener("click", () => {
+  syncJsonFromBuilder();
+  closeRuleBuilder();
+});
 document.querySelector("#builder-mode").addEventListener("change", switchBuilderMode);
 document.querySelector("#add-branch").addEventListener("click", () => {
   builderBranches.push(newBranch(builderBranches.length + 1));
@@ -184,6 +195,9 @@ document.querySelector("#lookup-key-column").addEventListener("change", () => {
 });
 document.querySelector("#settings-form").addEventListener("submit", saveSettings);
 document.querySelector("#token-form").addEventListener("submit", createToken);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !ruleBuilderModal.hidden) closeRuleBuilder();
+});
 
 loadMetrics();
 loadRules();
@@ -455,6 +469,18 @@ function statusItem(label, value) {
   return `<div class="status-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`;
 }
 
+function openRuleBuilder() {
+  renderRuleInspector();
+  ruleBuilderModal.hidden = false;
+  document.body.classList.add("modal-open");
+}
+
+function closeRuleBuilder() {
+  ruleBuilderModal.hidden = true;
+  document.body.classList.remove("modal-open");
+  renderRuleInspector();
+}
+
 function renderRuleInspector() {
   if (!ruleInspectorSummary) return;
   const key = document.querySelector("#rule-key").value.trim() || "new_eligibility_rule";
@@ -479,6 +505,11 @@ function renderRuleInspector() {
   inspectorBranches.textContent = String(builderBranches.length || 0);
   inspectorNodes.textContent = String(graphBuilder.nodes?.length || 0);
   inspectorMode.textContent = mode === "graph" ? "Advanced graph" : "Branch rules";
+  const branchLabel = `${builderBranches.length || 0} branch${builderBranches.length === 1 ? "" : "es"}`;
+  const nodeLabel = `${graphBuilder.nodes?.length || 0} node${graphBuilder.nodes?.length === 1 ? "" : "s"}`;
+  logicSummaryTitle.textContent = mode === "graph" ? "Advanced graph" : "Branch rules";
+  logicSummaryMeta.textContent = mode === "graph" ? nodeLabel : `${branchLabel} · fallback ${fallback}`;
+  logicModalSubtitle.textContent = mode === "graph" ? "Advanced graph routing and node outputs" : "Branch rules, conditions, lookup outputs, and fallback";
 }
 
 function renderRuleList() {

@@ -179,7 +179,47 @@
                   Description
                   <input id="rule-description" />
                 </label>
-                <div class="builder-shell">
+                <div class="logic-summary-card">
+                  <div>
+                    <span>Logic authoring</span>
+                    <strong id="logic-summary-title">Branch rules</strong>
+                    <small id="logic-summary-meta">1 branch · fallback ineligible</small>
+                  </div>
+                  <button type="button" id="open-rule-builder">Edit Logic</button>
+                </div>
+              </div>
+              <div class="rule-inspector">
+                <div class="editor-title">Inspector</div>
+                <div id="rule-inspector-summary" class="status-panel compact-status-panel"></div>
+                <div class="inspector-section">
+                  <h3>Execution</h3>
+                  <div class="inspector-lines">
+                    <div><span>Decision key</span><strong id="inspector-key">-</strong></div>
+                    <div><span>Surface</span><strong id="inspector-surface">-</strong></div>
+                    <div><span>Cache hint</span><strong id="inspector-cache">No cache hint</strong></div>
+                    <div><span>Fallback</span><strong id="inspector-fallback">ineligible</strong></div>
+                  </div>
+                </div>
+                <div class="inspector-section">
+                  <h3>Draft Shape</h3>
+                  <div class="inspector-lines">
+                    <div><span>Branches</span><strong id="inspector-branches">0</strong></div>
+                    <div><span>Graph nodes</span><strong id="inspector-nodes">0</strong></div>
+                    <div><span>Mode</span><strong id="inspector-mode">Branch rules</strong></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="rule-builder-modal" class="rule-builder-modal" hidden>
+              <div class="rule-builder-dialog">
+                <div class="rule-builder-header">
+                  <div>
+                    <strong>Edit Rule Logic</strong>
+                    <span id="logic-modal-subtitle">Branch rules and output routing</span>
+                  </div>
+                  <button type="button" id="close-rule-builder">Close</button>
+                </div>
+                <div class="builder-shell modal-builder-shell">
                   <div class="builder-bar">
                     <label>
                       Builder mode
@@ -222,26 +262,9 @@
                     <div id="graph-node-editor" class="graph-node-editor"></div>
                   </div>
                 </div>
-              </div>
-              <div class="rule-inspector">
-                <div class="editor-title">Inspector</div>
-                <div id="rule-inspector-summary" class="status-panel compact-status-panel"></div>
-                <div class="inspector-section">
-                  <h3>Execution</h3>
-                  <div class="inspector-lines">
-                    <div><span>Decision key</span><strong id="inspector-key">-</strong></div>
-                    <div><span>Surface</span><strong id="inspector-surface">-</strong></div>
-                    <div><span>Cache hint</span><strong id="inspector-cache">No cache hint</strong></div>
-                    <div><span>Fallback</span><strong id="inspector-fallback">ineligible</strong></div>
-                  </div>
-                </div>
-                <div class="inspector-section">
-                  <h3>Draft Shape</h3>
-                  <div class="inspector-lines">
-                    <div><span>Branches</span><strong id="inspector-branches">0</strong></div>
-                    <div><span>Graph nodes</span><strong id="inspector-nodes">0</strong></div>
-                    <div><span>Mode</span><strong id="inspector-mode">Branch rules</strong></div>
-                  </div>
+                <div class="rule-builder-footer">
+                  <button type="button" id="sync-json-modal">Sync JSON</button>
+                  <button type="button" id="done-rule-builder">Done</button>
                 </div>
               </div>
             </div>
