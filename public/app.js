@@ -4,6 +4,8 @@ const evalOutput = document.querySelector("#eval-output");
 const editorOutput = document.querySelector("#rule-editor-output");
 const branchEditor = document.querySelector("#branch-editor");
 const ruleGraph = document.querySelector("#rule-graph");
+const graphEditor = document.querySelector("#graph-editor");
+const graphNodeEditor = document.querySelector("#graph-node-editor");
 const lookupOutput = document.querySelector("#lookup-output");
 const messageOutput = document.querySelector("#message-output");
 const referenceGrid = document.querySelector("#reference-grid");
@@ -22,6 +24,7 @@ let selectedRuleKey = null;
 let selectedLookupId = null;
 let selectedMessageId = null;
 let builderBranches = [];
+let graphBuilder = { entry: "input", nodes: [] };
 let cachedRuleSets = [];
 let cachedLookupTables = [];
 let cachedSettings = {};
@@ -69,9 +72,21 @@ document.querySelector("#new-lookup").addEventListener("click", newLookup);
 document.querySelector("#new-message").addEventListener("click", newMessage);
 document.querySelector("#export-config").addEventListener("click", exportConfig);
 document.querySelector("#sync-json").addEventListener("click", syncJsonFromBuilder);
+document.querySelector("#builder-mode").addEventListener("change", switchBuilderMode);
 document.querySelector("#add-branch").addEventListener("click", () => {
   builderBranches.push(newBranch(builderBranches.length + 1));
   renderBranchEditor();
+  syncJsonFromBuilder();
+});
+document.querySelector("#add-graph-node").addEventListener("click", addGraphNode);
+document.querySelector("#create-graph-template").addEventListener("click", () => {
+  graphBuilder = starterGraphBuilder();
+  renderGraphBuilder();
+  syncJsonFromBuilder();
+});
+document.querySelector("#graph-entry").addEventListener("input", () => {
+  graphBuilder.entry = document.querySelector("#graph-entry").value.trim();
+  renderRuleGraph();
   syncJsonFromBuilder();
 });
 document.querySelector("#publish-rule").addEventListener("click", publishSelectedRule);
@@ -459,8 +474,11 @@ function newRule() {
   document.querySelector("#fallback-result").value = "ineligible";
   document.querySelector("#fallback-outputs").value = "{}";
   versionList.innerHTML = row(["No published versions yet", "", "", ""]);
+  document.querySelector("#builder-mode").value = "branches";
+  graphBuilder = starterGraphBuilder();
   builderBranches = [newBranch(1)];
   renderBranchEditor();
+  renderBuilderMode();
   syncJsonFromBuilder();
   editorOutput.textContent = "Ready for a new draft";
 }
@@ -806,7 +824,11 @@ function row(values, options = {}) {
 }
 
 function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+  return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+}
+
+function cssEscape(value) {
+  return window.CSS?.escape ? window.CSS.escape(value) : String(value).replace(/["\\]/g, "\\$&");
 }
 
 function formatTime(value) {
@@ -920,6 +942,27 @@ function renderBranchEditor() {
   renderRuleGraph();
 }
 
+function switchBuilderMode() {
+  const mode = document.querySelector("#builder-mode").value;
+  if (mode === "graph" && (!graphBuilder.nodes || graphBuilder.nodes.length === 0)) {
+    graphBuilder = starterGraphBuilder();
+  }
+  renderBuilderMode();
+  syncJsonFromBuilder();
+}
+
+function renderBuilderMode() {
+  const mode = document.querySelector("#builder-mode").value;
+  const graphMode = mode === "graph";
+  branchEditor.hidden = graphMode;
+  graphEditor.hidden = !graphMode;
+  document.querySelector("#add-branch").hidden = graphMode;
+  document.querySelector("#fallback-result").closest("label").hidden = graphMode;
+  document.querySelector("#fallback-outputs").closest("label").hidden = graphMode;
+  if (graphMode) renderGraphBuilder();
+  renderRuleGraph();
+}
+
 function bindOutputFieldEditor(node, branchIndex) {
   const target = node.querySelector("[data-role='outputs']");
   const outputs = parseJsonSafe(builderBranches[branchIndex].outputs || "{}");
@@ -1029,6 +1072,10 @@ function uniqueOutputFieldName(fields, base) {
 
 function renderRuleGraph() {
   if (!ruleGraph) return;
+  if (document.querySelector("#builder-mode").value === "graph") {
+    renderAdvancedGraphPreview();
+    return;
+  }
   const fallbackResult = document.querySelector("#fallback-result").value.trim() || "deferred";
   const fallbackOutputs = parseJsonSafe(document.querySelector("#fallback-outputs").value || "{}");
   const branchCards = builderBranches.map((branch, index) => {
@@ -1072,6 +1119,265 @@ function renderRuleGraph() {
       setTimeout(() => target?.classList.remove("highlight"), 900);
     });
   });
+}
+
+function renderAdvancedGraphPreview() {
+  const nodes = graphBuilder.nodes || [];
+  const cards = nodes.map((node) => {
+    const edges = graphNodeEdges(node);
+    return `
+      <button type="button" class="graph-node branch-node" data-graph-node="${escapeHtml(node.id)}">
+        <span class="graph-kicker">${escapeHtml(node.type || "node")}${node.id === graphBuilder.entry ? " / entry" : ""}</span>
+        <strong>${escapeHtml(node.id || "node")}</strong>
+        <span>${escapeHtml(graphNodeSummary(node))}</span>
+        <small>${escapeHtml(edges.length ? `Routes to ${edges.join(", ")}` : "Terminal node")}</small>
+      </button>
+    `;
+  }).join("");
+  ruleGraph.innerHTML = `
+    <div class="graph-stage">
+      <div class="graph-node input-node">
+        <span class="graph-kicker">Entry</span>
+        <strong>${escapeHtml(graphBuilder.entry || "input")}</strong>
+        <span>${escapeHtml(nodes.length)} node${nodes.length === 1 ? "" : "s"}</span>
+      </div>
+      <div class="graph-lane">
+        ${cards || '<div class="graph-empty">Create a graph template or add a node.</div>'}
+      </div>
+      <div class="graph-node fallback-node">
+        <span class="graph-kicker">Validation</span>
+        <strong>${escapeHtml(graphReachabilitySummary())}</strong>
+        <span>Draft JSON remains the source of truth.</span>
+      </div>
+    </div>
+  `;
+  ruleGraph.querySelectorAll("[data-graph-node]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const target = graphNodeEditor.querySelector(`[data-node-id="${cssEscape(button.dataset.graphNode)}"]`);
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      target?.classList.add("highlight");
+      setTimeout(() => target?.classList.remove("highlight"), 900);
+    });
+  });
+}
+
+function renderGraphBuilder() {
+  document.querySelector("#graph-entry").value = graphBuilder.entry || "";
+  graphNodeEditor.innerHTML = (graphBuilder.nodes || []).map((node, index) => graphNodeEditorCard(node, index)).join("");
+  graphNodeEditor.querySelectorAll("[data-graph-field]").forEach((input) => {
+    input.addEventListener("input", () => updateGraphNodeField(Number(input.dataset.nodeIndex), input.dataset.graphField, input.value));
+    input.addEventListener("change", syncJsonFromBuilder);
+  });
+  graphNodeEditor.querySelectorAll("[data-remove-graph-node]").forEach((button) => {
+    button.addEventListener("click", () => {
+      graphBuilder.nodes.splice(Number(button.dataset.removeGraphNode), 1);
+      renderGraphBuilder();
+      syncJsonFromBuilder();
+    });
+  });
+  renderRuleGraph();
+}
+
+function graphNodeEditorCard(node, index) {
+  return `
+    <section class="graph-edit-card" data-node-id="${escapeHtml(node.id || "")}">
+      <div class="graph-edit-head">
+        <label>
+          Node ID
+          <input data-node-index="${index}" data-graph-field="id" value="${escapeHtml(node.id || "")}" />
+        </label>
+        <label>
+          Type
+          <select data-node-index="${index}" data-graph-field="type">
+            ${graphNodeTypes().map((type) => `<option value="${type}"${node.type === type ? " selected" : ""}>${graphNodeTypeLabel(type)}</option>`).join("")}
+          </select>
+        </label>
+        <label>
+          Next
+          <input data-node-index="${index}" data-graph-field="next" value="${escapeHtml(node.next || "")}" />
+        </label>
+        <button type="button" data-remove-graph-node="${index}">Remove</button>
+      </div>
+      <div class="graph-edge-line">${escapeHtml(graphNodeEdges(node).length ? `Edges: ${graphNodeEdges(node).join(", ")}` : "Terminal or incomplete node")}</div>
+      <div class="graph-edit-fields">
+        ${graphNodeSpecificFields(node, index)}
+      </div>
+    </section>
+  `;
+}
+
+function graphNodeSpecificFields(node, index) {
+  const field = (name, label, value = node[name] ?? "") => `
+    <label>
+      ${label}
+      <input data-node-index="${index}" data-graph-field="${name}" value="${escapeHtml(formatOutputValue(value))}" />
+    </label>
+  `;
+  if (node.type === "condition") {
+    return [
+      field("expression", "Expression"),
+      field("true", "True route"),
+      field("false", "False route")
+    ].join("");
+  }
+  if (node.type === "score") {
+    return [
+      field("label", "Score label"),
+      field("rules", "Rules JSON", JSON.stringify(node.rules || []))
+    ].join("");
+  }
+  if (node.type === "lookup") {
+    return [
+      field("table", "Reference table"),
+      field("key_expression", "Key expression"),
+      field("column", "Field to return"),
+      field("output_key", "Store as context")
+    ].join("");
+  }
+  if (node.type === "frequency_cap") {
+    return [
+      field("max", "Max events"),
+      field("window_days", "Window days"),
+      field("message_id", "Message ID"),
+      field("surface", "Surface"),
+      field("capped", "Capped route"),
+      field("output_key", "Store count as")
+    ].join("");
+  }
+  if (["output", "fallback", "error"].includes(node.type)) {
+    return [
+      field("result", "Result"),
+      field("outputs", "Outputs JSON", JSON.stringify(node.outputs || {}))
+    ].join("");
+  }
+  return [
+    field("defaults", "Defaults JSON", JSON.stringify(node.defaults || {}))
+  ].join("");
+}
+
+function updateGraphNodeField(index, field, rawValue) {
+  const node = graphBuilder.nodes[index];
+  if (!node) return;
+  if (field === "id" && graphBuilder.entry === node.id) graphBuilder.entry = rawValue.trim();
+  if (["rules", "outputs", "defaults"].includes(field)) {
+    node[field] = parseJsonSafe(rawValue, field === "rules" ? [] : {});
+  } else if (["max", "window_days"].includes(field)) {
+    node[field] = Number(rawValue || 0);
+  } else if (rawValue.trim() === "") {
+    delete node[field];
+  } else {
+    node[field] = field === "id" ? rawValue.trim() : rawValue;
+  }
+  if (field === "type") Object.assign(node, graphNodeDefaults(node.type, node.id));
+  renderRuleGraph();
+}
+
+function addGraphNode() {
+  const type = document.querySelector("#graph-new-node-type").value;
+  const id = uniqueGraphNodeId(type);
+  graphBuilder.nodes.push(graphNodeDefaults(type, id));
+  renderGraphBuilder();
+  syncJsonFromBuilder();
+}
+
+function starterGraphBuilder() {
+  return {
+    entry: "input",
+    nodes: [
+      { id: "input", type: "input", next: "condition" },
+      { id: "condition", type: "condition", expression: "attribute(\"lead_score\") >= 50", true: "eligible", false: "fallback" },
+      { id: "eligible", type: "output", result: "eligible", outputs: {} },
+      { id: "fallback", type: "output", result: "deferred", outputs: {} }
+    ]
+  };
+}
+
+function graphNodeDefaults(type, id) {
+  const base = { id, type };
+  if (type === "input") return { ...base, next: "" };
+  if (type === "condition") return { ...base, expression: "attribute(\"lead_score\") >= 50", true: "", false: "" };
+  if (type === "score") return { ...base, label: id, rules: [], next: "" };
+  if (type === "lookup") return { ...base, table: "", key_expression: "\"\"", column: "", output_key: id, next: "" };
+  if (type === "frequency_cap") return { ...base, max: 3, window_days: 7, next: "", capped: "" };
+  return { ...base, result: type === "fallback" ? "deferred" : "eligible", outputs: {} };
+}
+
+function graphNodeTypes() {
+  return ["input", "condition", "score", "lookup", "frequency_cap", "output", "fallback", "error"];
+}
+
+function graphNodeTypeLabel(type) {
+  return {
+    input: "Input",
+    condition: "Condition",
+    score: "Score",
+    lookup: "Reference lookup",
+    frequency_cap: "Frequency cap",
+    output: "Output",
+    fallback: "Fallback",
+    error: "Error"
+  }[type] || type;
+}
+
+function uniqueGraphNodeId(type) {
+  const ids = new Set((graphBuilder.nodes || []).map((node) => node.id));
+  const base = slug(type || "node");
+  for (let index = 1; index < 100; index += 1) {
+    const id = `${base}_${index}`;
+    if (!ids.has(id)) return id;
+  }
+  return `${base}_${Date.now()}`;
+}
+
+function graphNodeEdges(node) {
+  return ["next", "true", "false", "capped", "fallback"]
+    .map((field) => node[field])
+    .filter(Boolean);
+}
+
+function graphNodeSummary(node) {
+  if (node.type === "condition") return node.expression || "No expression";
+  if (node.type === "score") return `${(node.rules || []).length} scoring rule${(node.rules || []).length === 1 ? "" : "s"}`;
+  if (node.type === "lookup") return [node.table, node.column].filter(Boolean).join(" / ") || "Reference lookup";
+  if (node.type === "frequency_cap") return `Max ${node.max || 0} in ${node.window_days || 0} days`;
+  if (["output", "fallback", "error"].includes(node.type)) return node.result || "deferred";
+  return "Defaults and routing";
+}
+
+function graphReachabilitySummary() {
+  const nodes = new Map((graphBuilder.nodes || []).map((node) => [node.id, node]));
+  const visited = new Set();
+  const stack = [graphBuilder.entry];
+  while (stack.length) {
+    const id = stack.pop();
+    if (!id || visited.has(id)) continue;
+    visited.add(id);
+    const node = nodes.get(id);
+    if (!node) continue;
+    stack.push(...graphNodeEdges(node));
+  }
+  const unreachable = (graphBuilder.nodes || []).filter((node) => !visited.has(node.id)).length;
+  return unreachable ? `${unreachable} unreachable` : "All reachable";
+}
+
+function graphFromBuilder() {
+  return {
+    graph: {
+      entry: graphBuilder.entry || "input",
+      nodes: (graphBuilder.nodes || []).map((node) => cleanGraphNode(node))
+    }
+  };
+}
+
+function cleanGraphNode(node) {
+  const copy = {};
+  for (const [key, value] of Object.entries(node)) {
+    if (value === "" || value == null) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    if (typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0) continue;
+    copy[key] = value;
+  }
+  return copy;
 }
 
 function bindLookupOutputHelper(node, branchIndex) {
@@ -1219,7 +1525,7 @@ function bindSchemaKeySuggestions(node, branchIndex, conditionIndex) {
 function syncJsonFromBuilder() {
   clearInvalid();
   try {
-    const draft = draftFromBuilder();
+    const draft = document.querySelector("#builder-mode").value === "graph" ? graphFromBuilder() : draftFromBuilder();
     validateDraft(draft);
     document.querySelector("#rule-draft").value = JSON.stringify(draft, null, 2);
     renderRuleGraph();
@@ -1234,11 +1540,22 @@ function syncBuilderFromJson() {
   try {
     const draft = JSON.parse(document.querySelector("#rule-draft").value);
     validateDraft(draft);
-    document.querySelector("#fallback-result").value = draft.fallback?.result || "deferred";
-    document.querySelector("#fallback-outputs").value = JSON.stringify(draft.fallback?.outputs || {});
-    builderBranches = (draft.branches || []).map((branch, index) => branchToBuilder(branch, index));
-    if (builderBranches.length === 0) builderBranches = [newBranch(1)];
-    renderBranchEditor();
+    if (draft.graph) {
+      document.querySelector("#builder-mode").value = "graph";
+      graphBuilder = {
+        entry: draft.graph.entry || "input",
+        nodes: (draft.graph.nodes || []).map((node) => ({ ...node }))
+      };
+      renderBuilderMode();
+    } else {
+      document.querySelector("#builder-mode").value = "branches";
+      document.querySelector("#fallback-result").value = draft.fallback?.result || "deferred";
+      document.querySelector("#fallback-outputs").value = JSON.stringify(draft.fallback?.outputs || {});
+      builderBranches = (draft.branches || []).map((branch, index) => branchToBuilder(branch, index));
+      if (builderBranches.length === 0) builderBranches = [newBranch(1)];
+      renderBranchEditor();
+      renderBuilderMode();
+    }
     editorOutput.textContent = "Builder synced";
   } catch (error) {
     editorOutput.textContent = error.message;
@@ -1307,24 +1624,46 @@ function parseJsonField(input, label, raw = input?.value) {
   }
 }
 
-function parseJsonSafe(raw) {
+function parseJsonSafe(raw, fallback = {}) {
   try {
     const parsed = JSON.parse(raw || "{}");
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    if (Array.isArray(fallback)) return Array.isArray(parsed) ? parsed : fallback;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : fallback;
   } catch {
-    return {};
+    return fallback;
   }
 }
 
 function validateDraft(draft) {
   if (!draft || typeof draft !== "object" || Array.isArray(draft)) throw new Error("Draft must be a JSON object");
-  if (draft.graph) return;
+  if (draft.graph) {
+    validateGraphDraft(draft.graph);
+    return;
+  }
   if (!Array.isArray(draft.branches)) throw new Error("Draft must include a branches array");
   if (draft.branches.length === 0) throw new Error("Draft needs at least one branch");
   draft.branches.forEach((branch, index) => {
     if (!branch.id) throw new Error(`Branch ${index + 1} needs an ID`);
     if (!branch.result) throw new Error(`Branch ${branch.id} needs a result`);
     validateConditionGroup(branch.when, `Branch ${branch.id}`, 1);
+  });
+}
+
+function validateGraphDraft(graph) {
+  if (!graph || typeof graph !== "object" || Array.isArray(graph)) throw new Error("Graph must be a JSON object");
+  if (!graph.entry) throw new Error("Graph needs an entry node");
+  if (!Array.isArray(graph.nodes) || graph.nodes.length === 0) throw new Error("Graph needs at least one node");
+  const ids = new Set();
+  graph.nodes.forEach((node) => {
+    if (!node.id) throw new Error("Every graph node needs an ID");
+    if (ids.has(node.id)) throw new Error(`Duplicate graph node ID: ${node.id}`);
+    ids.add(node.id);
+  });
+  if (!ids.has(graph.entry)) throw new Error(`Graph entry node does not exist: ${graph.entry}`);
+  graph.nodes.forEach((node) => {
+    graphNodeEdges(node).forEach((target) => {
+      if (!ids.has(target)) throw new Error(`Graph node ${node.id} routes to missing node: ${target}`);
+    });
   });
 }
 

@@ -157,6 +157,13 @@
             <div class="builder-shell">
               <div class="builder-bar">
                 <label>
+                  Builder mode
+                  <select id="builder-mode">
+                    <option value="branches">Branch rules</option>
+                    <option value="graph">Advanced graph</option>
+                  </select>
+                </label>
+                <label>
                   Fallback result
                   <input id="fallback-result" value="ineligible" />
                 </label>
@@ -168,6 +175,27 @@
               </div>
               <div id="rule-graph" class="rule-graph"></div>
               <div id="branch-editor" class="branch-list"></div>
+              <div id="graph-editor" class="graph-editor" hidden>
+                <div class="graph-toolbar">
+                  <label>
+                    Entry node
+                    <input id="graph-entry" value="input" />
+                  </label>
+                  <label>
+                    New node type
+                    <select id="graph-new-node-type">
+                      <option value="condition">Condition</option>
+                      <option value="score">Score</option>
+                      <option value="lookup">Reference lookup</option>
+                      <option value="frequency_cap">Frequency cap</option>
+                      <option value="output">Output</option>
+                    </select>
+                  </label>
+                  <button type="button" id="add-graph-node">Add Node</button>
+                  <button type="button" id="create-graph-template">Create Template</button>
+                </div>
+                <div id="graph-node-editor" class="graph-node-editor"></div>
+              </div>
             </div>
             <div class="actions left">
               <button type="button" id="sync-json">Sync JSON</button>

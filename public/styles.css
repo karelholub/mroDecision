@@ -465,7 +465,7 @@ textarea {
 
 .builder-bar {
   display: grid;
-  grid-template-columns: minmax(120px, 0.7fr) minmax(160px, 1fr) auto;
+  grid-template-columns: minmax(130px, 0.7fr) minmax(120px, 0.7fr) minmax(160px, 1fr) auto;
   gap: 10px;
   align-items: end;
 }
@@ -531,6 +531,49 @@ button.graph-node:hover {
 
 .fallback-node {
   background: var(--warning-soft);
+}
+
+.graph-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.graph-toolbar {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(150px, 0.8fr) auto auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.graph-node-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.graph-edit-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel-soft);
+}
+
+.graph-edit-head {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.8fr) minmax(150px, 0.8fr) minmax(120px, 0.6fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.graph-edit-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.graph-edge-line {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .branch-card.highlight {
@@ -675,6 +718,9 @@ pre {
   .grid-three,
   .graph-stage,
   .builder-bar,
+  .graph-toolbar,
+  .graph-edit-head,
+  .graph-edit-fields,
   .branch-head,
   .condition-row,
   .output-field-row,

@@ -14,6 +14,7 @@ This initial implementation is dependency-light and runs on Node.js built-ins on
 - In-app message library with reusable default content
 - Safe expression evaluation without `eval`
 - Basic rule-builder style branches and advanced graph nodes
+- First-pass advanced graph editor with route preview and reachability validation
 - Generic reference data table storage for catalogs, matrices, mappings, and suppressions
 - Audit log queries and operational metrics
 - Per-rule usage detail with fallback, branch, and recent decision views

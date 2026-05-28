@@ -236,6 +236,55 @@ function validateGraph(graph) {
     ids.add(node.id);
   }
   if (!ids.has(graph.entry)) validationError(`Graph entry node does not exist: ${graph.entry}`);
+  const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
+  for (const node of graph.nodes) {
+    validateGraphNodeRoutes(node, ids);
+  }
+  const visited = new Set();
+  const visiting = new Set();
+  const reachesTerminal = visitGraphNode(graph.entry, nodes, visited, visiting, new Map());
+  if (!reachesTerminal) validationError("Graph must have a reachable output, fallback, or error node");
+  const unreachable = graph.nodes.filter((node) => !visited.has(node.id));
+  if (unreachable.length) validationError(`Graph has unreachable nodes: ${unreachable.map((node) => node.id).join(", ")}`);
+}
+
+function validateGraphNodeRoutes(node, ids) {
+  const type = node.type || "input";
+  const terminal = new Set(["output", "fallback", "error"]);
+  if (terminal.has(type)) return;
+  if (type === "condition") {
+    requiredString(node, "true", `Graph condition ${node.id} needs a true route`);
+    requiredString(node, "false", `Graph condition ${node.id} needs a false route`);
+  } else if (type === "frequency_cap") {
+    requiredString(node, "next", `Graph frequency cap ${node.id} needs a next route`);
+  } else {
+    requiredString(node, "next", `Graph node ${node.id} needs a next route`);
+  }
+  for (const target of graphNodeTargets(node)) {
+    if (!ids.has(target)) validationError(`Graph node ${node.id} routes to missing node: ${target}`);
+  }
+}
+
+function visitGraphNode(id, nodes, visited, visiting, memo) {
+  if (visiting.has(id)) validationError(`Circular graph path detected at ${id}`);
+  if (memo.has(id)) return memo.get(id);
+  const node = nodes.get(id);
+  if (!node) return false;
+  visiting.add(id);
+  visited.add(id);
+  const terminal = ["output", "fallback", "error"].includes(node.type);
+  const targets = graphNodeTargets(node);
+  const childResults = targets.map((target) => visitGraphNode(target, nodes, visited, visiting, memo));
+  const reachesTerminal = terminal || childResults.some(Boolean);
+  visiting.delete(id);
+  memo.set(id, reachesTerminal);
+  return reachesTerminal;
+}
+
+function graphNodeTargets(node) {
+  return ["next", "true", "false", "capped", "fallback"]
+    .map((key) => node[key])
+    .filter((value) => typeof value === "string" && value.trim() !== "");
 }
 
 function requiredString(object, key, message = `${key} is required`) {

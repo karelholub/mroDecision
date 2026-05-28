@@ -70,6 +70,49 @@ test("blocks undeclared input references when an input schema is provided", () =
   );
 });
 
+test("validates graph routes and reachability", () => {
+  assert.doesNotThrow(() =>
+    validateRuleDefinition({
+      graph: {
+        entry: "input",
+        nodes: [
+          { id: "input", type: "input", next: "condition" },
+          { id: "condition", type: "condition", expression: "attribute(\"lead_score\") >= 50", true: "eligible", false: "fallback" },
+          { id: "eligible", type: "output", result: "eligible" },
+          { id: "fallback", type: "output", result: "deferred" }
+        ]
+      }
+    })
+  );
+  assert.throws(
+    () =>
+      validateRuleDefinition({
+        graph: {
+          entry: "input",
+          nodes: [
+            { id: "input", type: "input", next: "missing" },
+            { id: "fallback", type: "output", result: "deferred" }
+          ]
+        }
+      }),
+    /missing node/
+  );
+  assert.throws(
+    () =>
+      validateRuleDefinition({
+        graph: {
+          entry: "input",
+          nodes: [
+            { id: "input", type: "input", next: "fallback" },
+            { id: "fallback", type: "output", result: "deferred" },
+            { id: "unused", type: "output", result: "eligible" }
+          ]
+        }
+      }),
+    /unreachable/
+  );
+});
+
 test("validates import bundles", () => {
   assert.doesNotThrow(() =>
     validateBundle({

@@ -97,6 +97,8 @@ Expression functions:
 
 The expression parser is a small safe parser. It does not use JavaScript `eval`.
 
+The UI includes a first-pass advanced graph editor for these nodes. Switch the Draft Editor to `Advanced graph`, create a template or add nodes, then wire routes with `next`, `true`, `false`, and `capped`. The service validates that every route points to an existing node, the entry node exists, reachable paths terminate in an output/fallback/error node, and no nodes are unreachable.
+
 ### Frequency Cap Nodes
 
 Graph rules can use `frequency_cap` nodes to suppress a path when the profile has already received enough client events in a time window. The first implementation counts stored `impression` events.
