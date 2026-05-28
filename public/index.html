@@ -395,37 +395,60 @@
             <button id="run-eval">Run</button>
           </div>
         </header>
-        <div class="filter-bar">
-          <label>
-            Rule set
-            <select id="eval-rule-key"></select>
-          </label>
-          <label>
-            Preset
-            <select id="eval-preset">
-              <option value="nbo_green">NBO green energy</option>
-              <option value="nbo_credit">NBO credit suppression</option>
-              <option value="nbo_retention">NBO retention</option>
-              <option value="nbo_premium">NBO premium upsell</option>
-              <option value="nbo_fallback">NBO fallback</option>
-              <option value="loan">Loan eligibility</option>
-            </select>
-          </label>
-          <label>
-            Version
-            <select id="eval-mode">
-              <option value="published">Published</option>
-              <option value="draft">Current draft</option>
-            </select>
-          </label>
-          <label>
-            Profile key
-            <input id="eval-profile-key" value="demo-profile" />
-          </label>
+        <div class="evaluate-workbench">
+          <div class="evaluate-controls editor">
+            <div class="editor-title">Request Setup</div>
+            <div class="audit-filter-grid">
+              <label>
+                Rule set
+                <select id="eval-rule-key"></select>
+              </label>
+              <label>
+                Preset
+                <select id="eval-preset">
+                  <option value="nbo_green">NBO green energy</option>
+                  <option value="nbo_credit">NBO credit suppression</option>
+                  <option value="nbo_retention">NBO retention</option>
+                  <option value="nbo_premium">NBO premium upsell</option>
+                  <option value="nbo_fallback">NBO fallback</option>
+                  <option value="loan">Loan eligibility</option>
+                </select>
+              </label>
+              <label>
+                Version
+                <select id="eval-mode">
+                  <option value="published">Published</option>
+                  <option value="draft">Current draft</option>
+                </select>
+              </label>
+              <label>
+                Profile key
+                <input id="eval-profile-key" value="demo-profile" />
+              </label>
+            </div>
+            <div class="actions left">
+              <button type="button" id="load-preset-secondary">Load Preset</button>
+              <button type="button" id="run-eval-secondary">Run</button>
+            </div>
+            <div class="inspector-section">
+              <h3>What This Runs</h3>
+              <div class="inspector-lines">
+                <div><span>Endpoint</span><strong id="eval-endpoint-label">/v1/evaluate</strong></div>
+                <div><span>Audit write</span><strong id="eval-audit-label">Yes, published mode</strong></div>
+              </div>
+            </div>
+          </div>
+          <div class="evaluate-request editor">
+            <div class="editor-title">Profile Payload</div>
+            <textarea id="eval-input" spellcheck="false"></textarea>
+          </div>
+          <div class="evaluate-response editor">
+            <div class="editor-title">Response</div>
+            <div id="eval-summary" class="status-panel compact-status-panel"></div>
+            <div id="eval-trace" class="eval-trace"></div>
+            <pre id="eval-output"></pre>
+          </div>
         </div>
-        <textarea id="eval-input" spellcheck="false"></textarea>
-        <div id="eval-trace" class="eval-trace"></div>
-        <pre id="eval-output"></pre>
       </section>
 
       <section id="audit" class="view">

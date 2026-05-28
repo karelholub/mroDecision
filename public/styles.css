@@ -839,6 +839,73 @@ header {
   overflow: auto;
 }
 
+.evaluate-workbench {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.68fr) minmax(340px, 1.15fr) minmax(320px, 1fr);
+  gap: 16px;
+  height: calc(100vh - 184px);
+  min-height: 620px;
+  min-width: 0;
+}
+
+.evaluate-controls,
+.evaluate-request,
+.evaluate-response {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.evaluate-controls {
+  align-content: start;
+  display: grid;
+  gap: 14px;
+  overflow: auto;
+}
+
+.evaluate-request,
+.evaluate-response {
+  display: grid;
+  gap: 12px;
+}
+
+.evaluate-request {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.evaluate-response {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
+.evaluate-response .compact-status-panel {
+  grid-template-columns: 1fr;
+}
+
+.evaluate-request textarea,
+.evaluate-response pre {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  resize: none;
+}
+
+.evaluate-response pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.evaluate-response .eval-trace {
+  min-height: 0;
+  overflow: auto;
+}
+
+.eval-trace:empty {
+  display: none;
+}
+
 .row {
   min-height: 44px;
   display: grid;
@@ -1295,6 +1362,11 @@ pre {
     min-height: 0;
   }
 
+  .evaluate-workbench {
+    height: auto;
+    min-height: 0;
+  }
+
   .metric-grid,
   .overview-grid {
     grid-template-columns: 1fr 1fr;
@@ -1311,6 +1383,7 @@ pre {
     .rule-workbench,
     .rule-editor-main,
     .audit-workbench,
+    .evaluate-workbench,
     .filter-bar,
     .metric-grid,
     .overview-grid,
@@ -1343,7 +1416,10 @@ pre {
   .rule-bottom-drawer,
   .audit-filter-pane,
   .audit-results-pane,
-  .audit-detail-pane {
+  .audit-detail-pane,
+  .evaluate-controls,
+  .evaluate-request,
+  .evaluate-response {
     overflow: visible;
   }
 

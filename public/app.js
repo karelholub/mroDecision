@@ -2,6 +2,9 @@ const tokenInput = document.querySelector("#token");
 const evalInput = document.querySelector("#eval-input");
 const evalOutput = document.querySelector("#eval-output");
 const evalTrace = document.querySelector("#eval-trace");
+const evalSummary = document.querySelector("#eval-summary");
+const evalEndpointLabel = document.querySelector("#eval-endpoint-label");
+const evalAuditLabel = document.querySelector("#eval-audit-label");
 const editorOutput = document.querySelector("#rule-editor-output");
 const branchEditor = document.querySelector("#branch-editor");
 const ruleGraph = document.querySelector("#rule-graph");
@@ -92,7 +95,10 @@ document.querySelector("#import-schema").addEventListener("click", importSchema)
 document.querySelector("#refresh-schema").addEventListener("click", loadSchema);
 document.querySelector("#sync-schema").addEventListener("click", syncSchemaFromMeiro);
 document.querySelector("#run-eval").addEventListener("click", runEvaluate);
+document.querySelector("#run-eval-secondary").addEventListener("click", runEvaluate);
 document.querySelector("#load-preset").addEventListener("click", loadEvaluatePreset);
+document.querySelector("#load-preset-secondary").addEventListener("click", loadEvaluatePreset);
+document.querySelector("#eval-mode").addEventListener("change", renderEvaluateModeLabels);
 document.querySelector("#eval-rule-key").addEventListener("change", () => {
   const body = readEvaluateInput();
   body.decision_key = document.querySelector("#eval-rule-key").value;
@@ -155,6 +161,7 @@ loadMessages();
 loadSettings();
 loadSchema({ silent: true });
 loadEvaluatePreset();
+renderEvaluationSummary(null, document.querySelector("#eval-mode").value);
 loadIntegration();
 loadRuntimeStatus();
 
@@ -929,11 +936,13 @@ async function runEvaluate() {
       method: "POST",
       body: JSON.stringify(request)
     });
+    renderEvaluationSummary(body, mode);
     renderEvaluationTrace(body);
     evalOutput.textContent = formatDecisionOutput(body);
     loadAudit();
     loadMetrics();
   } catch (error) {
+    renderEvaluationSummary(null, document.querySelector("#eval-mode").value, error);
     evalTrace.innerHTML = "";
     evalOutput.textContent = error.message;
   }
@@ -2336,6 +2345,7 @@ function loadEvaluatePreset() {
   document.querySelector("#eval-rule-key").value = request.decision_key;
   document.querySelector("#eval-profile-key").value = request.profile_key;
   evalInput.value = JSON.stringify(request, null, 2);
+  renderEvaluateModeLabels();
 }
 
 function readEvaluateInput() {
@@ -2360,6 +2370,40 @@ function formatDecisionOutput(body) {
     },
     response: body
   }, null, 2);
+}
+
+function renderEvaluateModeLabels() {
+  const mode = document.querySelector("#eval-mode").value;
+  evalEndpointLabel.textContent = mode === "draft" ? "/v1/rule-sets/:key/test" : "/v1/evaluate";
+  evalAuditLabel.textContent = mode === "draft" ? "No, draft test" : "Yes, published mode";
+}
+
+function renderEvaluationSummary(body, mode, error) {
+  if (!evalSummary) return;
+  if (error) {
+    evalSummary.innerHTML = [
+      statusItem("Status", "Error"),
+      statusItem("Mode", mode === "draft" ? "Draft" : "Published"),
+      statusItem("Result", "-"),
+      statusItem("Matched", "-")
+    ].join("");
+    return;
+  }
+  if (!body) {
+    evalSummary.innerHTML = [
+      statusItem("Status", "Ready"),
+      statusItem("Mode", mode === "draft" ? "Draft" : "Published"),
+      statusItem("Result", "-"),
+      statusItem("Matched", "-")
+    ].join("");
+    return;
+  }
+  evalSummary.innerHTML = [
+    statusItem("Status", body.errors?.length ? "Warning" : "OK"),
+    statusItem("Mode", mode === "draft" ? "Draft" : "Published"),
+    statusItem("Result", body.result || "-"),
+    statusItem("Matched", body.matched_rules?.join(", ") || "fallback")
+  ].join("");
 }
 
 function renderEvaluationTrace(body) {
