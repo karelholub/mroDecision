@@ -320,7 +320,7 @@ async function loadClientEventMetrics() {
 
 function renderClientEventMetrics(metrics) {
   clientEventsPanel.innerHTML = `
-    <div class="overview-grid">
+    <div class="client-event-grid">
       ${clientEventGroup("Rules", metrics.by_rule)}
       ${clientEventGroup("Variants", metrics.by_variant)}
       ${clientEventGroup("Messages", metrics.by_message)}
@@ -328,25 +328,24 @@ function renderClientEventMetrics(metrics) {
     </div>
     <div>
       <div class="editor-title">Recent Events</div>
-      <div class="table compact-table">${header(["Time", "Type", "Rule", "Profile", "Variant"])}${clientEventRows(metrics.recent_events)}</div>
+      <div class="client-event-list recent-client-events">${clientEventRows(metrics.recent_events)}</div>
     </div>
   `;
 }
 
 function clientEventGroup(title, items = []) {
   return `
-    <div>
+    <div class="client-event-section">
       <div class="editor-title">${escapeHtml(title)}</div>
-      <div class="table compact-table">${header(["Key", "Type", "Count", "Profiles", "Last seen"])}${
+      <div class="client-event-list">${
         items.length
-          ? items.map((item) => row([
-              item.key,
-              item.event_type,
-              formatNumber(item.count),
-              formatNumber(item.unique_profiles),
-              item.last_seen_at ? formatTime(item.last_seen_at) : "-"
+          ? items.map((item) => clientEventCard(item.key, [
+              ["Type", item.event_type],
+              ["Count", formatNumber(item.count)],
+              ["Profiles", formatNumber(item.unique_profiles)],
+              ["Last seen", item.last_seen_at ? formatTime(item.last_seen_at) : "-"]
             ])).join("")
-          : row(["No data", "", "", "", ""])
+          : `<div class="status-line">No data yet</div>`
       }</div>
     </div>
   `;
@@ -354,14 +353,24 @@ function clientEventGroup(title, items = []) {
 
 function clientEventRows(items = []) {
   return items.length
-    ? items.map((item) => row([
-        item.occurred_at ? formatTime(item.occurred_at) : "-",
-        item.event_type,
-        item.decision_key,
-        item.profile_key,
-        item.variant_key || item.message_id || "-"
+    ? items.map((item) => clientEventCard(item.occurred_at ? formatTime(item.occurred_at) : "-", [
+        ["Type", item.event_type],
+        ["Rule", item.decision_key],
+        ["Profile", item.profile_key],
+        ["Variant", item.variant_key || item.message_id || "-"]
       ])).join("")
-    : row(["No events yet", "", "", "", ""]);
+    : `<div class="status-line">No events yet</div>`;
+}
+
+function clientEventCard(title, fields) {
+  return `
+    <div class="client-event-card">
+      <strong>${escapeHtml(title || "(empty)")}</strong>
+      <div>
+        ${fields.map(([label, value]) => `<span>${escapeHtml(label)}</span><em>${escapeHtml(value || "-")}</em>`).join("")}
+      </div>
+    </div>
+  `;
 }
 
 function clientEventStatusItems(items) {
