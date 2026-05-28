@@ -469,6 +469,7 @@
               <label>
                 Preset
                 <select id="eval-preset">
+                  <option value="rule_default">Selected rule default</option>
                   <option value="nbo_green">NBO green energy</option>
                   <option value="nbo_credit">NBO credit suppression</option>
                   <option value="nbo_retention">NBO retention</option>
@@ -491,6 +492,7 @@
             </div>
             <div class="actions left">
               <button type="button" id="load-preset-secondary">Load Preset</button>
+              <button type="button" id="open-eval-payload">Edit Profile Payload</button>
               <button type="button" id="run-eval-secondary">Run</button>
             </div>
             <div class="inspector-section">
@@ -501,16 +503,24 @@
               </div>
             </div>
           </div>
-          <div class="evaluate-request editor">
-            <div class="editor-title">Profile Payload</div>
-            <textarea id="eval-input" spellcheck="false"></textarea>
-          </div>
           <div class="evaluate-response editor">
             <div class="editor-title">Response</div>
             <div id="eval-summary" class="status-panel compact-status-panel"></div>
             <div id="eval-output-summary" class="eval-output-summary"></div>
             <div id="eval-trace" class="eval-trace"></div>
             <pre id="eval-output"></pre>
+          </div>
+        </div>
+        <div id="eval-payload-modal" class="eval-payload-modal" hidden>
+          <div class="eval-payload-dialog">
+            <div class="eval-payload-header">
+              <div>
+                <strong>Profile Payload</strong>
+                <span>Edit the JSON request body used for this evaluation.</span>
+              </div>
+              <button type="button" id="close-eval-payload">Close</button>
+            </div>
+            <textarea id="eval-input" spellcheck="false"></textarea>
           </div>
         </div>
       </section>

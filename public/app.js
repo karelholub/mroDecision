@@ -6,6 +6,7 @@ const evalSummary = document.querySelector("#eval-summary");
 const evalOutputSummary = document.querySelector("#eval-output-summary");
 const evalEndpointLabel = document.querySelector("#eval-endpoint-label");
 const evalAuditLabel = document.querySelector("#eval-audit-label");
+const evalPayloadModal = document.querySelector("#eval-payload-modal");
 const editorOutput = document.querySelector("#rule-editor-output");
 const branchEditor = document.querySelector("#branch-editor");
 const ruleGraph = document.querySelector("#rule-graph");
@@ -136,6 +137,8 @@ document.querySelector("#run-eval").addEventListener("click", runEvaluate);
 document.querySelector("#run-eval-secondary").addEventListener("click", runEvaluate);
 document.querySelector("#load-preset").addEventListener("click", loadEvaluatePreset);
 document.querySelector("#load-preset-secondary").addEventListener("click", loadEvaluatePreset);
+document.querySelector("#open-eval-payload").addEventListener("click", openEvalPayload);
+document.querySelector("#close-eval-payload").addEventListener("click", closeEvalPayload);
 document.querySelector("#eval-mode").addEventListener("change", renderEvaluateModeLabels);
 document.querySelector("#eval-rule-key").addEventListener("change", loadEvaluatePresetForSelectedRule);
 document.querySelector("#eval-profile-key").addEventListener("input", () => {
@@ -236,6 +239,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && lookupDetailModal && !lookupDetailModal.hidden) closeLookupDetail();
   if (event.key === "Escape" && messageDetailModal && !messageDetailModal.hidden) closeMessageDetail();
   if (event.key === "Escape" && overviewRuleDetailModal && !overviewRuleDetailModal.hidden) closeOverviewRuleDetail();
+  if (event.key === "Escape" && evalPayloadModal && !evalPayloadModal.hidden) closeEvalPayload();
 });
 
 loadMetrics();
@@ -2866,7 +2870,7 @@ function renderEvaluateRuleOptions() {
 
 function loadEvaluatePreset() {
   const preset = document.querySelector("#eval-preset")?.value || "nbo_green";
-  const request = evaluatePreset(preset);
+  const request = preset === "rule_default" ? evaluatePresetForRule(selectedEvaluateRule()) : evaluatePreset(preset);
   document.querySelector("#eval-rule-key").value = request.decision_key;
   document.querySelector("#eval-profile-key").value = request.profile_key;
   evalInput.value = JSON.stringify(request, null, 2);
@@ -2877,14 +2881,36 @@ function loadEvaluatePresetForSelectedRule() {
   const previous = readEvaluateInputSafe();
   const rule = selectedEvaluateRule();
   const request = evaluatePresetForRule(rule);
-  request.profile_key = document.querySelector("#eval-profile-key").value.trim() || previous.profile_key || request.profile_key;
+  const currentProfileKey = document.querySelector("#eval-profile-key").value.trim() || previous.profile_key || "";
+  if (currentProfileKey && !currentProfileKey.startsWith("preset-")) request.profile_key = currentProfileKey;
   document.querySelector("#eval-profile-key").value = request.profile_key;
+  syncEvaluatePresetSelect(rule);
   evalInput.value = JSON.stringify(request, null, 2);
   renderEvaluateModeLabels();
   renderEvaluationSummary(null, document.querySelector("#eval-mode").value);
   renderEvaluationOutputSummary(null);
   evalTrace.innerHTML = "";
   evalOutput.textContent = "";
+}
+
+function syncEvaluatePresetSelect(rule = {}) {
+  const presetSelect = document.querySelector("#eval-preset");
+  if (!presetSelect) return;
+  if (rule.decision_key === "next_best_offer") {
+    if (!presetSelect.value.startsWith("nbo_")) presetSelect.value = "nbo_green";
+    return;
+  }
+  presetSelect.value = rule.decision_key === "loan_eligibility" ? "loan" : "rule_default";
+}
+
+function openEvalPayload() {
+  if (!evalPayloadModal) return;
+  evalPayloadModal.hidden = false;
+}
+
+function closeEvalPayload() {
+  if (!evalPayloadModal) return;
+  evalPayloadModal.hidden = true;
 }
 
 function readEvaluateInput() {
@@ -3126,18 +3152,43 @@ function selectedEvaluateRule() {
 function evaluatePresetForRule(rule = {}) {
   const key = rule.decision_key || "next_best_offer";
   if (key === "loan_eligibility") return evaluatePreset("loan");
-  if (key === "next_best_offer") return evaluatePreset(document.querySelector("#eval-preset")?.value || "nbo_green");
+  if (key === "next_best_offer") {
+    const selectedPreset = document.querySelector("#eval-preset")?.value || "nbo_green";
+    return evaluatePreset(selectedPreset.startsWith("nbo_") ? selectedPreset : "nbo_green");
+  }
   if (rule.type === "inapp_message") return inAppEvaluatePreset(rule);
   if (rule.type === "experiment") return experimentEvaluatePreset(rule);
-  const request = evaluatePreset("nbo_green");
-  request.decision_key = key;
-  request.profile_key = `preset-${key || "rule"}`;
-  request.context = {
-    channel: rule.surface ? "web" : "email",
-    request_source: "dee_ui",
-    ...(rule.surface ? { surface: rule.surface } : {})
+  return genericEvaluatePreset(rule);
+}
+
+function genericEvaluatePreset(rule) {
+  const key = rule.decision_key || "selected_rule";
+  return {
+    decision_key: key,
+    profile_key: `preset-${key}`,
+    identifiers: [{ typeId: "email", value: "user@example.com" }],
+    attributes: sampleAttributesFromSchema(rule.input_schema),
+    segments: {},
+    context: {
+      channel: rule.surface ? "web" : "email",
+      request_source: "dee_ui",
+      ...(rule.surface ? { surface: rule.surface } : {})
+    }
   };
-  return request;
+}
+
+function sampleAttributesFromSchema(schema = {}) {
+  const properties = schema.properties || schema.attributes || {};
+  return Object.fromEntries(Object.keys(properties).map((key) => [key, [{ value: sampleValueForSchema(properties[key]) }]]));
+}
+
+function sampleValueForSchema(schema = {}) {
+  if (Array.isArray(schema.enum) && schema.enum.length) return schema.enum[0];
+  if (schema.type === "number" || schema.type === "integer") return 1;
+  if (schema.type === "boolean") return true;
+  if (schema.type === "array") return [];
+  if (schema.type === "object") return {};
+  return "sample";
 }
 
 function inAppEvaluatePreset(rule) {
@@ -3145,13 +3196,7 @@ function inAppEvaluatePreset(rule) {
     decision_key: rule.decision_key,
     profile_key: `preset-${rule.decision_key}`,
     identifiers: [{ typeId: "email", value: "user@example.com" }],
-    attributes: {
-      lead_score: [{ value: 82 }],
-      web_engagement_score: [{ value: 74 }],
-      interacted_promotions: [{ value: [] }],
-      churn_risk_score: [{ value: 0.2 }],
-      sustainability_score: [{ value: 70 }]
-    },
+    attributes: sampleAttributesFromSchema(rule.input_schema),
     segments: {},
     context: {
       channel: "web",
