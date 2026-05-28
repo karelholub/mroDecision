@@ -158,8 +158,9 @@ aside input {
 
 .settings-layout {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: minmax(210px, 0.32fr) minmax(0, 1fr);
   gap: 16px;
+  align-items: start;
   min-height: calc(100vh - 160px);
 }
 
@@ -177,10 +178,23 @@ aside input {
 }
 
 .settings-tab {
+  display: grid;
+  gap: 2px;
   justify-content: flex-start;
+  min-height: 58px;
   border-color: transparent;
   background: transparent;
   text-align: left;
+}
+
+.settings-tab span {
+  font-weight: 700;
+}
+
+.settings-tab small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
 }
 
 .settings-tab.active,
@@ -190,13 +204,67 @@ aside input {
   color: var(--accent);
 }
 
+.settings-tab.active small,
+.settings-tab:hover small {
+  color: #256f68;
+}
+
 .settings-panel {
+  min-width: 0;
+  max-height: calc(100vh - 150px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.settings-summary-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 16px;
   background: var(--panel);
   box-shadow: var(--shadow);
+}
+
+.settings-health-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.settings-health-item {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.settings-health-item strong {
+  overflow-wrap: anywhere;
+}
+
+.settings-health-item span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.settings-health-item.ok {
+  border-color: #a7d7cd;
+  background: #f0faf7;
+}
+
+.settings-health-item.warn {
+  border-color: #f0cf75;
+  background: var(--warning-soft);
 }
 
 .settings-tab-panel {
@@ -207,10 +275,107 @@ aside input {
   display: block;
 }
 
+.settings-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.settings-section-head p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings-card-grid,
+.schema-workspace,
+.integration-workspace,
+.token-workspace {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-card-grid .wide,
+.integration-workspace .wide {
+  grid-column: 1 / -1;
+}
+
+.settings-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--panel-soft);
+}
+
+.settings-card label {
+  min-width: 0;
+}
+
+.schema-workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.integration-workspace,
+.token-workspace {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
+  align-items: start;
+}
+
+.integration-workspace .settings-card:last-child,
+.token-workspace .settings-card:last-child {
+  grid-column: 2;
+}
+
+.token-workspace form {
+  grid-row: span 2;
+}
+
+.token-list {
+  max-height: 360px;
+  overflow: auto;
+}
+
+.token-list .row {
+  grid-template-columns: minmax(130px, 1fr) minmax(110px, 0.65fr) minmax(110px, 0.65fr) minmax(120px, 0.7fr) minmax(80px, 0.45fr);
+}
+
 .settings-panel textarea,
 .settings-panel pre {
   max-height: 420px;
   overflow: auto;
+}
+
+.settings-panel textarea {
+  min-height: 220px;
+  resize: vertical;
+}
+
+.settings-panel pre {
+  min-height: 240px;
+}
+
+@media (min-width: 1500px) {
+  .settings-layout {
+    grid-template-columns: minmax(210px, 0.72fr) minmax(0, 2.1fr) minmax(230px, 0.8fr);
+  }
+
+  .settings-summary-panel {
+    position: sticky;
+    top: 92px;
+    grid-column: auto;
+  }
+
+  .settings-health-summary {
+    grid-template-columns: 1fr;
+  }
 }
 
 input.invalid,
@@ -1858,6 +2023,9 @@ pre {
     .overview-workbench,
   .lookup-guide,
   .settings-layout,
+  .settings-card-grid,
+  .integration-workspace,
+  .token-workspace,
   .guide-grid,
   .status-panel,
   .detail-summary,
@@ -1906,6 +2074,22 @@ pre {
 
   .settings-tabs {
     position: static;
+  }
+
+  .settings-panel,
+  .settings-summary-panel {
+    max-height: none;
+    overflow: visible;
+    position: static;
+  }
+
+  .integration-workspace .settings-card:last-child,
+  .token-workspace .settings-card:last-child {
+    grid-column: auto;
+  }
+
+  .token-workspace form {
+    grid-row: auto;
   }
 
   .branch-logic {

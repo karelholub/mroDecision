@@ -731,158 +731,251 @@
         </header>
         <div class="settings-layout">
           <div class="settings-tabs" role="tablist" aria-label="Settings sections">
-            <button type="button" class="settings-tab active" data-settings-tab="environment">Environment</button>
-            <button type="button" class="settings-tab" data-settings-tab="meiro">Meiro</button>
-            <button type="button" class="settings-tab" data-settings-tab="schema">Schema Sync</button>
-            <button type="button" class="settings-tab" data-settings-tab="integration">Integration</button>
-            <button type="button" class="settings-tab" data-settings-tab="tokens">API Tokens</button>
-            <button type="button" class="settings-tab" data-settings-tab="runtime">Runtime</button>
+            <button type="button" class="settings-tab active" data-settings-tab="environment">
+              <span>Environment</span>
+              <small>Runtime label, retention, active token</small>
+            </button>
+            <button type="button" class="settings-tab" data-settings-tab="meiro">
+              <span>Meiro</span>
+              <small>Collector and Profile API access</small>
+            </button>
+            <button type="button" class="settings-tab" data-settings-tab="schema">
+              <span>Schema Sync</span>
+              <small>Profile fields for builders</small>
+            </button>
+            <button type="button" class="settings-tab" data-settings-tab="integration">
+              <span>Integration</span>
+              <small>Pipes request and response template</small>
+            </button>
+            <button type="button" class="settings-tab" data-settings-tab="tokens">
+              <span>API Tokens</span>
+              <small>Scoped service credentials</small>
+            </button>
+            <button type="button" class="settings-tab" data-settings-tab="runtime">
+              <span>Runtime</span>
+              <small>Raw diagnostics</small>
+            </button>
           </div>
           <div class="settings-panel">
             <form id="settings-form">
             <section class="settings-tab-panel active" data-settings-panel="environment">
-              <div class="editor-title">Environment</div>
-            <label class="auth-token-field">
-              Active API token
-              <input id="token" type="password" value="dev-admin-token" />
-            </label>
-              <div class="grid-two">
-                <label>
-                  Environment label
-                  <input id="setting-environment-label" />
+              <div class="settings-section-head">
+                <div>
+                  <div class="editor-title">Environment</div>
+                  <p>Operational identity, retention windows, and the token used by this console.</p>
+                </div>
+              </div>
+              <div class="settings-card-grid">
+                <label class="auth-token-field">
+                  Active API token
+                  <input id="token" type="password" value="dev-admin-token" />
                 </label>
-                <label>
-                  Audit retention days
-                  <input id="setting-audit-retention-days" type="number" min="1" />
-                </label>
-                <label>
-                  Client event retention days
-                  <input id="setting-client-event-retention-days" type="number" min="1" />
-                </label>
-                <label>
-                  Bootstrap tokens
-                  <select id="setting-bootstrap-tokens-enabled">
-                    <option value="true">Enabled</option>
-                    <option value="false">Disabled after DB admin token exists</option>
-                  </select>
-                </label>
+                <div class="settings-card">
+                  <div class="editor-title compact-title">Retention</div>
+                  <div class="grid-two">
+                    <label>
+                      Audit retention days
+                      <input id="setting-audit-retention-days" type="number" min="1" />
+                    </label>
+                    <label>
+                      Client event retention days
+                      <input id="setting-client-event-retention-days" type="number" min="1" />
+                    </label>
+                  </div>
+                </div>
+                <div class="settings-card wide">
+                  <div class="grid-two">
+                    <label>
+                      Environment label
+                      <input id="setting-environment-label" />
+                    </label>
+                    <label>
+                      Bootstrap tokens
+                      <select id="setting-bootstrap-tokens-enabled">
+                        <option value="true">Enabled</option>
+                        <option value="false">Disabled after DB admin token exists</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
               </div>
               <div class="actions left">
                 <button type="submit">Save Settings</button>
               </div>
             </section>
             <section class="settings-tab-panel" data-settings-panel="meiro">
-              <div class="editor-title">Meiro Endpoints</div>
-              <div class="grid-two">
-                <label>
-                  Meiro URL
-                  <input id="setting-meiro-url" placeholder="https://..." />
-                </label>
-                <label>
-                  Meiro source slug
-                  <input id="setting-meiro-source-slug" />
-                </label>
+              <div class="settings-section-head">
+                <div>
+                  <div class="editor-title">Meiro Endpoints</div>
+                  <p>Connect the engine to Meiro collection and profile schema services.</p>
+                </div>
               </div>
-              <div class="grid-two">
-                <label>
-                  Meiro API URL
-                  <input id="setting-meiro-api-url" placeholder="https://..." />
-                </label>
-                <label>
-                  Meiro API token
-                  <input id="setting-meiro-api-token" type="password" />
-                </label>
+              <div class="settings-card-grid">
+                <div class="settings-card wide">
+                  <div class="grid-two">
+                    <label>
+                      Meiro URL
+                      <input id="setting-meiro-url" placeholder="https://..." />
+                    </label>
+                    <label>
+                      Meiro source slug
+                      <input id="setting-meiro-source-slug" />
+                    </label>
+                  </div>
+                </div>
+                <div class="settings-card wide">
+                  <div class="grid-two">
+                    <label>
+                      Meiro API URL
+                      <input id="setting-meiro-api-url" placeholder="https://..." />
+                    </label>
+                    <label>
+                      Meiro API token
+                      <input id="setting-meiro-api-token" type="password" />
+                    </label>
+                  </div>
+                </div>
               </div>
               <div class="actions left">
                 <button type="submit">Save Settings</button>
               </div>
             </section>
             <section class="settings-tab-panel" data-settings-panel="schema">
-              <div class="editor-title">Schema Sync</div>
-              <div class="grid-three">
-                <label>
-                  Schema sync minutes
-                  <input id="setting-schema-sync-interval" type="number" min="1" />
-                </label>
-                <label>
-                  Identifier type
-                  <input id="schema-sync-identifier-type" placeholder="email" />
-                </label>
-                <label>
-                  Identifier value
-                  <input id="schema-sync-identifier-value" placeholder="user@example.com" />
-                </label>
+              <div class="settings-section-head">
+                <div>
+                  <div class="editor-title">Schema Sync</div>
+                  <p>Keep rule and lookup builders aligned with the profile fields available in Meiro.</p>
+                </div>
               </div>
-              <div class="actions left">
-                <button type="submit">Save Settings</button>
-                <button type="button" id="sync-schema">Sync From Meiro</button>
+              <div class="schema-workspace">
+                <div class="settings-card">
+                  <div class="grid-three">
+                    <label>
+                      Schema sync minutes
+                      <input id="setting-schema-sync-interval" type="number" min="1" />
+                    </label>
+                    <label>
+                      Identifier type
+                      <input id="schema-sync-identifier-type" placeholder="email" />
+                    </label>
+                    <label>
+                      Identifier value
+                      <input id="schema-sync-identifier-value" placeholder="user@example.com" />
+                    </label>
+                  </div>
+                  <div class="actions left">
+                    <button type="submit">Save Settings</button>
+                    <button type="button" id="sync-schema">Sync From Meiro</button>
+                  </div>
+                  <div id="schema-sync-status" class="status-line"></div>
+                </div>
+                <div class="settings-card">
+                  <div class="editor-title compact-title">Manual Import</div>
+                  <textarea id="schema-import" spellcheck="false" placeholder='{"attributes":[{"name":"lead_score","type":"number"}],"segments":[{"name":"vip_customers","type":"boolean"}],"context":[{"name":"channel","type":"string"}]}'></textarea>
+                  <div class="actions left">
+                    <button type="button" id="import-schema">Import Schema</button>
+                    <button type="button" id="refresh-schema">Refresh Schema</button>
+                  </div>
+                </div>
+                <div class="settings-card">
+                  <div class="editor-title compact-title">Schema Output</div>
+                  <pre id="schema-output"></pre>
+                </div>
               </div>
-              <div id="schema-sync-status" class="status-line"></div>
-              <textarea id="schema-import" spellcheck="false" placeholder='{"attributes":[{"name":"lead_score","type":"number"}],"segments":[{"name":"vip_customers","type":"boolean"}],"context":[{"name":"channel","type":"string"}]}'></textarea>
-              <div class="actions left">
-                <button type="button" id="import-schema">Import Schema</button>
-                <button type="button" id="refresh-schema">Refresh Schema</button>
-              </div>
-              <pre id="schema-output"></pre>
             </section>
             </form>
             <section class="settings-tab-panel" data-settings-panel="integration">
-              <div class="editor-title">Integration Templates</div>
+              <div class="settings-section-head">
+                <div>
+                  <div class="editor-title">Integration Templates</div>
+                  <p>Copy-ready request details for Meiro Pipes and the response shape expected by the collector.</p>
+                </div>
+              </div>
               <div class="actions left">
                 <button type="button" id="refresh-integration">Refresh Template</button>
               </div>
-              <div class="grid-two">
-                <label>
-                  DEE endpoint
-                  <input id="integration-endpoint" readonly />
+              <div class="integration-workspace">
+                <div class="settings-card wide">
+                  <div class="grid-two">
+                    <label>
+                      DEE endpoint
+                      <input id="integration-endpoint" readonly />
+                    </label>
+                    <label>
+                      Meiro collector endpoint
+                      <input id="integration-meiro-url" readonly />
+                    </label>
+                  </div>
+                </div>
+                <label class="settings-card">
+                  HTTP template
+                  <textarea id="integration-template" spellcheck="false" readonly></textarea>
                 </label>
-                <label>
-                  Meiro collector endpoint
-                  <input id="integration-meiro-url" readonly />
-                </label>
+                <div class="settings-card">
+                  <div class="editor-title compact-title">Expected Response</div>
+                  <pre id="integration-response"></pre>
+                </div>
               </div>
-              <label>
-                HTTP template
-                <textarea id="integration-template" spellcheck="false" readonly></textarea>
-              </label>
-              <div class="editor-title compact-title">Expected Response</div>
-              <pre id="integration-response"></pre>
             </section>
             <section class="settings-tab-panel" data-settings-panel="runtime">
-              <div class="editor-title">Runtime Diagnostics</div>
-              <pre id="settings-output"></pre>
+              <div class="settings-section-head">
+                <div>
+                  <div class="editor-title">Runtime Diagnostics</div>
+                  <p>Raw settings and scheduler state for debugging deployment issues.</p>
+                </div>
+              </div>
+              <div class="settings-card">
+                <pre id="settings-output"></pre>
+              </div>
             </section>
             <section class="settings-tab-panel" data-settings-panel="tokens">
-              <div class="editor-title">API Tokens</div>
-              <form id="token-form">
-                <div class="grid-two">
-                  <label>
-                    Token name
-                    <input id="token-name" value="Meiro Pipes evaluate" />
-                  </label>
-                  <label>
-                    Scopes
-                    <select id="token-scopes">
-                      <option value="evaluate">Evaluate only</option>
-                      <option value="client">Client app</option>
-                      <option value="viewer">Viewer</option>
-                      <option value="editor,viewer">Editor</option>
-                      <option value="publisher,viewer">Publisher</option>
-                      <option value="admin,evaluate">Admin + evaluate</option>
-                    </select>
-                  </label>
+              <div class="settings-section-head">
+                <div>
+                  <div class="editor-title">API Tokens</div>
+                  <p>Issue scoped credentials for Meiro Pipes, client-side tracking, and operators.</p>
                 </div>
-                <label>
-                  Allowed decision keys
-                  <input id="token-decision-keys" placeholder="Optional, comma separated" />
-                </label>
-                <div class="actions left">
-                  <button type="submit">Create Token</button>
+              </div>
+              <div class="token-workspace">
+                <form id="token-form" class="settings-card">
+                  <div class="grid-two">
+                    <label>
+                      Token name
+                      <input id="token-name" value="Meiro Pipes evaluate" />
+                    </label>
+                    <label>
+                      Scopes
+                      <select id="token-scopes">
+                        <option value="evaluate">Evaluate only</option>
+                        <option value="client">Client app</option>
+                        <option value="viewer">Viewer</option>
+                        <option value="editor,viewer">Editor</option>
+                        <option value="publisher,viewer">Publisher</option>
+                        <option value="admin,evaluate">Admin + evaluate</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label>
+                    Allowed decision keys
+                    <input id="token-decision-keys" placeholder="Optional, comma separated" />
+                  </label>
+                  <div class="actions left">
+                    <button type="submit">Create Token</button>
+                  </div>
+                </form>
+                <div class="settings-card">
+                  <div class="editor-title compact-title">Issued Tokens</div>
+                  <div id="token-list" class="table token-list"></div>
                 </div>
-              </form>
-              <div id="token-list" class="table"></div>
-              <pre id="token-output"></pre>
+                <div class="settings-card">
+                  <div class="editor-title compact-title">Token Output</div>
+                  <pre id="token-output"></pre>
+                </div>
+              </div>
             </section>
+          </div>
+          <div class="settings-summary-panel">
+            <div class="editor-title">Configuration Status</div>
+            <div id="settings-health-summary" class="settings-health-summary"></div>
           </div>
         </div>
       </section>

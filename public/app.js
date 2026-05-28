@@ -28,6 +28,7 @@ const lookupVersionList = document.querySelector("#lookup-version-list");
 const settingsOutput = document.querySelector("#settings-output");
 const tokenOutput = document.querySelector("#token-output");
 const schemaOutput = document.querySelector("#schema-output");
+const settingsHealthSummary = document.querySelector("#settings-health-summary");
 const integrationTemplate = document.querySelector("#integration-template");
 const integrationResponse = document.querySelector("#integration-response");
 const metricCards = document.querySelector("#metric-cards");
@@ -2707,11 +2708,13 @@ async function loadSettings() {
     document.querySelector("#schema-sync-identifier-type").value = settings.schema_sync_identifier_type || "";
     document.querySelector("#schema-sync-identifier-value").value = settings.schema_sync_identifier_value || "";
     renderSchemaSyncStatus(settings, body.runtime?.schema_sync || {});
+    renderSettingsSummary(settings, body.runtime || {});
     settingsOutput.textContent = JSON.stringify(body, null, 2);
     renderIntegration();
     await loadTokens();
   } catch (error) {
     settingsOutput.textContent = error.message;
+    renderSettingsSummary(null, null, error);
   }
 }
 
@@ -2738,6 +2741,7 @@ async function saveSettings(event) {
     });
     cachedSettings = { ...cachedSettings, settings: body.settings || {} };
     renderSchemaSyncStatus(body.settings || {}, body.runtime?.schema_sync || {});
+    renderSettingsSummary(body.settings || {}, body.runtime || {});
     renderIntegration();
     settingsOutput.textContent = JSON.stringify(body, null, 2);
   } catch (error) {
@@ -2778,6 +2782,64 @@ function renderSchemaSyncStatus(settings, runtime) {
   target.textContent = `Status: ${status}. Last sync: ${lastSync}. Imported: ${count}. Next sync: ${nextRun}.${error}`;
 }
 
+function renderSettingsSummary(settings, runtime, error = null) {
+  if (!settingsHealthSummary) return;
+  if (error) {
+    settingsHealthSummary.innerHTML = `<div class="settings-health-item warn"><strong>Settings unavailable</strong><span>${escapeHtml(error.message)}</span></div>`;
+    return;
+  }
+  const schemaRuntime = runtime?.schema_sync || {};
+  const collectorConfigured = Boolean(settings?.meiro_url && settings?.meiro_source_slug);
+  const apiConfigured = Boolean(settings?.meiro_api_url && settings?.meiro_api_token_configured);
+  const schemaStatus = settings?.schema_last_sync_status || "never";
+  const schemaHealthy = ["ok", "success"].includes(schemaStatus);
+  const schemaDetail = settings?.schema_last_synced_at
+    ? `${formatTime(settings.schema_last_synced_at)} · ${Number(settings.schema_last_sync_count || 0)} fields`
+    : "No schema sync completed yet";
+  const nextRun = schemaRuntime.configured && schemaRuntime.next_run_at ? formatTime(schemaRuntime.next_run_at) : "Not scheduled";
+  const items = [
+    {
+      label: "Environment",
+      value: settings?.environment_label || "local",
+      detail: `${Number(settings?.audit_retention_days || 90)}d audit · ${Number(settings?.client_event_retention_days || 180)}d client events`,
+      ok: true
+    },
+    {
+      label: "Meiro Collector",
+      value: collectorConfigured ? "Configured" : "Incomplete",
+      detail: collectorConfigured ? [settings.meiro_url, "collect", settings.meiro_source_slug].join("/") : "Set Meiro URL and source slug",
+      ok: collectorConfigured
+    },
+    {
+      label: "Profile API",
+      value: apiConfigured ? "Configured" : "Incomplete",
+      detail: apiConfigured ? settings.meiro_api_url : "Set API URL and token for schema import",
+      ok: apiConfigured
+    },
+    {
+      label: "Schema Sync",
+      value: schemaStatus,
+      detail: `${schemaDetail}. Next: ${nextRun}`,
+      ok: schemaHealthy
+    },
+    {
+      label: "Bootstrap Tokens",
+      value: settings?.bootstrap_tokens_enabled === false ? "Disabled" : "Enabled",
+      detail: settings?.bootstrap_tokens_enabled === false ? "DB tokens are required" : "Static admin token remains accepted",
+      ok: settings?.bootstrap_tokens_enabled === false
+    }
+  ];
+  settingsHealthSummary.innerHTML = items
+    .map((item) => `
+      <div class="settings-health-item ${item.ok ? "ok" : "warn"}">
+        <span>${escapeHtml(item.label)}</span>
+        <strong>${escapeHtml(item.value)}</strong>
+        <span>${escapeHtml(item.detail)}</span>
+      </div>
+    `)
+    .join("");
+}
+
 async function importSchema() {
   try {
     const body = await api("/v1/schema/import", {
@@ -2811,6 +2873,7 @@ async function loadIntegration() {
   try {
     const body = await api("/v1/settings");
     cachedSettings = { settings: body.settings || {}, runtime: body.runtime || {} };
+    renderSettingsSummary(body.settings || {}, body.runtime || {});
     renderIntegration();
   } catch (error) {
     if (integrationResponse) integrationResponse.textContent = error.message;
