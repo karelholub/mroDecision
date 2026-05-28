@@ -21,6 +21,10 @@ const integrationResponse = document.querySelector("#integration-response");
 const metricCards = document.querySelector("#metric-cards");
 const ruleDetailPanel = document.querySelector("#metrics-rule-detail");
 const clientEventsPanel = document.querySelector("#metrics-client-events");
+const topbarTitle = document.querySelector("#topbar-title");
+const topbarSubtitle = document.querySelector("#topbar-subtitle");
+const topbarEnv = document.querySelector("#topbar-env");
+const topbarHealth = document.querySelector("#topbar-health");
 let selectedRuleKey = null;
 let selectedLookupId = null;
 let selectedMessageId = null;
@@ -36,8 +40,18 @@ document.querySelectorAll("nav button").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll("nav button, .view").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
-    document.querySelector(`#${button.dataset.view}`).classList.add("active");
+    const view = document.querySelector(`#${button.dataset.view}`);
+    view.classList.add("active");
+    updateTopbarForView(view);
     if (button.dataset.view === "overview") loadMetrics();
+  });
+});
+
+document.querySelectorAll("[data-settings-tab]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll("[data-settings-tab], [data-settings-panel]").forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
+    document.querySelector(`[data-settings-panel="${button.dataset.settingsTab}"]`)?.classList.add("active");
   });
 });
 
@@ -118,6 +132,7 @@ loadSettings();
 loadSchema({ silent: true });
 loadEvaluatePreset();
 loadIntegration();
+loadRuntimeStatus();
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -131,6 +146,23 @@ async function api(path, options = {}) {
   const body = await response.json();
   if (!response.ok) throw new Error(body.message || response.statusText);
   return body;
+}
+
+function updateTopbarForView(view) {
+  const title = view.querySelector("h2")?.textContent || "Meiro DEE";
+  const subtitle = view.querySelector(".page-subtitle")?.textContent || "Decision control plane";
+  topbarTitle.textContent = title;
+  topbarSubtitle.textContent = subtitle;
+}
+
+async function loadRuntimeStatus() {
+  try {
+    const response = await fetch("/v1/ready", { headers: { "x-request-id": "ui-runtime-status" } });
+    const body = await response.json();
+    topbarHealth.textContent = body.status === "ready" ? "Ready" : "Not ready";
+  } catch {
+    topbarHealth.textContent = "Unknown";
+  }
 }
 
 async function loadRules() {
@@ -2367,6 +2399,7 @@ async function loadSettings() {
     const body = await api("/v1/settings");
     const settings = body.settings || {};
     cachedSettings = { settings, runtime: body.runtime || {} };
+    topbarEnv.textContent = settings.environment_label || "local";
     document.querySelector("#setting-environment-label").value = settings.environment_label || "";
     document.querySelector("#setting-audit-retention-days").value = settings.audit_retention_days || "";
     document.querySelector("#setting-client-event-retention-days").value = settings.client_event_retention_days || "";

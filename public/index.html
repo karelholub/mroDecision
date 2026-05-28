@@ -13,16 +13,31 @@
         <span>Decision control plane</span>
       </div>
       <nav>
+        <span class="nav-section">Operations</span>
         <button data-view="overview" class="active">Overview</button>
+        <button data-view="audit">Audit</button>
+        <span class="nav-section">Decisioning</span>
         <button data-view="rules">Rule Sets</button>
         <button data-view="test">Evaluate</button>
-        <button data-view="audit">Audit</button>
+        <span class="nav-section">Content & Data</span>
         <button data-view="messages">Messages</button>
         <button data-view="lookups">Reference Data</button>
+        <span class="nav-section">Administration</span>
         <button data-view="settings">Settings</button>
       </nav>
     </aside>
-    <main>
+    <div class="app-frame">
+      <div class="topbar">
+        <div>
+          <strong id="topbar-title">Overview</strong>
+          <span id="topbar-subtitle">Operational health, rule usage, and service utilization.</span>
+        </div>
+        <div class="topbar-status">
+          <span id="topbar-env">local</span>
+          <span id="topbar-health">Checking</span>
+        </div>
+      </div>
+      <main>
       <section id="overview" class="view active">
         <header>
           <div>
@@ -579,14 +594,23 @@
           </div>
           <button id="refresh-settings">Refresh</button>
         </header>
-        <div class="split">
-          <div class="editor">
-            <div class="editor-title">Environment</div>
+        <div class="settings-layout">
+          <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+            <button type="button" class="settings-tab active" data-settings-tab="environment">Environment</button>
+            <button type="button" class="settings-tab" data-settings-tab="meiro">Meiro</button>
+            <button type="button" class="settings-tab" data-settings-tab="schema">Schema Sync</button>
+            <button type="button" class="settings-tab" data-settings-tab="integration">Integration</button>
+            <button type="button" class="settings-tab" data-settings-tab="tokens">API Tokens</button>
+            <button type="button" class="settings-tab" data-settings-tab="runtime">Runtime</button>
+          </div>
+          <div class="settings-panel">
+            <form id="settings-form">
+            <section class="settings-tab-panel active" data-settings-panel="environment">
+              <div class="editor-title">Environment</div>
             <label class="auth-token-field">
               Active API token
               <input id="token" type="password" value="dev-admin-token" />
             </label>
-            <form id="settings-form">
               <div class="grid-two">
                 <label>
                   Environment label
@@ -608,6 +632,12 @@
                   </select>
                 </label>
               </div>
+              <div class="actions left">
+                <button type="submit">Save Settings</button>
+              </div>
+            </section>
+            <section class="settings-tab-panel" data-settings-panel="meiro">
+              <div class="editor-title">Meiro Endpoints</div>
               <div class="grid-two">
                 <label>
                   Meiro URL
@@ -618,7 +648,7 @@
                   <input id="setting-meiro-source-slug" />
                 </label>
               </div>
-              <div class="grid-three">
+              <div class="grid-two">
                 <label>
                   Meiro API URL
                   <input id="setting-meiro-api-url" placeholder="https://..." />
@@ -627,18 +657,18 @@
                   Meiro API token
                   <input id="setting-meiro-api-token" type="password" />
                 </label>
-                <label>
-                  Schema sync minutes
-                  <input id="setting-schema-sync-interval" type="number" min="1" />
-                </label>
               </div>
               <div class="actions left">
                 <button type="submit">Save Settings</button>
               </div>
-            </form>
-            <details>
-              <summary>Schema sync and manual import</summary>
-              <div class="grid-two">
+            </section>
+            <section class="settings-tab-panel" data-settings-panel="schema">
+              <div class="editor-title">Schema Sync</div>
+              <div class="grid-three">
+                <label>
+                  Schema sync minutes
+                  <input id="setting-schema-sync-interval" type="number" min="1" />
+                </label>
                 <label>
                   Identifier type
                   <input id="schema-sync-identifier-type" placeholder="email" />
@@ -649,6 +679,7 @@
                 </label>
               </div>
               <div class="actions left">
+                <button type="submit">Save Settings</button>
                 <button type="button" id="sync-schema">Sync From Meiro</button>
               </div>
               <div id="schema-sync-status" class="status-line"></div>
@@ -658,9 +689,10 @@
                 <button type="button" id="refresh-schema">Refresh Schema</button>
               </div>
               <pre id="schema-output"></pre>
-            </details>
-            <details open>
-              <summary>Integration templates</summary>
+            </section>
+            </form>
+            <section class="settings-tab-panel" data-settings-panel="integration">
+              <div class="editor-title">Integration Templates</div>
               <div class="actions left">
                 <button type="button" id="refresh-integration">Refresh Template</button>
               </div>
@@ -680,43 +712,47 @@
               </label>
               <div class="editor-title compact-title">Expected Response</div>
               <pre id="integration-response"></pre>
-            </details>
-            <pre id="settings-output"></pre>
-          </div>
-          <div class="editor">
-            <div class="editor-title">API Tokens</div>
-            <form id="token-form">
-              <div class="grid-two">
+            </section>
+            <section class="settings-tab-panel" data-settings-panel="runtime">
+              <div class="editor-title">Runtime Diagnostics</div>
+              <pre id="settings-output"></pre>
+            </section>
+            <section class="settings-tab-panel" data-settings-panel="tokens">
+              <div class="editor-title">API Tokens</div>
+              <form id="token-form">
+                <div class="grid-two">
+                  <label>
+                    Token name
+                    <input id="token-name" value="Meiro Pipes evaluate" />
+                  </label>
+                  <label>
+                    Scopes
+                    <select id="token-scopes">
+                      <option value="evaluate">Evaluate only</option>
+                      <option value="client">Client app</option>
+                      <option value="viewer">Viewer</option>
+                      <option value="editor,viewer">Editor</option>
+                      <option value="publisher,viewer">Publisher</option>
+                      <option value="admin,evaluate">Admin + evaluate</option>
+                    </select>
+                  </label>
+                </div>
                 <label>
-                  Token name
-                  <input id="token-name" value="Meiro Pipes evaluate" />
+                  Allowed decision keys
+                  <input id="token-decision-keys" placeholder="Optional, comma separated" />
                 </label>
-                <label>
-                  Scopes
-                  <select id="token-scopes">
-                    <option value="evaluate">Evaluate only</option>
-                    <option value="client">Client app</option>
-                    <option value="viewer">Viewer</option>
-                    <option value="editor,viewer">Editor</option>
-                    <option value="publisher,viewer">Publisher</option>
-                    <option value="admin,evaluate">Admin + evaluate</option>
-                  </select>
-                </label>
-              </div>
-              <label>
-                Allowed decision keys
-                <input id="token-decision-keys" placeholder="Optional, comma separated" />
-              </label>
-              <div class="actions left">
-                <button type="submit">Create Token</button>
-              </div>
-            </form>
-            <div id="token-list" class="table"></div>
-            <pre id="token-output"></pre>
+                <div class="actions left">
+                  <button type="submit">Create Token</button>
+                </div>
+              </form>
+              <div id="token-list" class="table"></div>
+              <pre id="token-output"></pre>
+            </section>
           </div>
         </div>
       </section>
-    </main>
+      </main>
+    </div>
     <script src="/app.js"></script>
   </body>
 </html>
