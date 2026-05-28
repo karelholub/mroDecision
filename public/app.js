@@ -12,6 +12,8 @@ const graphEditor = document.querySelector("#graph-editor");
 const graphNodeEditor = document.querySelector("#graph-node-editor");
 const lookupOutput = document.querySelector("#lookup-output");
 const messageOutput = document.querySelector("#message-output");
+const messagePreview = document.querySelector("#message-preview");
+const messageInspectorSummary = document.querySelector("#message-inspector-summary");
 const referenceGrid = document.querySelector("#reference-grid");
 const auditDetail = document.querySelector("#audit-detail");
 const auditDetailSummary = document.querySelector("#audit-detail-summary");
@@ -74,6 +76,14 @@ document.querySelectorAll("[data-rule-drawer-tab]").forEach((button) => {
     document.querySelectorAll("[data-rule-drawer-tab], [data-rule-drawer-panel]").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
     document.querySelector(`[data-rule-drawer-panel="${button.dataset.ruleDrawerTab}"]`)?.classList.add("active");
+  });
+});
+
+document.querySelectorAll("[data-message-drawer-tab]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll("[data-message-drawer-tab], [data-message-drawer-panel]").forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
+    document.querySelector(`[data-message-drawer-panel="${button.dataset.messageDrawerTab}"]`)?.classList.add("active");
   });
 });
 
@@ -142,6 +152,12 @@ document.querySelector("#fallback-result").addEventListener("input", syncJsonFro
 document.querySelector("#fallback-outputs").addEventListener("change", syncJsonFromBuilder);
 document.querySelector("#lookup-editor").addEventListener("submit", saveLookup);
 document.querySelector("#message-editor").addEventListener("submit", saveMessage);
+document.querySelector("#sync-message-json").addEventListener("click", syncMessageJsonFromPreview);
+["#message-name", "#message-surface", "#message-status", "#message-preview-title", "#message-preview-body", "#message-preview-cta", "#message-preview-image"].forEach((selector) => {
+  document.querySelector(selector).addEventListener("input", renderMessagePreview);
+  document.querySelector(selector).addEventListener("change", renderMessagePreview);
+});
+document.querySelector("#message-content").addEventListener("change", syncMessagePreviewFromJson);
 document.querySelector("#import-lookup-csv").addEventListener("click", importLookupCsv);
 document.querySelector("#add-reference-row").addEventListener("click", addReferenceRow);
 document.querySelector("#add-reference-column").addEventListener("click", addReferenceColumn);
@@ -845,6 +861,7 @@ function newMessage() {
     image_url: "url"
   }, null, 2);
   document.querySelector("#message-metadata").value = JSON.stringify({}, null, 2);
+  syncMessagePreviewFromJson();
   messageOutput.textContent = "Ready for a new message";
 }
 
@@ -863,12 +880,14 @@ function loadMessage(id, messages) {
   document.querySelector("#message-content").value = JSON.stringify(message.default_content || {}, null, 2);
   document.querySelector("#message-schema").value = JSON.stringify(message.content_schema || {}, null, 2);
   document.querySelector("#message-metadata").value = JSON.stringify(message.metadata || {}, null, 2);
+  syncMessagePreviewFromJson();
   messageOutput.textContent = `Loaded ${id}`;
 }
 
 async function saveMessage(event) {
   event.preventDefault();
   try {
+    syncMessageJsonFromPreview();
     const id = selectedMessageId || document.querySelector("#message-id").value.trim();
     const body = {
       name: document.querySelector("#message-name").value.trim() || id,
@@ -889,6 +908,58 @@ async function saveMessage(event) {
   } catch (error) {
     messageOutput.textContent = error.message;
   }
+}
+
+function syncMessagePreviewFromJson() {
+  try {
+    const content = JSON.parse(document.querySelector("#message-content").value || "{}");
+    document.querySelector("#message-preview-title").value = content.title || "";
+    document.querySelector("#message-preview-body").value = content.body || "";
+    document.querySelector("#message-preview-cta").value = content.cta_label || "";
+    document.querySelector("#message-preview-image").value = content.image_url || "";
+    renderMessagePreview();
+  } catch (error) {
+    messageOutput.textContent = error.message;
+  }
+}
+
+function syncMessageJsonFromPreview() {
+  const current = parseJsonSafe(document.querySelector("#message-content").value || "{}");
+  const content = {
+    ...current,
+    title: document.querySelector("#message-preview-title").value.trim(),
+    body: document.querySelector("#message-preview-body").value.trim(),
+    cta_label: document.querySelector("#message-preview-cta").value.trim(),
+    image_url: document.querySelector("#message-preview-image").value.trim()
+  };
+  document.querySelector("#message-content").value = JSON.stringify(content, null, 2);
+  renderMessagePreview();
+  messageOutput.textContent = "Message JSON synced";
+}
+
+function renderMessagePreview() {
+  if (!messagePreview) return;
+  const title = document.querySelector("#message-preview-title").value.trim() || document.querySelector("#message-name").value.trim() || "Untitled message";
+  const body = document.querySelector("#message-preview-body").value.trim() || "No message body yet.";
+  const cta = document.querySelector("#message-preview-cta").value.trim();
+  const imageUrl = document.querySelector("#message-preview-image").value.trim();
+  const surface = document.querySelector("#message-surface").value.trim() || "-";
+  const status = document.querySelector("#message-status").value || "active";
+  messagePreview.innerHTML = `
+    ${imageUrl ? `<div class="message-preview-image" style="background-image:url('${escapeHtml(imageUrl)}')"></div>` : ""}
+    <div class="message-preview-body">
+      <span>${escapeHtml(surface)}</span>
+      <strong>${escapeHtml(title)}</strong>
+      <p>${escapeHtml(body)}</p>
+      ${cta ? `<button type="button">${escapeHtml(cta)}</button>` : ""}
+    </div>
+  `;
+  messageInspectorSummary.innerHTML = [
+    statusItem("Status", status),
+    statusItem("Surface", surface),
+    statusItem("Message ID", document.querySelector("#message-id").value.trim() || "-"),
+    statusItem("Schema fields", Object.keys(parseJsonSafe(document.querySelector("#message-schema").value || "{}")).length)
+  ].join("");
 }
 
 async function loadLookupVersions(id) {

@@ -906,6 +906,192 @@ header {
   display: none;
 }
 
+.message-workbench {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(0, 2.25fr);
+  gap: 16px;
+  height: calc(100vh - 184px);
+  min-height: 660px;
+  min-width: 0;
+}
+
+.message-list-pane,
+.message-editor-pane,
+.message-editor-main,
+.message-form-pane,
+.message-preview-pane,
+.message-bottom-drawer {
+  min-width: 0;
+  min-height: 0;
+}
+
+.message-list-pane {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.message-list {
+  height: 100%;
+}
+
+.message-list .row {
+  grid-template-columns: 1fr;
+  gap: 5px;
+  align-items: start;
+}
+
+.message-list .row:first-child {
+  display: none;
+}
+
+.message-list .row > div:first-child {
+  font-weight: 700;
+}
+
+.message-list .row > div:nth-child(n+2) {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.message-editor-pane {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto minmax(230px, 0.38fr);
+  gap: 12px;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+#messages #message-editor.message-editor-pane {
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.message-editor-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.8fr);
+  gap: 12px;
+  overflow: hidden;
+}
+
+.message-form-pane,
+.message-preview-pane,
+.message-bottom-drawer {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.message-form-pane,
+.message-preview-pane {
+  height: 100%;
+  max-height: 100%;
+  overflow: auto;
+  padding: 16px;
+}
+
+.message-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.message-form-pane textarea {
+  width: 100%;
+  min-height: 132px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.message-preview-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.message-preview-pane .compact-status-panel {
+  grid-template-columns: 1fr 1fr;
+}
+
+.message-preview-card {
+  min-height: 170px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  overflow: hidden;
+}
+
+.message-preview-image {
+  min-height: 120px;
+  background-color: #e5e7eb;
+  background-position: center;
+  background-size: cover;
+}
+
+.message-preview-body {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.message-preview-body span {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.message-preview-body strong {
+  overflow-wrap: anywhere;
+  font-size: 20px;
+}
+
+.message-preview-body p {
+  color: var(--muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.message-preview-body button {
+  justify-self: start;
+}
+
+.message-preview-pane .status-item {
+  min-height: 64px;
+  padding: 8px;
+}
+
+.message-preview-pane .status-item strong {
+  font-size: 12px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.message-preview-pane .status-item span {
+  font-size: 11px;
+}
+
+.message-bottom-drawer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.message-bottom-drawer .drawer-panel textarea,
+.message-bottom-drawer .drawer-panel pre {
+  width: 100%;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .row {
   min-height: 44px;
   display: grid;
@@ -1367,6 +1553,11 @@ pre {
     min-height: 0;
   }
 
+  .message-workbench {
+    height: auto;
+    min-height: 0;
+  }
+
   .metric-grid,
   .overview-grid {
     grid-template-columns: 1fr 1fr;
@@ -1384,6 +1575,9 @@ pre {
     .rule-editor-main,
     .audit-workbench,
     .evaluate-workbench,
+    .message-workbench,
+    .message-editor-main,
+    .message-field-grid,
     .filter-bar,
     .metric-grid,
     .overview-grid,
@@ -1419,7 +1613,11 @@ pre {
   .audit-detail-pane,
   .evaluate-controls,
   .evaluate-request,
-  .evaluate-response {
+  .evaluate-response,
+  .message-form-pane,
+  .message-preview-pane,
+  .message-bottom-drawer,
+  .message-editor-pane {
     overflow: visible;
   }
 
