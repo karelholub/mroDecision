@@ -72,6 +72,7 @@ let cachedLookupTables = [];
 let cachedMessages = [];
 let cachedSettings = {};
 let cachedSchema = [];
+let cachedEvaluationProfiles = [];
 const savedProfileStorageKey = "meiro-dee-evaluate-profiles";
 
 document.querySelectorAll("nav button").forEach((button) => {
@@ -271,6 +272,7 @@ loadMessages();
 loadSettings();
 loadSchema({ silent: true });
 loadEvaluatePreset();
+loadEvaluationProfiles();
 renderEvaluationSummary(null, document.querySelector("#eval-mode").value);
 renderEvaluationOutputSummary(null);
 renderSavedEvaluateProfiles();
@@ -3085,9 +3087,20 @@ function loadEvaluatePresetForSelectedRule() {
   renderEvaluateValidation(request);
 }
 
+async function loadEvaluationProfiles() {
+  try {
+    const body = await api("/v1/evaluation-profiles");
+    cachedEvaluationProfiles = body.profiles || [];
+    renderSavedEvaluateProfiles();
+  } catch {
+    cachedEvaluationProfiles = readSavedEvaluateProfiles();
+    renderSavedEvaluateProfiles();
+  }
+}
+
 function renderSavedEvaluateProfiles() {
   if (!evalSavedProfile) return;
-  const profiles = readSavedEvaluateProfiles();
+  const profiles = cachedEvaluationProfiles.length ? cachedEvaluationProfiles : readSavedEvaluateProfiles();
   evalSavedProfile.innerHTML = [
     `<option value="">No saved profile selected</option>`,
     ...profiles.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)} · ${escapeHtml(profile.decision_key || "any rule")}</option>`)
@@ -3107,37 +3120,53 @@ function writeSavedEvaluateProfiles(profiles) {
   localStorage.setItem(savedProfileStorageKey, JSON.stringify(profiles.slice(0, 50)));
 }
 
-function saveEvaluateProfile() {
+async function saveEvaluateProfile() {
   try {
     const request = readEvaluateInput();
     const validation = renderEvaluateValidation(request);
     if (validation.errors.length) throw new Error(`Profile cannot be saved: ${validation.errors.join("; ")}`);
     const name = window.prompt("Saved profile name", `${request.decision_key} · ${request.profile_key}`);
     if (!name) return;
-    const profiles = readSavedEvaluateProfiles();
     const id = `${request.decision_key}:${request.profile_key}:${name}`.toLowerCase().replace(/[^a-z0-9:_-]+/g, "_");
-    const next = profiles.filter((profile) => profile.id !== id);
-    next.unshift({
-      id,
+    const payload = {
       name,
       decision_key: request.decision_key,
       profile_key: request.profile_key,
-      request,
-      updated_at: new Date().toISOString()
-    });
-    writeSavedEvaluateProfiles(next);
-    renderSavedEvaluateProfiles();
-    evalSavedProfile.value = id;
+      request
+    };
+    try {
+      const response = await api(`/v1/evaluation-profiles/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: JSON.stringify(payload)
+      });
+      await loadEvaluationProfiles();
+      evalSavedProfile.value = response.profile.id;
+    } catch {
+      const profiles = readSavedEvaluateProfiles();
+      const next = profiles.filter((profile) => profile.id !== id);
+      next.unshift({ id, ...payload, updated_at: new Date().toISOString() });
+      writeSavedEvaluateProfiles(next);
+      cachedEvaluationProfiles = [];
+      renderSavedEvaluateProfiles();
+      evalSavedProfile.value = id;
+    }
     renderEvaluateValidation(request, "Saved profile is ready for reuse.");
   } catch (error) {
     renderEvaluateValidation(null, error.message);
   }
 }
 
-function deleteEvaluateProfile() {
+async function deleteEvaluateProfile() {
   const id = evalSavedProfile?.value;
   if (!id) return;
-  writeSavedEvaluateProfiles(readSavedEvaluateProfiles().filter((profile) => profile.id !== id));
+  try {
+    await api(`/v1/evaluation-profiles/${encodeURIComponent(id)}`, { method: "DELETE" });
+    await loadEvaluationProfiles();
+  } catch {
+    writeSavedEvaluateProfiles(readSavedEvaluateProfiles().filter((profile) => profile.id !== id));
+    cachedEvaluationProfiles = [];
+    renderSavedEvaluateProfiles();
+  }
   renderSavedEvaluateProfiles();
   renderEvaluateValidation(null, "Saved profile deleted.");
 }
@@ -3145,7 +3174,7 @@ function deleteEvaluateProfile() {
 function loadSavedEvaluateProfile() {
   const id = evalSavedProfile?.value;
   if (!id) return;
-  const profile = readSavedEvaluateProfiles().find((item) => item.id === id);
+  const profile = [...cachedEvaluationProfiles, ...readSavedEvaluateProfiles()].find((item) => item.id === id);
   if (!profile) return;
   const request = structuredClone(profile.request);
   if (cachedRuleSets.some((ruleSet) => ruleSet.decision_key === request.decision_key)) {

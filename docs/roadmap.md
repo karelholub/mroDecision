@@ -29,6 +29,7 @@ Implemented:
 - Overview rule usage drilldown with fallback rate, matched branch distribution, and recent decisions.
 - Evaluate panel trace cards for matched branch checks and graph node paths.
 - Evaluate saved profile payloads, request-shape validation, and published-vs-draft comparison.
+- Shared server-side saved evaluation profiles for team QA payloads.
 - Message template controls for type, placement, media, footer, multiple CTAs, delivery lifecycle, priority, and TTL metadata.
 - Settings connection tests for Meiro Profile API and collector endpoints.
 - Embedded UI for rule sets, draft testing, evaluation, audit, lookups, settings, tokens, and Meiro request templates.
@@ -146,5 +147,4 @@ Status: readiness, request IDs, request logs, guarded bootstrap-token disablemen
 
 1. Add broader Meiro catalog sync if/when segment schema APIs are confirmed.
 2. Add drag/drop layout polish for the graph editor.
-3. Add server-side saved test-profile storage and team sharing if local browser storage is not enough.
-4. Add managed database adapter implementation if production scale requires multiple replicas.
+3. Add managed database adapter implementation if production scale requires multiple replicas.

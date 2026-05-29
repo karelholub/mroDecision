@@ -140,6 +140,26 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(store.getMessage("hero_offer").default_content.title, "Hello");
   assert.equal(store.listMessages({ surface: "homepage" })[0].id, "hero_offer");
 
+  const savedProfile = store.upsertEvaluationProfile(
+    "nbo_green_profile",
+    {
+      name: "NBO Green Profile",
+      request: {
+        decision_key: "next_best_offer",
+        profile_key: "profile-1",
+        identifiers: [{ typeId: "email", value: "user@example.com" }],
+        attributes: { lead_score: [{ value: 90 }] },
+        segments: {},
+        context: { channel: "email" }
+      }
+    },
+    "tester"
+  );
+  assert.equal(savedProfile.decision_key, "next_best_offer");
+  assert.equal(store.listEvaluationProfiles({ decision_key: "next_best_offer" })[0].id, "nbo_green_profile");
+  store.deleteEvaluationProfile("nbo_green_profile");
+  assert.equal(store.listEvaluationProfiles().length, 0);
+
   const apiToken = store.createApiToken({ name: "Evaluate token", scopes: ["evaluate"] }, "tester");
   assert.match(apiToken.token, /^dee_/);
   const verified = store.verifyApiToken(apiToken.token);

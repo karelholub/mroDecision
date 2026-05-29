@@ -721,6 +721,69 @@ export class Store {
     return row ? rowToMessage(row) : null;
   }
 
+  listEvaluationProfiles(params = {}) {
+    const conditions = [];
+    const values = [];
+    if (params.decision_key) {
+      conditions.push("decision_key = ?");
+      values.push(params.decision_key);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    return this.db
+      .prepare(`SELECT * FROM evaluation_profiles ${where} ORDER BY updated_at DESC, id ASC`)
+      .all(...values)
+      .map(rowToEvaluationProfile);
+  }
+
+  upsertEvaluationProfile(id, input, author) {
+    const profileId = normalizeKey(id || input.id || input.name);
+    if (!profileId) badRequest("Evaluation profile id is required");
+    if (!isPlainObject(input.request)) badRequest("request must be an object");
+    const existing = this.db.prepare("SELECT * FROM evaluation_profiles WHERE id = ?").get(profileId);
+    const now = createdAtNow();
+    const request = input.request;
+    const profile = {
+      id: profileId,
+      name: input.name || existing?.name || profileId,
+      decision_key: input.decision_key || request.decision_key || existing?.decision_key || "",
+      profile_key: input.profile_key || request.profile_key || existing?.profile_key || "",
+      request,
+      notes: input.notes || existing?.notes || "",
+      updated_at: now,
+      author
+    };
+    this.db
+      .prepare(
+        `INSERT INTO evaluation_profiles (
+          id, name, decision_key, profile_key, request_json, notes, updated_at, author
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          decision_key = excluded.decision_key,
+          profile_key = excluded.profile_key,
+          request_json = excluded.request_json,
+          notes = excluded.notes,
+          updated_at = excluded.updated_at,
+          author = excluded.author`
+      )
+      .run(
+        profile.id,
+        profile.name,
+        profile.decision_key,
+        profile.profile_key,
+        stringify(profile.request),
+        profile.notes,
+        profile.updated_at,
+        profile.author
+      );
+    return profile;
+  }
+
+  deleteEvaluationProfile(id) {
+    const result = this.db.prepare("DELETE FROM evaluation_profiles WHERE id = ?").run(id);
+    if (!result.changes) notFound(`Evaluation profile not found: ${id}`);
+  }
+
   listApiTokens() {
     return this.db
       .prepare("SELECT id, name, scopes_json, decision_keys_json, created_at, last_used_at, revoked_at FROM api_tokens ORDER BY created_at DESC")
@@ -960,6 +1023,17 @@ function migrate(db) {
       author TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS evaluation_profiles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      decision_key TEXT NOT NULL DEFAULT '',
+      profile_key TEXT NOT NULL DEFAULT '',
+      request_json TEXT NOT NULL DEFAULT '{}',
+      notes TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL,
+      author TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       evaluated_at TEXT NOT NULL,
@@ -1030,6 +1104,7 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_schema_items_kind ON schema_items(kind, name);
     CREATE INDEX IF NOT EXISTS idx_lookup_table_versions ON lookup_table_versions(id, version);
     CREATE INDEX IF NOT EXISTS idx_messages_surface_status ON messages(surface, status);
+    CREATE INDEX IF NOT EXISTS idx_evaluation_profiles_rule ON evaluation_profiles(decision_key, updated_at);
   `);
   ensureColumn(db, "rule_sets", "type", "TEXT NOT NULL DEFAULT 'decision'");
   ensureColumn(db, "rule_sets", "priority", "INTEGER NOT NULL DEFAULT 0");
@@ -1324,6 +1399,19 @@ function rowToMessage(row) {
     content_schema: parse(row.content_schema_json || "{}"),
     default_content: parse(row.default_content_json || "{}"),
     metadata: parse(row.metadata_json || "{}"),
+    updated_at: row.updated_at,
+    author: row.author
+  };
+}
+
+function rowToEvaluationProfile(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    decision_key: row.decision_key || "",
+    profile_key: row.profile_key || "",
+    request: parse(row.request_json || "{}"),
+    notes: row.notes || "",
     updated_at: row.updated_at,
     author: row.author
   };

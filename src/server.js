@@ -275,6 +275,31 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  if (req.method === "GET" && pathname === "/v1/evaluation-profiles") {
+    requireScope(req, "viewer");
+    sendJson(res, 200, { profiles: store.listEvaluationProfiles(Object.fromEntries(url.searchParams)) });
+    return;
+  }
+
+  const evaluationProfileMatch = pathname.match(/^\/v1\/evaluation-profiles\/([^/]+)$/);
+  if (evaluationProfileMatch && req.method === "PUT") {
+    requireScope(req, "editor");
+    const body = await readJson(req);
+    validateEvaluateRequest(body.request || {});
+    const profile = store.upsertEvaluationProfile(decodeURIComponent(evaluationProfileMatch[1]), body, req.auth.name);
+    await store.save();
+    sendJson(res, 200, { profile });
+    return;
+  }
+
+  if (evaluationProfileMatch && req.method === "DELETE") {
+    requireScope(req, "editor");
+    store.deleteEvaluationProfile(decodeURIComponent(evaluationProfileMatch[1]));
+    await store.save();
+    sendJson(res, 200, { deleted: true });
+    return;
+  }
+
   const messageMatch = pathname.match(/^\/v1\/messages\/([^/]+)$/);
   if (messageMatch && req.method === "PUT") {
     requireScope(req, "editor");

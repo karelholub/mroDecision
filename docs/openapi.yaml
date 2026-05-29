@@ -804,6 +804,69 @@ paths:
                 properties:
                   message:
                     $ref: "#/components/schemas/Message"
+  /v1/evaluation-profiles:
+    get:
+      summary: List saved evaluation test profiles
+      parameters:
+        - name: decision_key
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Saved evaluation profiles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profiles:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EvaluationProfile"
+  /v1/evaluation-profiles/{id}:
+    put:
+      summary: Create or update a saved evaluation test profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluationProfileWrite"
+      responses:
+        "200":
+          description: Saved evaluation profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profile:
+                    $ref: "#/components/schemas/EvaluationProfile"
+    delete:
+      summary: Delete a saved evaluation test profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted marker
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
   /v1/schema:
     get:
       summary: List cached Meiro schema items
@@ -1624,6 +1687,41 @@ components:
         metadata:
           type: object
           additionalProperties: true
+    EvaluationProfile:
+      type: object
+      required: [id, name, request]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        decision_key:
+          type: string
+        profile_key:
+          type: string
+        request:
+          $ref: "#/components/schemas/EvaluateRequest"
+        notes:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+        author:
+          type: string
+    EvaluationProfileWrite:
+      type: object
+      required: [name, request]
+      properties:
+        name:
+          type: string
+        decision_key:
+          type: string
+        profile_key:
+          type: string
+        request:
+          $ref: "#/components/schemas/EvaluateRequest"
+        notes:
+          type: string
     SchemaItem:
       type: object
       required: [kind, name, type]
