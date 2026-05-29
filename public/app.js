@@ -7,6 +7,8 @@ const evalOutputSummary = document.querySelector("#eval-output-summary");
 const evalEndpointLabel = document.querySelector("#eval-endpoint-label");
 const evalAuditLabel = document.querySelector("#eval-audit-label");
 const evalPayloadModal = document.querySelector("#eval-payload-modal");
+const evalValidation = document.querySelector("#eval-validation");
+const evalSavedProfile = document.querySelector("#eval-saved-profile");
 const editorOutput = document.querySelector("#rule-editor-output");
 const branchEditor = document.querySelector("#branch-editor");
 const ruleGraph = document.querySelector("#rule-graph");
@@ -36,6 +38,7 @@ const schemaOutput = document.querySelector("#schema-output");
 const settingsHealthSummary = document.querySelector("#settings-health-summary");
 const integrationTemplate = document.querySelector("#integration-template");
 const integrationResponse = document.querySelector("#integration-response");
+const meiroTestOutput = document.querySelector("#meiro-test-output");
 const metricCards = document.querySelector("#metric-cards");
 const ruleDetailPanel = document.querySelector("#metrics-rule-detail");
 const clientEventsPanel = document.querySelector("#metrics-client-events");
@@ -69,6 +72,7 @@ let cachedLookupTables = [];
 let cachedMessages = [];
 let cachedSettings = {};
 let cachedSchema = [];
+const savedProfileStorageKey = "meiro-dee-evaluate-profiles";
 
 document.querySelectorAll("nav button").forEach((button) => {
   button.addEventListener("click", () => {
@@ -128,6 +132,8 @@ document.querySelector("#refresh-lookups").addEventListener("click", loadLookups
 document.querySelector("#refresh-messages").addEventListener("click", loadMessages);
 document.querySelector("#export-lookup-csv").addEventListener("click", exportLookupCsv);
 document.querySelector("#refresh-settings").addEventListener("click", loadSettings);
+document.querySelector("#test-meiro-profile").addEventListener("click", () => testMeiroConnection("profile"));
+document.querySelector("#test-meiro-collector").addEventListener("click", () => testMeiroConnection("collector"));
 document.querySelector("#refresh-integration").addEventListener("click", loadIntegration);
 document.querySelector("#export-audit-csv").addEventListener("click", exportAuditCsv);
 document.querySelector("#import-schema").addEventListener("click", importSchema);
@@ -139,13 +145,22 @@ document.querySelector("#load-preset").addEventListener("click", loadEvaluatePre
 document.querySelector("#load-preset-secondary").addEventListener("click", loadEvaluatePreset);
 document.querySelector("#open-eval-payload").addEventListener("click", openEvalPayload);
 document.querySelector("#close-eval-payload").addEventListener("click", closeEvalPayload);
-document.querySelector("#eval-mode").addEventListener("change", renderEvaluateModeLabels);
+document.querySelector("#save-eval-profile").addEventListener("click", saveEvaluateProfile);
+document.querySelector("#delete-eval-profile").addEventListener("click", deleteEvaluateProfile);
+document.querySelector("#compare-eval").addEventListener("click", compareEvaluateVersions);
+document.querySelector("#eval-saved-profile").addEventListener("change", loadSavedEvaluateProfile);
+document.querySelector("#eval-mode").addEventListener("change", () => {
+  renderEvaluateModeLabels();
+  renderEvaluateValidation();
+});
 document.querySelector("#eval-rule-key").addEventListener("change", loadEvaluatePresetForSelectedRule);
 document.querySelector("#eval-profile-key").addEventListener("input", () => {
   const body = readEvaluateInput();
   body.profile_key = document.querySelector("#eval-profile-key").value.trim() || body.profile_key;
   evalInput.value = JSON.stringify(body, null, 2);
+  renderEvaluateValidation();
 });
+evalInput.addEventListener("input", () => renderEvaluateValidation());
 document.querySelector("#new-rule").addEventListener("click", newRule);
 document.querySelector("#new-lookup").addEventListener("click", newLookup);
 document.querySelector("#new-message").addEventListener("click", newMessage);
@@ -206,7 +221,11 @@ document.querySelector("#format-message-json").addEventListener("click", formatA
   "#message-primary-cta-label",
   "#message-primary-cta-url",
   "#message-secondary-cta-label",
-  "#message-secondary-cta-url"
+  "#message-secondary-cta-url",
+  "#message-starts-at",
+  "#message-expires-at",
+  "#message-priority",
+  "#message-frequency-ttl"
 ].forEach((selector) => {
   document.querySelector(selector).addEventListener("input", renderMessagePreview);
   document.querySelector(selector).addEventListener("change", renderMessagePreview);
@@ -254,6 +273,8 @@ loadSchema({ silent: true });
 loadEvaluatePreset();
 renderEvaluationSummary(null, document.querySelector("#eval-mode").value);
 renderEvaluationOutputSummary(null);
+renderSavedEvaluateProfiles();
+renderEvaluateValidation();
 loadIntegration();
 loadRuntimeStatus();
 
@@ -1163,6 +1184,10 @@ function newMessage(options = {}) {
   document.querySelector("#message-status").value = "active";
   document.querySelector("#message-template-type").value = "banner";
   document.querySelector("#message-placement").value = "homepage.hero.top";
+  document.querySelector("#message-starts-at").value = "";
+  document.querySelector("#message-expires-at").value = "";
+  document.querySelector("#message-priority").value = "0";
+  document.querySelector("#message-frequency-ttl").value = "";
   document.querySelector("#message-content").value = JSON.stringify({
     template_type: "banner",
     placement: "homepage.hero.top",
@@ -1187,7 +1212,14 @@ function newMessage(options = {}) {
     image_url: "url",
     ctas: [{ label: "string", url: "url", style: "primary|secondary" }]
   }, null, 2);
-  document.querySelector("#message-metadata").value = JSON.stringify({}, null, 2);
+  document.querySelector("#message-metadata").value = JSON.stringify({
+    lifecycle: {
+      starts_at: "",
+      expires_at: "",
+      ttl_seconds: 0
+    },
+    priority: 0
+  }, null, 2);
   syncMessagePreviewFromJson();
   messageOutput.textContent = "Ready for a new message";
   if (!options.silent) openMessageDetail();
@@ -1208,6 +1240,7 @@ function loadMessage(id, messages) {
   document.querySelector("#message-content").value = JSON.stringify(message.default_content || {}, null, 2);
   document.querySelector("#message-schema").value = JSON.stringify(message.content_schema || {}, null, 2);
   document.querySelector("#message-metadata").value = JSON.stringify(message.metadata || {}, null, 2);
+  syncMessageDeliveryFromMetadata(message.metadata || {});
   syncMessagePreviewFromJson();
   messageOutput.textContent = `Loaded ${id}`;
   openMessageDetail();
@@ -1217,6 +1250,7 @@ async function saveMessage(event) {
   event.preventDefault();
   try {
     syncMessageJsonFromPreview();
+    syncMessageMetadataFromDelivery();
     const id = selectedMessageId || document.querySelector("#message-id").value.trim();
     const body = {
       name: document.querySelector("#message-name").value.trim() || id,
@@ -1290,6 +1324,43 @@ function syncMessageJsonFromPreview() {
   messageOutput.textContent = "Message JSON synced";
 }
 
+function syncMessageDeliveryFromMetadata(metadata = {}) {
+  const lifecycle = metadata.lifecycle || metadata.delivery || {};
+  document.querySelector("#message-starts-at").value = dateTimeLocalValue(lifecycle.starts_at || metadata.starts_at || "");
+  document.querySelector("#message-expires-at").value = dateTimeLocalValue(lifecycle.expires_at || metadata.expires_at || "");
+  document.querySelector("#message-priority").value = Number(metadata.priority ?? lifecycle.priority ?? 0);
+  document.querySelector("#message-frequency-ttl").value = Number(lifecycle.ttl_seconds ?? metadata.ttl_seconds ?? 0) || "";
+}
+
+function syncMessageMetadataFromDelivery() {
+  const metadata = parseJsonSafe(document.querySelector("#message-metadata").value || "{}");
+  const startsAt = isoFromDateTimeLocal(document.querySelector("#message-starts-at").value);
+  const expiresAt = isoFromDateTimeLocal(document.querySelector("#message-expires-at").value);
+  const ttl = Number(document.querySelector("#message-frequency-ttl").value || 0);
+  metadata.priority = Number(document.querySelector("#message-priority").value || 0);
+  metadata.lifecycle = {
+    ...(metadata.lifecycle || {}),
+    starts_at: startsAt,
+    expires_at: expiresAt,
+    ttl_seconds: Number.isFinite(ttl) && ttl > 0 ? ttl : 0
+  };
+  document.querySelector("#message-metadata").value = JSON.stringify(metadata, null, 2);
+}
+
+function dateTimeLocalValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function isoFromDateTimeLocal(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
 function formatActiveMessageJson() {
   const activePanel = document.querySelector(".message-bottom-drawer .drawer-panel.active");
   const textarea = activePanel?.querySelector("textarea");
@@ -1316,6 +1387,8 @@ function renderMessagePreview() {
   const imageUrl = document.querySelector("#message-preview-image").value.trim();
   const surface = document.querySelector("#message-surface").value.trim() || "-";
   const status = document.querySelector("#message-status").value || "active";
+  const ttl = Number(document.querySelector("#message-frequency-ttl").value || 0);
+  const expiresAt = document.querySelector("#message-expires-at").value;
   const ctas = [
     {
       label: document.querySelector("#message-primary-cta-label").value.trim(),
@@ -1344,6 +1417,8 @@ function renderMessagePreview() {
     statusItem("Template", templateType),
     statusItem("Placement", placement || "-"),
     statusItem("Surface", surface),
+    statusItem("TTL", ttl > 0 ? `${ttl}s` : "No recheck hint"),
+    statusItem("Expires", expiresAt ? formatTime(new Date(expiresAt).toISOString()) : "-"),
     statusItem("Message ID", document.querySelector("#message-id").value.trim() || "-"),
     statusItem("Schema fields", Object.keys(parseJsonSafe(document.querySelector("#message-schema").value || "{}")).length)
   ].join("");
@@ -1409,6 +1484,8 @@ async function loadLookupVersions(id) {
 async function runEvaluate() {
   try {
     const request = readEvaluateInput();
+    const validation = renderEvaluateValidation(request);
+    if (validation.errors.length) throw new Error(`Fix request setup first: ${validation.errors.join("; ")}`);
     const mode = document.querySelector("#eval-mode").value;
     const path = mode === "draft"
       ? `/v1/rule-sets/${encodeURIComponent(request.decision_key)}/test`
@@ -1429,6 +1506,119 @@ async function runEvaluate() {
     evalTrace.innerHTML = "";
     evalOutput.textContent = error.message;
   }
+}
+
+async function compareEvaluateVersions() {
+  try {
+    const request = readEvaluateInput();
+    const validation = renderEvaluateValidation(request);
+    if (validation.errors.length) throw new Error(`Fix request setup first: ${validation.errors.join("; ")}`);
+    const [published, draft] = await Promise.allSettled([
+      api(`/v1/rule-sets/${encodeURIComponent(request.decision_key)}/test-published`, {
+        method: "POST",
+        body: JSON.stringify(request)
+      }),
+      api(`/v1/rule-sets/${encodeURIComponent(request.decision_key)}/test`, {
+        method: "POST",
+        body: JSON.stringify(request)
+      })
+    ]);
+    const body = {
+      decision_key: request.decision_key,
+      profile_key: request.profile_key,
+      compare: {
+        published: published.status === "fulfilled" ? published.value : { error: published.reason.message },
+        draft: draft.status === "fulfilled" ? draft.value : { error: draft.reason.message }
+      }
+    };
+    renderEvaluationCompare(body);
+    evalOutput.textContent = JSON.stringify(body, null, 2);
+    loadAudit();
+    loadMetrics();
+  } catch (error) {
+    renderEvaluationSummary(null, "compare", error);
+    renderEvaluationOutputSummary(null, error);
+    evalTrace.innerHTML = "";
+    evalOutput.textContent = error.message;
+  }
+}
+
+function renderEvaluationCompare(body) {
+  const published = body.compare?.published || {};
+  const draft = body.compare?.draft || {};
+  const changed = compareDecisionResults(published, draft);
+  evalSummary.innerHTML = [
+    statusItem("Status", changed.length ? "Changed" : "Same"),
+    statusItem("Mode", "Published vs draft"),
+    statusItem("Published", published.error || published.result || "-"),
+    statusItem("Draft", draft.error || draft.result || "-")
+  ].join("");
+  evalOutputSummary.innerHTML = `
+    <div class="compare-grid">
+      ${compareDecisionCard("Published", published)}
+      ${compareDecisionCard("Draft", draft)}
+    </div>
+    <div class="compare-diff-card ${changed.length ? "warning" : ""}">
+      <span>Differences</span>
+      <strong>${escapeHtml(changed.length ? changed.join(", ") : "No functional difference detected")}</strong>
+    </div>
+  `;
+  evalTrace.innerHTML = `
+    <div class="trace-card">
+      <div class="trace-card-header">
+        <strong>Decision Path Compare</strong>
+        <span class="trace-badge">${escapeHtml(changed.length ? `${changed.length} changes` : "same")}</span>
+      </div>
+      <div class="compare-trace-grid">
+        <div>${traceCompareColumn("Published", published.trace)}</div>
+        <div>${traceCompareColumn("Draft", draft.trace)}</div>
+      </div>
+    </div>
+  `;
+}
+
+function compareDecisionCard(label, result) {
+  if (result.error) {
+    return `
+      <div class="eval-output-card warning">
+        <span>${escapeHtml(label)}</span>
+        <strong>Error</strong>
+        <small>${escapeHtml(result.error)}</small>
+      </div>
+    `;
+  }
+  return `
+    <div class="eval-output-card ${label === "Draft" ? "primary" : ""}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(result.result || "-")}</strong>
+      <small>${escapeHtml(result.matched_rules?.join(", ") || "fallback")}</small>
+    </div>
+  `;
+}
+
+function compareDecisionResults(left, right) {
+  const changes = [];
+  if (left.error || right.error) {
+    if (left.error !== right.error) changes.push("availability");
+    return changes;
+  }
+  if (left.result !== right.result) changes.push("result");
+  if (JSON.stringify(left.outputs || {}) !== JSON.stringify(right.outputs || {})) changes.push("outputs");
+  if (JSON.stringify(left.matched_rules || []) !== JSON.stringify(right.matched_rules || [])) changes.push("matched rules");
+  if (JSON.stringify(left.errors || []) !== JSON.stringify(right.errors || [])) changes.push("errors");
+  return changes;
+}
+
+function traceCompareColumn(label, trace = []) {
+  const items = Array.isArray(trace) && trace.length ? trace : [{ type: "empty", message: "No trace returned" }];
+  return `
+    <div class="trace-compare-column">
+      <strong>${escapeHtml(label)}</strong>
+      <div class="trace-path compact">
+        ${items.map(traceStepHtml).join("")}
+      </div>
+    </div>
+  `;
 }
 
 function header(values) {
@@ -2875,6 +3065,7 @@ function loadEvaluatePreset() {
   document.querySelector("#eval-profile-key").value = request.profile_key;
   evalInput.value = JSON.stringify(request, null, 2);
   renderEvaluateModeLabels();
+  renderEvaluateValidation(request);
 }
 
 function loadEvaluatePresetForSelectedRule() {
@@ -2891,6 +3082,80 @@ function loadEvaluatePresetForSelectedRule() {
   renderEvaluationOutputSummary(null);
   evalTrace.innerHTML = "";
   evalOutput.textContent = "";
+  renderEvaluateValidation(request);
+}
+
+function renderSavedEvaluateProfiles() {
+  if (!evalSavedProfile) return;
+  const profiles = readSavedEvaluateProfiles();
+  evalSavedProfile.innerHTML = [
+    `<option value="">No saved profile selected</option>`,
+    ...profiles.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)} · ${escapeHtml(profile.decision_key || "any rule")}</option>`)
+  ].join("");
+}
+
+function readSavedEvaluateProfiles() {
+  try {
+    const profiles = JSON.parse(localStorage.getItem(savedProfileStorageKey) || "[]");
+    return Array.isArray(profiles) ? profiles : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSavedEvaluateProfiles(profiles) {
+  localStorage.setItem(savedProfileStorageKey, JSON.stringify(profiles.slice(0, 50)));
+}
+
+function saveEvaluateProfile() {
+  try {
+    const request = readEvaluateInput();
+    const validation = renderEvaluateValidation(request);
+    if (validation.errors.length) throw new Error(`Profile cannot be saved: ${validation.errors.join("; ")}`);
+    const name = window.prompt("Saved profile name", `${request.decision_key} · ${request.profile_key}`);
+    if (!name) return;
+    const profiles = readSavedEvaluateProfiles();
+    const id = `${request.decision_key}:${request.profile_key}:${name}`.toLowerCase().replace(/[^a-z0-9:_-]+/g, "_");
+    const next = profiles.filter((profile) => profile.id !== id);
+    next.unshift({
+      id,
+      name,
+      decision_key: request.decision_key,
+      profile_key: request.profile_key,
+      request,
+      updated_at: new Date().toISOString()
+    });
+    writeSavedEvaluateProfiles(next);
+    renderSavedEvaluateProfiles();
+    evalSavedProfile.value = id;
+    renderEvaluateValidation(request, "Saved profile is ready for reuse.");
+  } catch (error) {
+    renderEvaluateValidation(null, error.message);
+  }
+}
+
+function deleteEvaluateProfile() {
+  const id = evalSavedProfile?.value;
+  if (!id) return;
+  writeSavedEvaluateProfiles(readSavedEvaluateProfiles().filter((profile) => profile.id !== id));
+  renderSavedEvaluateProfiles();
+  renderEvaluateValidation(null, "Saved profile deleted.");
+}
+
+function loadSavedEvaluateProfile() {
+  const id = evalSavedProfile?.value;
+  if (!id) return;
+  const profile = readSavedEvaluateProfiles().find((item) => item.id === id);
+  if (!profile) return;
+  const request = structuredClone(profile.request);
+  if (cachedRuleSets.some((ruleSet) => ruleSet.decision_key === request.decision_key)) {
+    document.querySelector("#eval-rule-key").value = request.decision_key;
+  }
+  document.querySelector("#eval-profile-key").value = request.profile_key || "";
+  syncEvaluatePresetSelect(selectedEvaluateRule());
+  evalInput.value = JSON.stringify(request, null, 2);
+  renderEvaluateModeLabels();
+  renderEvaluateValidation(request, "Loaded saved profile.");
 }
 
 function syncEvaluatePresetSelect(rule = {}) {
@@ -2928,6 +3193,43 @@ function readEvaluateInputSafe() {
   }
 }
 
+function renderEvaluateValidation(request = null, notice = "") {
+  if (!evalValidation) return { errors: [], warnings: [] };
+  let body = request;
+  const errors = [];
+  const warnings = [];
+  if (!body) {
+    try {
+      body = readEvaluateInput();
+    } catch (error) {
+      errors.push(`Payload JSON is invalid: ${error.message}`);
+    }
+  }
+  if (body) {
+    if (!body.decision_key) errors.push("decision_key is required");
+    if (!body.profile_key) errors.push("profile_key is required");
+    if (!Array.isArray(body.identifiers)) errors.push("identifiers must be an array");
+    if (!body.attributes || typeof body.attributes !== "object" || Array.isArray(body.attributes)) warnings.push("attributes should be an object of Meiro attribute arrays");
+    if (!body.context || typeof body.context !== "object" || Array.isArray(body.context)) warnings.push("context should be an object");
+    const selected = selectedEvaluateRule();
+    if (selected?.input_schema?.properties || selected?.input_schema?.attributes) {
+      const required = Object.keys(selected.input_schema.properties || selected.input_schema.attributes || {});
+      const missing = required.filter((key) => !(key in (body.attributes || {})) && !(key in (body.context || {})) && !(key in (body.segments || {})));
+      if (missing.length) warnings.push(`schema fields not present in payload: ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? "…" : ""}`);
+    }
+    const mode = document.querySelector("#eval-mode").value;
+    if (mode === "draft" && selected?.status === "archived") warnings.push("selected rule is archived; draft tests may not reflect a published route");
+  }
+  const className = errors.length ? "error" : warnings.length ? "warning" : "ok";
+  const items = errors.length ? errors : warnings.length ? warnings : [notice || "Request shape looks ready."];
+  evalValidation.className = `eval-validation ${className}`;
+  evalValidation.innerHTML = `
+    <strong>${errors.length ? "Fix before running" : warnings.length ? "Review before running" : "Ready"}</strong>
+    <span>${escapeHtml(items.join(" · "))}</span>
+  `;
+  return { errors, warnings };
+}
+
 function formatDecisionOutput(body) {
   return JSON.stringify({
     summary: {
@@ -2951,12 +3253,18 @@ function renderEvaluateModeLabels() {
   evalAuditLabel.textContent = mode === "draft" ? "No, draft test" : "Yes, published mode";
 }
 
+function evaluateModeLabel(mode) {
+  if (mode === "draft") return "Draft";
+  if (mode === "compare") return "Compare";
+  return "Published";
+}
+
 function renderEvaluationSummary(body, mode, error) {
   if (!evalSummary) return;
   if (error) {
     evalSummary.innerHTML = [
       statusItem("Status", "Error"),
-      statusItem("Mode", mode === "draft" ? "Draft" : "Published"),
+      statusItem("Mode", evaluateModeLabel(mode)),
       statusItem("Result", "-"),
       statusItem("Matched", "-")
     ].join("");
@@ -2965,7 +3273,7 @@ function renderEvaluationSummary(body, mode, error) {
   if (!body) {
     evalSummary.innerHTML = [
       statusItem("Status", "Ready"),
-      statusItem("Mode", mode === "draft" ? "Draft" : "Published"),
+      statusItem("Mode", evaluateModeLabel(mode)),
       statusItem("Result", "-"),
       statusItem("Matched", "-")
     ].join("");
@@ -2973,7 +3281,7 @@ function renderEvaluationSummary(body, mode, error) {
   }
   evalSummary.innerHTML = [
     statusItem("Status", body.errors?.length ? "Warning" : "OK"),
-    statusItem("Mode", mode === "draft" ? "Draft" : "Published"),
+    statusItem("Mode", evaluateModeLabel(mode)),
     statusItem("Result", body.result || "-"),
     statusItem("Matched", body.matched_rules?.join(", ") || "fallback")
   ].join("");
@@ -3259,6 +3567,28 @@ async function loadSettings() {
   } catch (error) {
     settingsOutput.textContent = error.message;
     renderSettingsSummary(null, null, error);
+  }
+}
+
+async function testMeiroConnection(target) {
+  try {
+    if (meiroTestOutput) meiroTestOutput.textContent = `Testing ${target} connection...`;
+    const body = {
+      target,
+      meiro_url: document.querySelector("#setting-meiro-url").value.trim(),
+      meiro_source_slug: document.querySelector("#setting-meiro-source-slug").value.trim(),
+      meiro_api_url: document.querySelector("#setting-meiro-api-url").value.trim(),
+      meiro_api_token: document.querySelector("#setting-meiro-api-token").value.trim(),
+      identifier_type: document.querySelector("#schema-sync-identifier-type").value.trim(),
+      identifier_value: document.querySelector("#schema-sync-identifier-value").value.trim()
+    };
+    const response = await api("/v1/settings/test-connection", {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+    if (meiroTestOutput) meiroTestOutput.textContent = JSON.stringify(response, null, 2);
+  } catch (error) {
+    if (meiroTestOutput) meiroTestOutput.textContent = error.message;
   }
 }
 

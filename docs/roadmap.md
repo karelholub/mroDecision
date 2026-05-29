@@ -28,6 +28,9 @@ Implemented:
 - Audit date filtering and CSV export.
 - Overview rule usage drilldown with fallback rate, matched branch distribution, and recent decisions.
 - Evaluate panel trace cards for matched branch checks and graph node paths.
+- Evaluate saved profile payloads, request-shape validation, and published-vs-draft comparison.
+- Message template controls for type, placement, media, footer, multiple CTAs, delivery lifecycle, priority, and TTL metadata.
+- Settings connection tests for Meiro Profile API and collector endpoints.
 - Embedded UI for rule sets, draft testing, evaluation, audit, lookups, settings, tokens, and Meiro request templates.
 - OpenAPI and Meiro Pipes integration templates.
 - Readiness endpoint, request IDs, request logs, bootstrap-token disablement, CI checks, production Compose/nginx examples, and deployment/backup guidance.
@@ -121,7 +124,7 @@ Goal: support feedback loops and operational reporting for client surfaces.
 - Add exposure and impression reports by rule set, variant, message, surface, and profile.
 - Add optional export format for downstream analytics or Meiro ingestion.
 
-Status: first-pass feedback ingestion is implemented with client-scoped impression and exposure endpoints, service metrics, event reports by rule, variant, message, surface, and profile, a `frequency_cap` graph node backed by impression events, a reusable message library, and surface-level priority evaluation.
+Status: first-pass feedback ingestion is implemented with client-scoped impression and exposure endpoints, service metrics, event reports by rule, variant, message, surface, and profile, a `frequency_cap` graph node backed by impression events, a reusable message library, surface-level priority evaluation, flexible message templates, and message lifecycle/TTL metadata.
 
 Open decision: defer mutual exclusion groups until basic experiment evaluation and exposure feedback are proven.
 
@@ -143,4 +146,5 @@ Status: readiness, request IDs, request logs, guarded bootstrap-token disablemen
 
 1. Add broader Meiro catalog sync if/when segment schema APIs are confirmed.
 2. Add drag/drop layout polish for the graph editor.
-3. Add managed database adapter implementation if production scale requires multiple replicas.
+3. Add server-side saved test-profile storage and team sharing if local browser storage is not enough.
+4. Add managed database adapter implementation if production scale requires multiple replicas.

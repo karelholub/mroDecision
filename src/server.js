@@ -239,6 +239,13 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  if (req.method === "POST" && pathname === "/v1/settings/test-connection") {
+    requireScope(req, "admin");
+    const result = await testSettingsConnection(await readJson(req));
+    sendJson(res, 200, result);
+    return;
+  }
+
   const ruleSetMatch = pathname.match(/^\/v1\/rule-sets\/([^/]+)(?:\/(.*))?$/);
   if (ruleSetMatch) {
     await routeRuleSet(req, res, decodeURIComponent(ruleSetMatch[1]), ruleSetMatch[2] || "");
@@ -390,6 +397,90 @@ async function syncSchemaFromMeiroProfile(input, author) {
     },
     profile_shape: Object.keys(profile)
   };
+}
+
+async function testSettingsConnection(input = {}) {
+  const target = String(input.target || "").trim();
+  if (target === "profile") return testMeiroProfileConnection(input);
+  if (target === "collector") return testMeiroCollectorConnection(input);
+  badRequest("target must be profile or collector");
+}
+
+async function testMeiroProfileConnection(input = {}) {
+  const settings = store.getSettings();
+  const endpoint = String(input.meiro_api_url || settings.meiro_api_url || "").trim();
+  const token = String(input.meiro_api_token || settings.meiro_api_token || "").trim();
+  const identifierType = String(input.identifier_type || settings.schema_sync_identifier_type || "").trim();
+  const identifierValue = String(input.identifier_value || settings.schema_sync_identifier_value || "").trim();
+  if (!endpoint) badRequest("meiro_api_url is required");
+  if (!token) badRequest("meiro_api_token is required");
+  if (!identifierType || !identifierValue) badRequest("identifier_type and identifier_value are required");
+
+  const url = new URL(endpoint);
+  url.searchParams.set("identifier_type", identifierType);
+  url.searchParams.set("identifier_value", identifierValue);
+  const response = await fetchWithTimeout(url, {
+    headers: {
+      "x-api-token": token,
+      authorization: `Bearer ${token}`,
+      accept: "application/json"
+    }
+  });
+  const text = await response.text();
+  let parsed = {};
+  try {
+    parsed = text ? JSON.parse(text) : {};
+  } catch {
+    parsed = { raw_preview: text.slice(0, 300) };
+  }
+  return {
+    target: "profile",
+    ok: response.ok,
+    status: response.status,
+    endpoint: url.origin + url.pathname,
+    profile_keys: Object.keys(parsed || {}).slice(0, 20),
+    message: response.ok ? "Profile API reached" : parsed.message || parsed.error || "Profile API returned an error"
+  };
+}
+
+async function testMeiroCollectorConnection(input = {}) {
+  const settings = store.getSettings();
+  const base = String(input.meiro_url || settings.meiro_url || "").trim();
+  const slug = String(input.meiro_source_slug || settings.meiro_source_slug || "").trim();
+  if (!base) badRequest("meiro_url is required");
+  if (!slug) badRequest("meiro_source_slug is required");
+  const url = new URL(["collect", slug].join("/"), base.endsWith("/") ? base : `${base}/`);
+  const response = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      decision_key: "connection_test",
+      profile_key: "dee-settings-test",
+      result: "test",
+      outputs: { source: "dee_settings" },
+      matched_rules: [],
+      errors: [],
+      evaluated_at: createdAtIso()
+    })
+  });
+  const text = await response.text();
+  return {
+    target: "collector",
+    ok: response.ok,
+    status: response.status,
+    endpoint: url.toString(),
+    message: response.ok ? "Collector accepted test payload" : text.slice(0, 300) || "Collector returned an error"
+  };
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function scheduleSchemaSync() {
@@ -665,6 +756,25 @@ async function routeRuleSet(req, res, key, suffix) {
       lookupTables: store.listLookupTables()
     });
     sendJson(res, 200, { ...result, tested_version: "draft" });
+    return;
+  }
+
+  if (req.method === "POST" && suffix === "test-published") {
+    requireScope(req, "editor");
+    const ruleSet = store.getRuleSet(key);
+    if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
+    const body = {
+      ...(await readJson(req)),
+      decision_key: key
+    };
+    validateEvaluateRequest(body);
+    const version = store.getVersion(key, body.rule_version);
+    const result = evaluateDecision({
+      request: body,
+      version,
+      lookupTables: store.listLookupTables()
+    });
+    sendJson(res, 200, { ...result, tested_version: "published" });
     return;
   }
 

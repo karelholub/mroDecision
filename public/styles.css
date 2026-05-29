@@ -1798,6 +1798,50 @@ header {
   overflow: auto;
 }
 
+.eval-validation {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--panel-soft);
+}
+
+.eval-validation strong {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.eval-validation span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.eval-validation.ok {
+  border-color: #a7d7cd;
+  background: #f0faf7;
+}
+
+.eval-validation.warning {
+  border-color: #f0cf75;
+  background: var(--warning-soft);
+}
+
+.eval-validation.error {
+  border-color: #f0a1a1;
+  background: #fff5f5;
+}
+
+.settings-test-output {
+  min-height: 110px;
+  max-height: 220px;
+  overflow: auto;
+}
+
 .eval-output-card {
   display: grid;
   gap: 4px;
@@ -1828,6 +1872,43 @@ header {
   min-width: 0;
   overflow-wrap: anywhere;
   font-size: 14px;
+}
+
+.compare-grid,
+.compare-trace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.compare-diff-card {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel-soft);
+}
+
+.compare-diff-card.warning {
+  border-color: #f0cf75;
+  background: var(--warning-soft);
+}
+
+.compare-diff-card span,
+.compare-diff-card strong {
+  overflow-wrap: anywhere;
+}
+
+.trace-compare-column {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.trace-path.compact {
+  gap: 6px;
 }
 
 .eval-empty-state {

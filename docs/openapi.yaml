@@ -480,6 +480,30 @@ paths:
                       tested_version:
                         type: string
                         const: draft
+  /v1/rule-sets/{key}/test-published:
+    post:
+      summary: Test the published version for a rule set without writing an audit entry
+      parameters:
+        - $ref: "#/components/parameters/RuleSetKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateRequestProfile"
+      responses:
+        "200":
+          description: Published evaluation result without audit write
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/EvaluateResponse"
+                  - type: object
+                    properties:
+                      tested_version:
+                        type: string
+                        const: published
   /v1/rule-sets/{key}/versions:
     get:
       summary: List published versions for a rule set
@@ -1008,6 +1032,50 @@ paths:
                     properties:
                       schema_sync:
                         $ref: "#/components/schemas/SchemaSyncRuntime"
+  /v1/settings/test-connection:
+    post:
+      summary: Test configured Meiro Profile API or collector connectivity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target]
+              properties:
+                target:
+                  type: string
+                  enum: [profile, collector]
+                meiro_url:
+                  type: string
+                meiro_source_slug:
+                  type: string
+                meiro_api_url:
+                  type: string
+                meiro_api_token:
+                  type: string
+                identifier_type:
+                  type: string
+                identifier_value:
+                  type: string
+      responses:
+        "200":
+          description: Connectivity test result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  target:
+                    type: string
+                  ok:
+                    type: boolean
+                  status:
+                    type: integer
+                  endpoint:
+                    type: string
+                  message:
+                    type: string
 components:
   securitySchemes:
     bearerAuth:

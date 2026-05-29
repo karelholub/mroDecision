@@ -489,12 +489,20 @@
                 Profile key
                 <input id="eval-profile-key" value="demo-profile" />
               </label>
+              <label>
+                Saved profile
+                <select id="eval-saved-profile"></select>
+              </label>
             </div>
             <div class="actions left">
               <button type="button" id="load-preset-secondary">Load Preset</button>
               <button type="button" id="open-eval-payload">Edit Profile Payload</button>
+              <button type="button" id="save-eval-profile">Save Profile</button>
+              <button type="button" id="delete-eval-profile">Delete</button>
               <button type="button" id="run-eval-secondary">Run</button>
+              <button type="button" id="compare-eval">Compare Draft</button>
             </div>
+            <div id="eval-validation" class="eval-validation"></div>
             <div class="inspector-section">
               <h3>What This Runs</h3>
               <div class="inspector-lines">
@@ -696,6 +704,27 @@
                       <label>
                         Secondary CTA URL
                         <input id="message-secondary-cta-url" placeholder="https://..." />
+                      </label>
+                    </div>
+                  </div>
+                  <div class="message-editor-section">
+                    <div class="editor-title">Delivery & TTL</div>
+                    <div class="message-field-grid">
+                      <label>
+                        Starts at
+                        <input id="message-starts-at" type="datetime-local" />
+                      </label>
+                      <label>
+                        Expires at
+                        <input id="message-expires-at" type="datetime-local" />
+                      </label>
+                      <label>
+                        Priority
+                        <input id="message-priority" type="number" value="0" />
+                      </label>
+                      <label>
+                        Recheck TTL seconds
+                        <input id="message-frequency-ttl" type="number" min="0" placeholder="300" />
                       </label>
                     </div>
                   </div>
@@ -926,7 +955,10 @@
               </div>
               <div class="actions left">
                 <button type="submit">Save Settings</button>
+                <button type="button" id="test-meiro-profile">Test Profile API</button>
+                <button type="button" id="test-meiro-collector">Test Collector</button>
               </div>
+              <pre id="meiro-test-output" class="settings-test-output"></pre>
             </section>
             <section class="settings-tab-panel" data-settings-panel="meiro">
               <div class="settings-section-head">
