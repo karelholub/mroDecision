@@ -4000,7 +4000,7 @@ async function loadSettings() {
     document.querySelector("#setting-meiro-skill-url").value = settings.meiro_skill_url || "";
     document.querySelector("#setting-meiro-cli-url").value = settings.meiro_cli_url || settings.meiro_url || "";
     document.querySelector("#setting-meiro-cli-token").value = "";
-    document.querySelector("#setting-meiro-cli-token").placeholder = settings.meiro_cli_token_configured ? "Configured" : "Uses Profile API token";
+    document.querySelector("#setting-meiro-cli-token").placeholder = settings.meiro_cli_token_configured ? "Configured" : "Separate mpcli token";
     document.querySelector("#setting-schema-sync-interval").value = settings.schema_sync_interval_minutes || 15;
     document.querySelector("#schema-sync-identifier-type").value = settings.schema_sync_identifier_type || "";
     document.querySelector("#schema-sync-identifier-value").value = settings.schema_sync_identifier_value || "";
@@ -4210,7 +4210,7 @@ function renderSettingsSummary(settings, runtime, error = null) {
   const collectorConfigured = Boolean(settings?.meiro_url && settings?.meiro_source_slug);
   const feedbackConfigured = Boolean(settings?.meiro_feedback_url);
   const apiConfigured = Boolean(settings?.meiro_api_url && settings?.meiro_api_token_configured);
-  const metadataConfigured = Boolean((settings?.meiro_cli_url || settings?.meiro_url) && (settings?.meiro_cli_token_configured || settings?.meiro_api_token_configured));
+  const metadataConfigured = Boolean((settings?.meiro_cli_url || settings?.meiro_url) && settings?.meiro_cli_token_configured);
   const schemaStatus = settings?.schema_last_sync_status || "never";
   const schemaHealthy = ["ok", "success"].includes(schemaStatus);
   const schemaDetail = settings?.schema_last_synced_at
@@ -4244,8 +4244,8 @@ function renderSettingsSummary(settings, runtime, error = null) {
     },
     {
       label: "Meiro Metadata",
-      value: metadataConfigured ? "Configured" : "Fallback only",
-      detail: metadataConfigured ? (settings.meiro_cli_url || settings.meiro_url) : "Add shared API token for mpcli catalog sync",
+      value: metadataConfigured ? "Configured" : "CLI token missing",
+      detail: metadataConfigured ? (settings.meiro_cli_url || settings.meiro_url) : "Add separate mpcli token for catalog and audience sync",
       ok: metadataConfigured
     },
     {

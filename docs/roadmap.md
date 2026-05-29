@@ -35,7 +35,7 @@ Implemented:
 - Message template controls for type, placement, media, footer, multiple CTAs, delivery lifecycle, priority, and TTL metadata.
 - Settings connection tests for Meiro Profile API, collector, and explicit feedback endpoints.
 - Schema import diagnostics for imported, skipped, and failed fields.
-- Meiro skill/mpcli metadata sync with Profile API fallback for condition-builder suggestions.
+- Meiro skill/mpcli metadata sync with a separate CLI/shared API token, plus Profile API fallback for condition-builder suggestions.
 - Meiro webhook and feedback delivery status history.
 - Embedded UI for rule sets, draft testing, evaluation, audit, lookups, settings, tokens, and Meiro request templates.
 - OpenAPI and Meiro Pipes integration templates.
@@ -81,7 +81,7 @@ Goal: make authoring safer by validating against Meiro attributes and audiences.
 
 Open decision: confirm exact Meiro Profile/Engage API endpoints and credentials available for schema and segment sync.
 
-Status: implemented for Profile API sample-profile sync plus skill/mpcli metadata discovery. Shared API endpoints for attributes, audiences, identifier types, catalogs, and event types are wired and reported through diagnostics; they require a Meiro personal API token compatible with `mpcli`.
+Status: implemented for Profile API sample-profile sync plus skill/mpcli metadata discovery. Shared API endpoints for attributes, audiences, identifier types, catalogs, and event types are wired and reported through diagnostics; they require a separate Meiro personal API token compatible with `mpcli`.
 
 ## Phase 3: Advanced Rule Authoring
 

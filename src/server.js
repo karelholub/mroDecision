@@ -459,7 +459,7 @@ async function syncMeiroMetadata(input = {}, author) {
   const settings = store.getSettings();
   const skillUrl = String(input.meiro_skill_url || settings.meiro_skill_url || "").trim();
   const cliBase = String(input.meiro_cli_url || settings.meiro_cli_url || settings.meiro_url || "").trim();
-  const cliToken = String(input.meiro_cli_token || settings.meiro_cli_token || input.meiro_api_token || settings.meiro_api_token || "").trim();
+  const cliToken = String(input.meiro_cli_token || settings.meiro_cli_token || "").trim();
   const diagnostics = {
     summary: { imported: 0, skipped: 0, failed: 0 },
     skill: null,
