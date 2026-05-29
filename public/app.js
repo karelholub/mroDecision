@@ -4084,6 +4084,8 @@ async function syncSchemaFromMeiro() {
     const body = await api("/v1/schema/sync", {
       method: "POST",
       body: JSON.stringify({
+        meiro_api_url: document.querySelector("#setting-meiro-api-url").value.trim(),
+        meiro_api_token: document.querySelector("#setting-meiro-api-token").value.trim(),
         identifier_type: document.querySelector("#schema-sync-identifier-type").value.trim(),
         identifier_value: document.querySelector("#schema-sync-identifier-value").value.trim()
       })
