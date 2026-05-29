@@ -31,7 +31,9 @@ Implemented:
 - Evaluate saved profile payloads, request-shape validation, and published-vs-draft comparison.
 - Shared server-side saved evaluation profiles for team QA payloads.
 - Message template controls for type, placement, media, footer, multiple CTAs, delivery lifecycle, priority, and TTL metadata.
-- Settings connection tests for Meiro Profile API and collector endpoints.
+- Settings connection tests for Meiro Profile API, collector, and explicit feedback endpoints.
+- Schema import diagnostics for imported, skipped, and failed fields.
+- Meiro webhook and feedback delivery status history.
 - Embedded UI for rule sets, draft testing, evaluation, audit, lookups, settings, tokens, and Meiro request templates.
 - OpenAPI and Meiro Pipes integration templates.
 - Readiness endpoint, request IDs, request logs, bootstrap-token disablement, CI checks, production Compose/nginx examples, and deployment/backup guidance.

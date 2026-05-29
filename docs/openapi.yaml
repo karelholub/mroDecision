@@ -907,6 +907,29 @@ paths:
                 properties:
                   imported:
                     type: object
+                  diagnostics:
+                    $ref: "#/components/schemas/SchemaImportDiagnostics"
+  /v1/meiro-deliveries:
+    get:
+      summary: List recent Meiro webhook and feedback delivery attempts
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Recent Meiro delivery attempts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deliveries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MeiroDelivery"
   /v1/schema/sync:
     post:
       summary: Sync schema by sampling a Meiro profile
@@ -1097,7 +1120,7 @@ paths:
                         $ref: "#/components/schemas/SchemaSyncRuntime"
   /v1/settings/test-connection:
     post:
-      summary: Test configured Meiro Profile API or collector connectivity
+      summary: Test configured Meiro Profile API, collector, or feedback connectivity
       requestBody:
         required: true
         content:
@@ -1108,7 +1131,7 @@ paths:
               properties:
                 target:
                   type: string
-                  enum: [profile, collector]
+                  enum: [profile, collector, feedback]
                 meiro_url:
                   type: string
                 meiro_source_slug:
@@ -1116,6 +1139,8 @@ paths:
                 meiro_api_url:
                   type: string
                 meiro_api_token:
+                  type: string
+                meiro_feedback_url:
                   type: string
                 identifier_type:
                   type: string
@@ -1779,6 +1804,48 @@ components:
                 type: string
               type:
                 type: string
+    SchemaImportDiagnostics:
+      type: object
+      properties:
+        summary:
+          type: object
+          properties:
+            imported:
+              type: integer
+            skipped:
+              type: integer
+            failed:
+              type: integer
+        attributes:
+          type: object
+        segments:
+          type: object
+        context:
+          type: object
+    MeiroDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+        target:
+          type: string
+        endpoint:
+          type: string
+        ok:
+          type: boolean
+        status:
+          type: integer
+        attempted_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+        error:
+          type: string
+        response_preview:
+          type: string
+        payload:
+          type: object
     ConfigBundle:
       type: object
       required: [kind, rule_sets, lookup_tables]
@@ -2062,6 +2129,8 @@ components:
         meiro_api_url:
           type: string
         meiro_api_token:
+          type: string
+        meiro_feedback_url:
           type: string
         schema_sync_interval_minutes:
           type: integer

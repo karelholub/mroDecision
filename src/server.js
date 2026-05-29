@@ -14,8 +14,7 @@ import {
   validateClientSurfaceRequest,
   validateEvaluateRequest,
   validateRuleDefinition,
-  validateRuleSetPayload,
-  validateSchemaImport
+  validateRuleSetPayload
 } from "./validation.js";
 
 const store = await Store.load();
@@ -224,7 +223,8 @@ async function routeApi(req, res, url) {
         direct_url: `http://localhost:${config.port}`,
         docker_url: "http://localhost:8090",
         db_path: config.dbPath,
-        schema_sync: schemaSyncRuntime()
+        schema_sync: schemaSyncRuntime(),
+        meiro_deliveries: store.listMeiroDeliveries({ limit: 10 })
       }
     });
     return;
@@ -242,6 +242,7 @@ async function routeApi(req, res, url) {
   if (req.method === "POST" && pathname === "/v1/settings/test-connection") {
     requireScope(req, "admin");
     const result = await testSettingsConnection(await readJson(req));
+    await store.save();
     sendJson(res, 200, result);
     return;
   }
@@ -351,17 +352,23 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  if (req.method === "GET" && pathname === "/v1/meiro-deliveries") {
+    requireScope(req, "viewer");
+    sendJson(res, 200, { deliveries: store.listMeiroDeliveries(Object.fromEntries(url.searchParams)) });
+    return;
+  }
+
   if (req.method === "POST" && pathname === "/v1/schema/import") {
     requireScope(req, "admin");
     const body = await readJson(req);
-    validateSchemaImport(body);
+    const diagnosed = diagnoseSchemaImport(body);
     const imported = {
-      attributes: store.replaceSchemaItems("attribute", body.attributes || [], req.auth.name),
-      segments: store.replaceSchemaItems("segment", body.segments || [], req.auth.name),
-      context: store.replaceSchemaItems("context", body.context || [], req.auth.name)
+      attributes: diagnosed.replace.attributes ? store.replaceSchemaItems("attribute", diagnosed.valid.attributes, req.auth.name) : [],
+      segments: diagnosed.replace.segments ? store.replaceSchemaItems("segment", diagnosed.valid.segments, req.auth.name) : [],
+      context: diagnosed.replace.context ? store.replaceSchemaItems("context", diagnosed.valid.context, req.auth.name) : []
     };
     await store.save();
-    sendJson(res, 200, { imported });
+    sendJson(res, 200, { imported, diagnostics: diagnosed.diagnostics });
     return;
   }
 
@@ -413,13 +420,19 @@ async function syncSchemaFromMeiroProfile(input, author) {
   }
 
   const inferred = inferSchemaFromProfile(profile);
+  const diagnosed = diagnoseSchemaImport({
+    attributes: inferred.attributes,
+    segments: inferred.segments,
+    context: inferred.context
+  });
   return {
     source: url.origin + url.pathname,
     imported: {
-      attributes: store.replaceSchemaItems("attribute", inferred.attributes, author),
-      segments: store.replaceSchemaItems("segment", inferred.segments, author),
-      context: store.replaceSchemaItems("context", inferred.context, author)
+      attributes: store.replaceSchemaItems("attribute", diagnosed.valid.attributes, author),
+      segments: store.replaceSchemaItems("segment", diagnosed.valid.segments, author),
+      context: store.replaceSchemaItems("context", diagnosed.valid.context, author)
     },
+    diagnostics: diagnosed.diagnostics,
     profile_shape: Object.keys(profile)
   };
 }
@@ -428,7 +441,8 @@ async function testSettingsConnection(input = {}) {
   const target = String(input.target || "").trim();
   if (target === "profile") return testMeiroProfileConnection(input);
   if (target === "collector") return testMeiroCollectorConnection(input);
-  badRequest("target must be profile or collector");
+  if (target === "feedback") return testMeiroFeedbackConnection(input);
+  badRequest("target must be profile, collector, or feedback");
 }
 
 async function testMeiroProfileConnection(input = {}) {
@@ -444,28 +458,50 @@ async function testMeiroProfileConnection(input = {}) {
   const url = new URL(endpoint);
   url.searchParams.set("identifier_type", identifierType);
   url.searchParams.set("identifier_value", identifierValue);
-  const response = await fetchWithTimeout(url, {
-    headers: {
-      "x-api-token": token,
-      authorization: `Bearer ${token}`,
-      accept: "application/json"
-    }
-  });
-  const text = await response.text();
-  let parsed = {};
+  const startedAt = Date.now();
+  let text = "";
   try {
-    parsed = text ? JSON.parse(text) : {};
-  } catch {
-    parsed = { raw_preview: text.slice(0, 300) };
+    const response = await fetchWithTimeout(url, {
+      headers: {
+        "x-api-token": token,
+        authorization: `Bearer ${token}`,
+        accept: "application/json"
+      }
+    });
+    text = await response.text();
+    let parsed = {};
+    try {
+      parsed = text ? JSON.parse(text) : {};
+    } catch {
+      parsed = { raw_preview: text.slice(0, 300) };
+    }
+    const result = {
+      target: "profile",
+      ok: response.ok,
+      status: response.status,
+      endpoint: url.origin + url.pathname,
+      profile_keys: Object.keys(parsed || {}).slice(0, 20),
+      message: response.ok ? "Profile API reached" : parsed.message || parsed.error || "Profile API returned an error"
+    };
+    store.recordMeiroDelivery({
+      ...result,
+      duration_ms: Date.now() - startedAt,
+      response_preview: text.slice(0, 500),
+      payload: { identifier_type: identifierType, identifier_value: identifierValue }
+    });
+    return result;
+  } catch (error) {
+    const result = {
+      target: "profile",
+      ok: false,
+      status: 0,
+      endpoint: url.origin + url.pathname,
+      profile_keys: [],
+      message: error.message
+    };
+    store.recordMeiroDelivery({ ...result, duration_ms: Date.now() - startedAt, error: error.message });
+    return result;
   }
-  return {
-    target: "profile",
-    ok: response.ok,
-    status: response.status,
-    endpoint: url.origin + url.pathname,
-    profile_keys: Object.keys(parsed || {}).slice(0, 20),
-    message: response.ok ? "Profile API reached" : parsed.message || parsed.error || "Profile API returned an error"
-  };
 }
 
 async function testMeiroCollectorConnection(input = {}) {
@@ -475,27 +511,75 @@ async function testMeiroCollectorConnection(input = {}) {
   if (!base) badRequest("meiro_url is required");
   if (!slug) badRequest("meiro_source_slug is required");
   const url = new URL(["collect", slug].join("/"), base.endsWith("/") ? base : `${base}/`);
-  const response = await fetchWithTimeout(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      decision_key: "connection_test",
-      profile_key: "dee-settings-test",
-      result: "test",
-      outputs: { source: "dee_settings" },
-      matched_rules: [],
-      errors: [],
-      evaluated_at: createdAtIso()
-    })
-  });
-  const text = await response.text();
-  return {
-    target: "collector",
-    ok: response.ok,
-    status: response.status,
-    endpoint: url.toString(),
-    message: response.ok ? "Collector accepted test payload" : text.slice(0, 300) || "Collector returned an error"
+  const payload = {
+    decision_key: "connection_test",
+    profile_key: "dee-settings-test",
+    result: "test",
+    outputs: { source: "dee_settings" },
+    matched_rules: [],
+    errors: [],
+    evaluated_at: createdAtIso()
   };
+  return deliverMeiroPayload("collector", url.toString(), payload);
+}
+
+async function testMeiroFeedbackConnection(input = {}) {
+  const settings = store.getSettings();
+  const endpoint = String(input.meiro_feedback_url || settings.meiro_feedback_url || "").trim();
+  if (!endpoint) badRequest("meiro_feedback_url is required");
+  const payload = {
+    decision_key: "feedback_connection_test",
+    profile_key: "dee-settings-test",
+    result: "test",
+    outputs: { source: "dee_settings", purpose: "feedback_delivery_test" },
+    matched_rules: [],
+    errors: [],
+    evaluated_at: createdAtIso()
+  };
+  return deliverMeiroPayload("feedback", endpoint, payload);
+}
+
+async function deliverMeiroPayload(target, endpoint, payload) {
+  const startedAt = Date.now();
+  let text = "";
+  try {
+    const response = await fetchWithTimeout(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    text = await response.text();
+    const result = {
+      target,
+      ok: response.ok,
+      status: response.status,
+      endpoint,
+      message: response.ok ? `${target} accepted test payload` : text.slice(0, 300) || `${target} returned an error`
+    };
+    store.recordMeiroDelivery({
+      ...result,
+      duration_ms: Date.now() - startedAt,
+      response_preview: text.slice(0, 500),
+      payload
+    });
+    return result;
+  } catch (error) {
+    const result = {
+      target,
+      ok: false,
+      status: 0,
+      endpoint,
+      message: error.message
+    };
+    store.recordMeiroDelivery({
+      ...result,
+      duration_ms: Date.now() - startedAt,
+      error: error.message,
+      response_preview: text.slice(0, 500),
+      payload
+    });
+    return result;
+  }
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
@@ -558,6 +642,74 @@ function recordSchemaSyncSuccess(synced, author) {
     },
     author
   );
+}
+
+function diagnoseSchemaImport(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) badRequest("Schema import payload must be an object");
+  const valid = { attributes: [], segments: [], context: [] };
+  const present = {
+    attributes: Object.prototype.hasOwnProperty.call(body, "attributes"),
+    segments: Object.prototype.hasOwnProperty.call(body, "segments"),
+    context: Object.prototype.hasOwnProperty.call(body, "context")
+  };
+  const replace = {
+    attributes: Array.isArray(body.attributes),
+    segments: Array.isArray(body.segments),
+    context: Array.isArray(body.context)
+  };
+  const diagnostics = {
+    summary: {
+      imported: 0,
+      skipped: 0,
+      failed: 0
+    },
+    attributes: schemaKindDiagnostics("attribute", body.attributes, valid.attributes),
+    segments: schemaKindDiagnostics("segment", body.segments, valid.segments),
+    context: schemaKindDiagnostics("context", body.context, valid.context)
+  };
+  diagnostics.summary.imported = valid.attributes.length + valid.segments.length + valid.context.length;
+  diagnostics.summary.skipped = diagnostics.attributes.skipped.length + diagnostics.segments.skipped.length + diagnostics.context.skipped.length;
+  diagnostics.summary.failed = diagnostics.attributes.failed.length + diagnostics.segments.failed.length + diagnostics.context.failed.length;
+  return { valid, present, replace, diagnostics };
+}
+
+function schemaKindDiagnostics(kind, input, output) {
+  const key = kind === "attribute" ? "attributes" : kind === "segment" ? "segments" : "context";
+  if (input == null) {
+    return { imported: 0, skipped: [], failed: [] };
+  }
+  if (!Array.isArray(input)) {
+    return {
+      imported: 0,
+      skipped: [],
+      failed: [{ reason: `${key} must be an array` }]
+    };
+  }
+  const seen = new Set();
+  const skipped = [];
+  const failed = [];
+  for (const [index, item] of input.entries()) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      failed.push({ index, reason: "item must be an object" });
+      continue;
+    }
+    const name = String(item.name || "").trim();
+    if (!name) {
+      failed.push({ index, reason: "missing name" });
+      continue;
+    }
+    if (seen.has(name)) {
+      skipped.push({ index, name, reason: "duplicate name in import payload" });
+      continue;
+    }
+    seen.add(name);
+    output.push({
+      ...item,
+      name,
+      type: item.type || (kind === "segment" ? "boolean" : "string")
+    });
+  }
+  return { imported: output.length, skipped, failed };
 }
 
 function schemaSyncConfigured(settings) {

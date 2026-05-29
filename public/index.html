@@ -956,10 +956,7 @@
               </div>
               <div class="actions left">
                 <button type="submit">Save Settings</button>
-                <button type="button" id="test-meiro-profile">Test Profile API</button>
-                <button type="button" id="test-meiro-collector">Test Collector</button>
               </div>
-              <pre id="meiro-test-output" class="settings-test-output"></pre>
             </section>
             <section class="settings-tab-panel" data-settings-panel="meiro">
               <div class="settings-section-head">
@@ -993,9 +990,24 @@
                     </label>
                   </div>
                 </div>
+                <div class="settings-card wide">
+                  <label>
+                    Feedback endpoint
+                    <input id="setting-meiro-feedback-url" placeholder="https://.../collect/decision-engine-feedback" />
+                  </label>
+                </div>
               </div>
               <div class="actions left">
                 <button type="submit">Save Settings</button>
+                <button type="button" id="test-meiro-profile">Test Profile API</button>
+                <button type="button" id="test-meiro-collector">Test Collector</button>
+                <button type="button" id="test-meiro-feedback">Test Feedback</button>
+                <button type="button" id="refresh-meiro-deliveries">Refresh Status</button>
+              </div>
+              <pre id="meiro-test-output" class="settings-test-output"></pre>
+              <div class="settings-card wide">
+                <div class="editor-title compact-title">Webhook & Feedback Delivery Status</div>
+                <div id="meiro-delivery-status" class="table delivery-status-table"></div>
               </div>
             </section>
             <section class="settings-tab-panel" data-settings-panel="schema">
@@ -1037,6 +1049,7 @@
                 </div>
                 <div class="settings-card">
                   <div class="editor-title compact-title">Schema Output</div>
+                  <div id="schema-import-diagnostics" class="schema-diagnostics"></div>
                   <pre id="schema-output"></pre>
                 </div>
               </div>

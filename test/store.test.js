@@ -176,6 +176,19 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
 
   const settings = store.updateSettings({ environment_label: "staging", audit_retention_days: 30, client_event_retention_days: 45 }, "tester");
   assert.equal(settings.environment_label, "staging");
+  const integrationSettings = store.updateSettings({ meiro_feedback_url: "https://example.test/collect/feedback" }, "tester");
+  assert.equal(integrationSettings.meiro_feedback_url, "https://example.test/collect/feedback");
+  const delivery = store.recordMeiroDelivery({
+    target: "feedback",
+    endpoint: "https://example.test/collect/feedback",
+    ok: true,
+    status: 202,
+    duration_ms: 42,
+    response_preview: "accepted",
+    payload: { decision_key: "next_best_offer" }
+  });
+  assert.equal(delivery.ok, true);
+  assert.equal(store.listMeiroDeliveries()[0].target, "feedback");
   assert.equal(store.getAuditRetentionDays(), 30);
   assert.equal(store.getClientEventRetentionDays(), 45);
   assert.equal(store.health().ok, true);

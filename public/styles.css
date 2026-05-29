@@ -1842,6 +1842,43 @@ header {
   overflow: auto;
 }
 
+.delivery-status-table {
+  max-height: 260px;
+  overflow: auto;
+}
+
+.schema-diagnostics {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.schema-diagnostic-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.schema-diagnostic-details {
+  display: grid;
+  gap: 8px;
+}
+
+.schema-diagnostic-details > div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel-soft);
+}
+
+.schema-diagnostic-details span,
+.schema-diagnostic-details small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 .eval-output-card {
   display: grid;
   gap: 4px;

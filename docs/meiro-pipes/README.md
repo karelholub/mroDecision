@@ -31,6 +31,8 @@ Use [profile-destination-send.js](profile-destination-send.js) for scheduled aud
 
 The embedded DEE UI includes an Integration tab that generates a ready-to-copy request template from the saved Meiro and DEE runtime settings. Use it after creating an evaluate-only API token in Settings.
 
+The Settings > Meiro section stores the Meiro base URL, source slug, Profile API URL/token, explicit feedback endpoint, and environment label. It also includes connection tests and a recent delivery status table so operators can confirm whether Profile API, collector, and feedback webhook calls are accepted.
+
 ## Attribute Storage
 
 Use [decision-result-attribute.sql](decision-result-attribute.sql) as a starting point for a realtime attribute that stores the latest `next_best_offer` decision on the profile.

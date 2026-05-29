@@ -848,6 +848,7 @@ export class Store {
       "meiro_source_slug",
       "meiro_api_url",
       "meiro_api_token",
+      "meiro_feedback_url",
       "schema_sync_interval_minutes",
       "schema_sync_identifier_type",
       "schema_sync_identifier_value",
@@ -894,6 +895,51 @@ export class Store {
   getClientEventRetentionDays() {
     const row = this.db.prepare("SELECT value_json FROM settings WHERE key = 'client_event_retention_days'").get();
     return Number(row ? parse(row.value_json) : config.clientEventRetentionDays) || config.clientEventRetentionDays;
+  }
+
+  listMeiroDeliveries(params = {}) {
+    const limit = Math.min(Number(params.limit || 20), 100);
+    return this.db
+      .prepare("SELECT * FROM meiro_deliveries ORDER BY attempted_at DESC LIMIT ?")
+      .all(limit)
+      .map(rowToMeiroDelivery);
+  }
+
+  recordMeiroDelivery(input) {
+    const delivery = {
+      id: input.id || randomBytes(12).toString("hex"),
+      target: input.target || "unknown",
+      endpoint: input.endpoint || "",
+      ok: input.ok ? 1 : 0,
+      status: Number(input.status || 0),
+      attempted_at: input.attempted_at || createdAtNow(),
+      duration_ms: Number(input.duration_ms || 0),
+      error: input.error || "",
+      response_preview: input.response_preview || "",
+      payload: isPlainObject(input.payload) ? input.payload : {}
+    };
+    this.db
+      .prepare(
+        `INSERT INTO meiro_deliveries (
+          id, target, endpoint, ok, status, attempted_at, duration_ms, error, response_preview, payload_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        delivery.id,
+        delivery.target,
+        delivery.endpoint,
+        delivery.ok,
+        delivery.status,
+        delivery.attempted_at,
+        delivery.duration_ms,
+        delivery.error,
+        delivery.response_preview,
+        stringify(delivery.payload)
+      );
+    return rowToMeiroDelivery({
+      ...delivery,
+      payload_json: stringify(delivery.payload)
+    });
   }
 
   exportBundle({ includeAudit = false } = {}) {
@@ -1093,6 +1139,19 @@ function migrate(db) {
       PRIMARY KEY (kind, name)
     );
 
+    CREATE TABLE IF NOT EXISTS meiro_deliveries (
+      id TEXT PRIMARY KEY,
+      target TEXT NOT NULL,
+      endpoint TEXT NOT NULL DEFAULT '',
+      ok INTEGER NOT NULL DEFAULT 0,
+      status INTEGER NOT NULL DEFAULT 0,
+      attempted_at TEXT NOT NULL,
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      error TEXT NOT NULL DEFAULT '',
+      response_preview TEXT NOT NULL DEFAULT '',
+      payload_json TEXT NOT NULL DEFAULT '{}'
+    );
+
     CREATE INDEX IF NOT EXISTS idx_rule_versions_decision ON rule_versions(decision_key, version);
     CREATE INDEX IF NOT EXISTS idx_audit_decision_time ON audit_log(decision_key, evaluated_at);
     CREATE INDEX IF NOT EXISTS idx_audit_profile_time ON audit_log(profile_key, evaluated_at);
@@ -1105,6 +1164,7 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_lookup_table_versions ON lookup_table_versions(id, version);
     CREATE INDEX IF NOT EXISTS idx_messages_surface_status ON messages(surface, status);
     CREATE INDEX IF NOT EXISTS idx_evaluation_profiles_rule ON evaluation_profiles(decision_key, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_meiro_deliveries_time ON meiro_deliveries(attempted_at);
   `);
   ensureColumn(db, "rule_sets", "type", "TEXT NOT NULL DEFAULT 'decision'");
   ensureColumn(db, "rule_sets", "priority", "INTEGER NOT NULL DEFAULT 0");
@@ -1127,6 +1187,7 @@ function seedSettings(db) {
     meiro_source_slug: "",
     meiro_api_url: "",
     meiro_api_token: "",
+    meiro_feedback_url: "",
     schema_sync_interval_minutes: 15,
     schema_sync_identifier_type: "",
     schema_sync_identifier_value: "",
@@ -1414,6 +1475,21 @@ function rowToEvaluationProfile(row) {
     notes: row.notes || "",
     updated_at: row.updated_at,
     author: row.author
+  };
+}
+
+function rowToMeiroDelivery(row) {
+  return {
+    id: row.id,
+    target: row.target,
+    endpoint: row.endpoint || "",
+    ok: Boolean(row.ok),
+    status: Number(row.status || 0),
+    attempted_at: row.attempted_at,
+    duration_ms: Number(row.duration_ms || 0),
+    error: row.error || "",
+    response_preview: row.response_preview || "",
+    payload: parse(row.payload_json || "{}")
   };
 }
 

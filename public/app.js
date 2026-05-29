@@ -39,6 +39,8 @@ const settingsHealthSummary = document.querySelector("#settings-health-summary")
 const integrationTemplate = document.querySelector("#integration-template");
 const integrationResponse = document.querySelector("#integration-response");
 const meiroTestOutput = document.querySelector("#meiro-test-output");
+const meiroDeliveryStatus = document.querySelector("#meiro-delivery-status");
+const schemaImportDiagnostics = document.querySelector("#schema-import-diagnostics");
 const metricCards = document.querySelector("#metric-cards");
 const ruleDetailPanel = document.querySelector("#metrics-rule-detail");
 const clientEventsPanel = document.querySelector("#metrics-client-events");
@@ -135,6 +137,8 @@ document.querySelector("#export-lookup-csv").addEventListener("click", exportLoo
 document.querySelector("#refresh-settings").addEventListener("click", loadSettings);
 document.querySelector("#test-meiro-profile").addEventListener("click", () => testMeiroConnection("profile"));
 document.querySelector("#test-meiro-collector").addEventListener("click", () => testMeiroConnection("collector"));
+document.querySelector("#test-meiro-feedback").addEventListener("click", () => testMeiroConnection("feedback"));
+document.querySelector("#refresh-meiro-deliveries").addEventListener("click", loadMeiroDeliveries);
 document.querySelector("#refresh-integration").addEventListener("click", loadIntegration);
 document.querySelector("#export-audit-csv").addEventListener("click", exportAuditCsv);
 document.querySelector("#import-schema").addEventListener("click", importSchema);
@@ -3718,11 +3722,13 @@ async function loadSettings() {
     document.querySelector("#setting-meiro-api-url").value = settings.meiro_api_url || "";
     document.querySelector("#setting-meiro-api-token").value = "";
     document.querySelector("#setting-meiro-api-token").placeholder = settings.meiro_api_token_configured ? "Configured" : "";
+    document.querySelector("#setting-meiro-feedback-url").value = settings.meiro_feedback_url || "";
     document.querySelector("#setting-schema-sync-interval").value = settings.schema_sync_interval_minutes || 15;
     document.querySelector("#schema-sync-identifier-type").value = settings.schema_sync_identifier_type || "";
     document.querySelector("#schema-sync-identifier-value").value = settings.schema_sync_identifier_value || "";
     renderSchemaSyncStatus(settings, body.runtime?.schema_sync || {});
     renderSettingsSummary(settings, body.runtime || {});
+    renderMeiroDeliveries(body.runtime?.meiro_deliveries || []);
     settingsOutput.textContent = JSON.stringify(body, null, 2);
     renderIntegration();
     await loadTokens();
@@ -3741,6 +3747,7 @@ async function testMeiroConnection(target) {
       meiro_source_slug: document.querySelector("#setting-meiro-source-slug").value.trim(),
       meiro_api_url: document.querySelector("#setting-meiro-api-url").value.trim(),
       meiro_api_token: document.querySelector("#setting-meiro-api-token").value.trim(),
+      meiro_feedback_url: document.querySelector("#setting-meiro-feedback-url").value.trim(),
       identifier_type: document.querySelector("#schema-sync-identifier-type").value.trim(),
       identifier_value: document.querySelector("#schema-sync-identifier-value").value.trim()
     };
@@ -3749,6 +3756,7 @@ async function testMeiroConnection(target) {
       body: JSON.stringify(body)
     });
     if (meiroTestOutput) meiroTestOutput.textContent = JSON.stringify(response, null, 2);
+    await loadMeiroDeliveries();
   } catch (error) {
     if (meiroTestOutput) meiroTestOutput.textContent = error.message;
   }
@@ -3765,6 +3773,7 @@ async function saveSettings(event) {
       meiro_url: document.querySelector("#setting-meiro-url").value.trim(),
       meiro_source_slug: document.querySelector("#setting-meiro-source-slug").value.trim(),
       meiro_api_url: document.querySelector("#setting-meiro-api-url").value.trim(),
+      meiro_feedback_url: document.querySelector("#setting-meiro-feedback-url").value.trim(),
       schema_sync_interval_minutes: Number(document.querySelector("#setting-schema-sync-interval").value || 15),
       schema_sync_identifier_type: document.querySelector("#schema-sync-identifier-type").value.trim(),
       schema_sync_identifier_value: document.querySelector("#schema-sync-identifier-value").value.trim()
@@ -3802,6 +3811,7 @@ async function syncSchemaFromMeiro() {
     await loadSettings();
     renderBranchEditor();
     schemaOutput.textContent = JSON.stringify(body, null, 2);
+    renderSchemaDiagnostics(body.diagnostics);
   } catch (error) {
     schemaOutput.textContent = error.message;
   }
@@ -3818,6 +3828,64 @@ function renderSchemaSyncStatus(settings, runtime) {
   target.textContent = `Status: ${status}. Last sync: ${lastSync}. Imported: ${count}. Next sync: ${nextRun}.${error}`;
 }
 
+async function loadMeiroDeliveries() {
+  try {
+    const body = await api("/v1/meiro-deliveries?limit=10");
+    renderMeiroDeliveries(body.deliveries || []);
+  } catch (error) {
+    if (meiroDeliveryStatus) meiroDeliveryStatus.innerHTML = row([error.message, "", "", "", ""]);
+  }
+}
+
+function renderMeiroDeliveries(deliveries = []) {
+  if (!meiroDeliveryStatus) return;
+  meiroDeliveryStatus.innerHTML = header(["Time", "Target", "Status", "Endpoint", "Message"]);
+  if (!deliveries.length) {
+    meiroDeliveryStatus.innerHTML += row(["No delivery attempts yet", "", "", "", ""]);
+    return;
+  }
+  meiroDeliveryStatus.innerHTML += deliveries
+    .map((item) => row([
+      item.attempted_at ? formatTime(item.attempted_at) : "-",
+      item.target || "-",
+      `${item.ok ? "OK" : "Failed"} · ${item.status || 0}`,
+      item.endpoint || "-",
+      item.error || item.response_preview || "-"
+    ]))
+    .join("");
+}
+
+function renderSchemaDiagnostics(diagnostics = null) {
+  if (!schemaImportDiagnostics) return;
+  if (!diagnostics) {
+    schemaImportDiagnostics.innerHTML = "";
+    return;
+  }
+  const summary = diagnostics.summary || {};
+  const kinds = [
+    ["Attributes", diagnostics.attributes],
+    ["Segments", diagnostics.segments],
+    ["Context", diagnostics.context]
+  ];
+  schemaImportDiagnostics.innerHTML = `
+    <div class="schema-diagnostic-summary">
+      ${statusItem("Imported", formatNumber(summary.imported || 0))}
+      ${statusItem("Skipped", formatNumber(summary.skipped || 0))}
+      ${statusItem("Failed", formatNumber(summary.failed || 0))}
+    </div>
+    <div class="schema-diagnostic-details">
+      ${kinds.map(([label, detail = {}]) => `
+        <div>
+          <strong>${escapeHtml(label)}</strong>
+          <span>${formatNumber(detail.imported || 0)} imported</span>
+          ${(detail.skipped || []).map((item) => `<small>Skipped ${escapeHtml(item.name || `#${item.index}`)}: ${escapeHtml(item.reason)}</small>`).join("")}
+          ${(detail.failed || []).map((item) => `<small>Failed ${escapeHtml(item.name || `#${item.index ?? "-"}`)}: ${escapeHtml(item.reason)}</small>`).join("")}
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderSettingsSummary(settings, runtime, error = null) {
   if (!settingsHealthSummary) return;
   if (error) {
@@ -3826,6 +3894,7 @@ function renderSettingsSummary(settings, runtime, error = null) {
   }
   const schemaRuntime = runtime?.schema_sync || {};
   const collectorConfigured = Boolean(settings?.meiro_url && settings?.meiro_source_slug);
+  const feedbackConfigured = Boolean(settings?.meiro_feedback_url);
   const apiConfigured = Boolean(settings?.meiro_api_url && settings?.meiro_api_token_configured);
   const schemaStatus = settings?.schema_last_sync_status || "never";
   const schemaHealthy = ["ok", "success"].includes(schemaStatus);
@@ -3845,6 +3914,12 @@ function renderSettingsSummary(settings, runtime, error = null) {
       value: collectorConfigured ? "Configured" : "Incomplete",
       detail: collectorConfigured ? [settings.meiro_url, "collect", settings.meiro_source_slug].join("/") : "Set Meiro URL and source slug",
       ok: collectorConfigured
+    },
+    {
+      label: "Feedback Endpoint",
+      value: feedbackConfigured ? "Configured" : "Incomplete",
+      detail: feedbackConfigured ? settings.meiro_feedback_url : "Set explicit feedback endpoint",
+      ok: feedbackConfigured
     },
     {
       label: "Profile API",
@@ -3889,6 +3964,7 @@ async function importSchema() {
     ];
     renderBranchEditor();
     schemaOutput.textContent = JSON.stringify(body, null, 2);
+    renderSchemaDiagnostics(body.diagnostics);
   } catch (error) {
     schemaOutput.textContent = error.message;
   }
@@ -3922,8 +3998,9 @@ function renderIntegration() {
   const runtime = cachedSettings.runtime || {};
   const endpoint = `${runtime.docker_url || "http://localhost:8090"}/v1/evaluate`;
   const collectorEndpoint = [settings.meiro_url, "collect", settings.meiro_source_slug].filter(Boolean).join("/");
+  const feedbackEndpoint = settings.meiro_feedback_url || collectorEndpoint;
   document.querySelector("#integration-endpoint").value = endpoint;
-  document.querySelector("#integration-meiro-url").value = collectorEndpoint || "";
+  document.querySelector("#integration-meiro-url").value = feedbackEndpoint || "";
   integrationTemplate.value = [
     "POST " + endpoint,
     "Authorization: Bearer <DEE_EVALUATE_TOKEN>",
@@ -3945,7 +4022,7 @@ function renderIntegration() {
     },
     matched_rules: ["green_energy_offer"],
     errors: []
-  }, null, 2) + `\n\nForward this result to Meiro:\nPOST ${collectorEndpoint || "<MEIRO_COLLECTOR_ENDPOINT>"}`;
+  }, null, 2) + `\n\nForward this result to Meiro:\nPOST ${feedbackEndpoint || "<MEIRO_FEEDBACK_ENDPOINT>"}`;
 }
 
 async function loadTokens() {
