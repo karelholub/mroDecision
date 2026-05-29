@@ -21,6 +21,8 @@ Implemented:
 - Scheduled Meiro Profile API schema sync when API settings and sample identifier are configured.
 - Rule Builder key suggestions from cached attributes, segments, and context keys.
 - Branch builder value-source comparisons for field-to-field checks.
+- Visual branch summaries with reusable condition blocks and branch output TTL helpers.
+- Safer publish review with changed-area diff, validation summary, affected rule preview, and warning-based publish blocking.
 - Client-side broken-reference warnings with publish blocking when cached schema references are invalid.
 - In-process client response caching based on rule TTL and cache scope.
 - Rule-set list search/filter controls with duplicate and archive actions.
@@ -93,7 +95,7 @@ Goal: support the full v2 graph model without forcing engineers to edit JSON.
 
 Open decision: ship a pragmatic graph editor first, then polish minimap/drag behavior, rather than blocking on a full canvas experience.
 
-Status: first-pass graph authoring is implemented with Branch/Graph mode switching, node cards for input, condition, score, lookup, frequency cap, output, fallback, and error nodes, draggable canvas positioning, visual route preview, JSON sync, route/reachability validation, draft/published evaluation trace cards, branch value-source comparisons, and guided helpers for lookup and frequency-cap nodes. Minimap and snap-guide polish remain optional.
+Status: first-pass graph authoring is implemented with Branch/Graph mode switching, node cards for input, condition, score, lookup, frequency cap, output, fallback, and error nodes, draggable canvas positioning, visual route preview, JSON sync, route/reachability validation, draft/published evaluation trace cards, branch value-source comparisons, reusable condition blocks, branch output TTL helpers, safer publish review, and guided helpers for lookup and frequency-cap nodes. Minimap and snap-guide polish remain optional.
 
 ## Phase 4: Client-Facing In-App and Experiment APIs
 
@@ -150,3 +152,4 @@ Status: readiness, request IDs, request logs, guarded bootstrap-token disablemen
 1. Add broader Meiro catalog sync if/when segment schema APIs are confirmed.
 2. Add managed database adapter implementation if production scale requires multiple replicas.
 3. Add optional graph-canvas minimap/snap guides if rule graphs become large in real customer use.
+4. Add server-persisted reusable condition blocks if teams want shared block governance instead of UI-provided starter blocks.

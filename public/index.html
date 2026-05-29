@@ -337,11 +337,27 @@
                   </label>
                   <button type="button" data-action="remove-branch">Remove</button>
                 </div>
+                <div class="branch-summary" data-role="branch-summary"></div>
                 <details open class="output-helper">
                   <summary>Output fields</summary>
                   <div data-role="outputs" class="output-field-list"></div>
                   <div class="actions left">
                     <button type="button" data-action="add-output">Add Output Field</button>
+                  </div>
+                </details>
+                <details class="output-helper">
+                  <summary>TTL and expiration</summary>
+                  <div class="ttl-helper-grid">
+                    <label>
+                      Offer TTL seconds
+                      <input data-helper="ttl-seconds" type="number" min="0" placeholder="300" />
+                    </label>
+                    <label>
+                      Offer expires at
+                      <input data-helper="expires-at" type="datetime-local" />
+                    </label>
+                    <button type="button" data-action="apply-ttl-output">Apply TTL</button>
+                    <button type="button" data-action="clear-ttl-output">Clear</button>
                   </div>
                 </details>
                 <details class="output-helper">
@@ -378,11 +394,41 @@
                       <option value="any">Any</option>
                     </select>
                   </label>
+                  <label>
+                    Reusable block
+                    <select data-field="condition-block"></select>
+                  </label>
+                  <button type="button" data-action="apply-condition-block">Apply Block</button>
                   <button type="button" data-action="add-condition">Add Condition</button>
                 </div>
                 <div data-role="conditions" class="condition-list"></div>
               </section>
             </template>
+            <div id="publish-confirm-modal" class="rule-builder-modal" hidden>
+              <div class="publish-confirm-dialog">
+                <div class="rule-builder-header">
+                  <div>
+                    <strong>Review Publish</strong>
+                    <span>Validate the draft before replacing the published rule.</span>
+                  </div>
+                  <button type="button" id="cancel-publish-rule">Close</button>
+                </div>
+                <div class="publish-review-body">
+                  <div id="publish-confirm-summary" class="publish-summary-grid"></div>
+                  <div class="publish-review-panel">
+                    <h3>Changed Areas</h3>
+                    <div id="publish-confirm-diff" class="publish-diff-list"></div>
+                  </div>
+                  <div class="publish-review-panel">
+                    <h3>Validation</h3>
+                    <div id="publish-confirm-validation" class="publish-validation-list"></div>
+                  </div>
+                </div>
+                <div class="rule-builder-footer">
+                  <button type="button" id="confirm-publish-rule">Publish Rule</button>
+                </div>
+              </div>
+            </div>
             <template id="condition-template">
               <div class="condition-row">
                 <label>

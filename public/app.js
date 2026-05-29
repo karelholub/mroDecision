@@ -61,12 +61,17 @@ const inspectorNodes = document.querySelector("#inspector-nodes");
 const inspectorMode = document.querySelector("#inspector-mode");
 const ruleDetailModal = document.querySelector("#rule-detail-modal");
 const ruleBuilderModal = document.querySelector("#rule-builder-modal");
+const publishConfirmModal = document.querySelector("#publish-confirm-modal");
+const publishConfirmSummary = document.querySelector("#publish-confirm-summary");
+const publishConfirmDiff = document.querySelector("#publish-confirm-diff");
+const publishConfirmValidation = document.querySelector("#publish-confirm-validation");
 const logicSummaryTitle = document.querySelector("#logic-summary-title");
 const logicSummaryMeta = document.querySelector("#logic-summary-meta");
 const logicModalSubtitle = document.querySelector("#logic-modal-subtitle");
 let selectedRuleKey = null;
 let selectedLookupId = null;
 let selectedMessageId = null;
+let selectedPublishedDefinition = null;
 let builderBranches = [];
 let graphBuilder = { entry: "input", nodes: [] };
 let cachedRuleSets = [];
@@ -76,6 +81,45 @@ let cachedSettings = {};
 let cachedSchema = [];
 let cachedEvaluationProfiles = [];
 const savedProfileStorageKey = "meiro-dee-evaluate-profiles";
+const conditionBlockTemplates = [
+  {
+    id: "high_intent",
+    name: "High intent",
+    conditions: [
+      { source: "attribute", key: "lead_score", operator: "greater_than_or_equal", value: "70" },
+      { source: "attribute", key: "web_engagement_score", operator: "greater_than_or_equal", value: "60" }
+    ]
+  },
+  {
+    id: "credit_safe",
+    name: "Credit safe",
+    conditions: [
+      { source: "attribute", key: "outstanding_balance_tier", operator: "not_in", value: "high, critical" },
+      { source: "attribute", key: "late_payments_count_12m", operator: "less_than_or_equal", value: "1" }
+    ]
+  },
+  {
+    id: "retention_risk",
+    name: "Retention risk",
+    conditions: [
+      { source: "attribute", key: "churn_risk_score", operator: "greater_than_or_equal", value: "65" }
+    ]
+  },
+  {
+    id: "surface_match",
+    name: "Surface matches rule",
+    conditions: [
+      { source: "context", key: "surface", operator: "equals", value: "" }
+    ]
+  },
+  {
+    id: "known_profile",
+    name: "Known profile",
+    conditions: [
+      { source: "attribute", key: "customer_lifetime_value", operator: "is_not_blank", value: "" }
+    ]
+  }
+];
 
 document.querySelectorAll("nav button").forEach((button) => {
   button.addEventListener("click", () => {
@@ -206,6 +250,8 @@ document.querySelector("#graph-entry").addEventListener("input", () => {
   syncJsonFromBuilder();
 });
 document.querySelector("#publish-rule").addEventListener("click", publishSelectedRule);
+document.querySelector("#cancel-publish-rule").addEventListener("click", closePublishConfirm);
+document.querySelector("#confirm-publish-rule").addEventListener("click", confirmPublishSelectedRule);
 document.querySelector("#rule-editor").addEventListener("submit", saveDraft);
 document.querySelector("#rule-draft").addEventListener("change", syncBuilderFromJson);
 ["#rule-name", "#rule-key", "#rule-type", "#rule-priority", "#rule-surface", "#rule-client-ttl", "#rule-cache-scope", "#rule-description"].forEach((selector) => {
@@ -698,6 +744,16 @@ function closeRuleBuilder() {
   renderRuleInspector();
 }
 
+function openPublishConfirm() {
+  publishConfirmModal.hidden = false;
+  document.body.classList.add("modal-open");
+}
+
+function closePublishConfirm() {
+  publishConfirmModal.hidden = true;
+  document.body.classList.remove("modal-open");
+}
+
 function renderRuleInspector() {
   if (!ruleInspectorSummary) return;
   const key = document.querySelector("#rule-key").value.trim() || "new_eligibility_rule";
@@ -814,6 +870,7 @@ async function loadRule(key) {
   try {
     const body = await api(`/v1/rule-sets/${encodeURIComponent(key)}`);
     selectedRuleKey = key;
+    selectedPublishedDefinition = body.version?.definition || null;
     document.querySelector("#rule-name").value = body.rule_set.name;
     document.querySelector("#rule-key").value = body.rule_set.decision_key;
     document.querySelector("#rule-key").disabled = true;
@@ -840,6 +897,7 @@ async function loadRule(key) {
 
 function newRule(options = {}) {
   selectedRuleKey = null;
+  selectedPublishedDefinition = null;
   document.querySelector("#rule-name").value = "New Eligibility Rule";
   document.querySelector("#rule-key").value = "new_eligibility_rule";
   document.querySelector("#rule-key").disabled = false;
@@ -895,15 +953,137 @@ async function publishSelectedRule() {
     const payload = readEditorPayload();
     validateDraft(payload.draft);
     const warnings = schemaReferenceWarnings(payload.draft);
+    renderPublishReview(payload, warnings);
+    openPublishConfirm();
+  } catch (error) {
+    editorOutput.textContent = error.message;
+  }
+}
+
+async function confirmPublishSelectedRule() {
+  if (!selectedRuleKey) return;
+  const button = document.querySelector("#confirm-publish-rule");
+  button.disabled = true;
+  try {
+    syncJsonFromBuilder();
+    const payload = readEditorPayload();
+    validateDraft(payload.draft);
+    const warnings = schemaReferenceWarnings(payload.draft);
     if (warnings.length) throw new Error(`Cannot publish with broken schema references:\n${warnings.map((item) => `- ${item}`).join("\n")}`);
+    await api(`/v1/rule-sets/${encodeURIComponent(selectedRuleKey)}/draft`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
     const body = await api(`/v1/rule-sets/${encodeURIComponent(selectedRuleKey)}/publish`, { method: "POST", body: "{}" });
     editorOutput.textContent = JSON.stringify(body, null, 2);
+    selectedPublishedDefinition = payload.draft;
+    closePublishConfirm();
     await loadRules();
     await loadVersions(selectedRuleKey);
     renderRuleInspector();
   } catch (error) {
     editorOutput.textContent = error.message;
+    renderPublishReviewError(error);
+  } finally {
+    button.disabled = false;
   }
+}
+
+function renderPublishReview(payload, schemaWarnings = []) {
+  const draft = payload.draft;
+  const stats = draftPublishStats(draft);
+  const changes = clientDiffValues(selectedPublishedDefinition || {}, draft).slice(0, 40);
+  const validations = publishValidationItems(payload, schemaWarnings);
+  publishConfirmSummary.innerHTML = [
+    statusItem("Decision key", payload.decision_key || "-"),
+    statusItem("Branches", stats.branches),
+    statusItem("Outputs", stats.outputs),
+    statusItem("TTL", payload.cache_policy?.client_ttl ? `${payload.cache_policy.client_ttl}s` : "No response TTL")
+  ].join("");
+  publishConfirmDiff.innerHTML = changes.length
+    ? changes.map((item) => `
+      <div class="publish-diff-item">
+        <strong>${escapeHtml(item.path)}</strong>
+        <span>${escapeHtml(item.type)}</span>
+      </div>
+    `).join("")
+    : `<div class="publish-diff-item"><strong>No draft changes detected</strong><span>Current draft matches the latest published definition.</span></div>`;
+  publishConfirmValidation.innerHTML = validations.map((item) => `
+    <div class="publish-validation-item ${item.level === "warn" ? "warn" : ""}">
+      <strong>${escapeHtml(item.title)}</strong>
+      <span>${escapeHtml(item.detail)}</span>
+    </div>
+  `).join("");
+  document.querySelector("#confirm-publish-rule").disabled = schemaWarnings.length > 0;
+}
+
+function renderPublishReviewError(error) {
+  publishConfirmValidation.innerHTML = `
+    <div class="publish-validation-item warn">
+      <strong>Publish failed</strong>
+      <span>${escapeHtml(error.message)}</span>
+    </div>
+  `;
+}
+
+function draftPublishStats(draft) {
+  if (draft.graph) {
+    const outputs = (draft.graph.nodes || []).filter((node) => node.type === "output").length;
+    return { branches: `${draft.graph.nodes?.length || 0} nodes`, outputs };
+  }
+  const branches = draft.branches || [];
+  const outputs = branches.reduce((count, branch) => count + Object.keys(branch.outputs || {}).length, 0);
+  return { branches: branches.length, outputs };
+}
+
+function publishValidationItems(payload, schemaWarnings = []) {
+  const draft = payload.draft || {};
+  const items = [
+    { title: "Draft schema", detail: "JSON structure is valid and executable.", level: "ok" },
+    { title: "Affected rule", detail: `${payload.name || payload.decision_key} will publish as ${payload.type || "decision"}.`, level: "ok" }
+  ];
+  if (payload.cache_policy?.client_ttl) {
+    items.push({ title: "Response TTL", detail: `${payload.cache_policy.client_ttl}s cache hint using ${payload.cache_policy.scope || "profile"} scope.`, level: "ok" });
+  } else {
+    items.push({ title: "Response TTL", detail: "No client-side cache hint is configured.", level: "warn" });
+  }
+  const branchWarnings = branchPublishWarnings(draft);
+  if (schemaWarnings.length) {
+    items.push({ title: "Publish blocked", detail: "Fix schema reference warnings before publishing this rule.", level: "warn" });
+  }
+  [...schemaWarnings, ...branchWarnings].forEach((warning) => {
+    items.push({ title: "Review warning", detail: warning, level: "warn" });
+  });
+  return items;
+}
+
+function branchPublishWarnings(draft) {
+  if (!draft || draft.graph) return [];
+  const warnings = [];
+  for (const branch of draft.branches || []) {
+    const id = branch.id || branch.label || "branch";
+    const outputs = branch.outputs || {};
+    if (Object.keys(outputs).length === 0) warnings.push(`${id} has no output fields.`);
+    if (outputs.expires_at && Number.isNaN(Date.parse(outputs.expires_at))) warnings.push(`${id} has an invalid expires_at value.`);
+  }
+  return warnings;
+}
+
+function clientDiffValues(left, right, path = "$") {
+  if (JSON.stringify(left) === JSON.stringify(right)) return [];
+  const leftObject = left && typeof left === "object";
+  const rightObject = right && typeof right === "object";
+  if (!leftObject || !rightObject || Array.isArray(left) || Array.isArray(right)) {
+    return [{ path, type: changeType(left, right) }];
+  }
+  const keys = [...new Set([...Object.keys(left || {}), ...Object.keys(right || {})])].sort();
+  return keys.flatMap((key) => clientDiffValues(left?.[key], right?.[key], `${path}.${key}`));
+}
+
+function changeType(left, right) {
+  if (left === undefined) return "added";
+  if (right === undefined) return "removed";
+  return "changed";
 }
 
 async function loadVersions(key) {
@@ -1722,8 +1902,11 @@ function renderBranchEditor() {
     bindBranchField(node, branchIndex, "result");
     bindBranchField(node, branchIndex, "outputs");
     bindBranchField(node, branchIndex, "logic");
+    bindBranchSummary(node, branchIndex);
     bindOutputFieldEditor(node, branchIndex);
     bindLookupOutputHelper(node, branchIndex);
+    bindTtlOutputHelper(node, branchIndex);
+    bindConditionBlockHelper(node, branchIndex);
     node.querySelector("[data-action='remove-branch']").addEventListener("click", () => {
       builderBranches.splice(branchIndex, 1);
       renderBranchEditor();
@@ -1748,6 +1931,9 @@ function renderBranchEditor() {
       builderBranches[branchIndex].outputs = JSON.stringify(outputs);
       renderBranchEditor();
       syncJsonFromBuilder();
+    });
+    node.querySelector("[data-action='apply-condition-block']").addEventListener("click", () => {
+      applyConditionBlock(node, branchIndex);
     });
 
     const conditions = node.querySelector("[data-role='conditions']");
@@ -1796,6 +1982,58 @@ function renderBuilderMode() {
   if (graphMode) renderGraphBuilder();
   renderRuleGraph();
   renderRuleInspector();
+}
+
+function bindBranchSummary(node, branchIndex) {
+  const target = node.querySelector("[data-role='branch-summary']");
+  const branch = builderBranches[branchIndex];
+  const outputs = parseJsonSafe(branch.outputs || "{}");
+  const warnings = branchSummaryWarnings(branch, outputs);
+  const items = [
+    `${branch.conditions.length} condition${branch.conditions.length === 1 ? "" : "s"}`,
+    `${Object.keys(outputs).length} output${Object.keys(outputs).length === 1 ? "" : "s"}`,
+    outputs.ttl_seconds ? `offer TTL ${outputs.ttl_seconds}s` : "no offer TTL",
+    branch.logic === "any" ? "match any" : "match all"
+  ];
+  target.innerHTML = [
+    ...items.map((item) => `<span class="branch-chip">${escapeHtml(item)}</span>`),
+    ...warnings.map((item) => `<span class="branch-chip warn">${escapeHtml(item)}</span>`)
+  ].join("");
+}
+
+function branchSummaryWarnings(branch, outputs) {
+  const warnings = [];
+  if (!branch.conditions.length) warnings.push("no conditions");
+  if (!Object.keys(outputs).length) warnings.push("no outputs");
+  if (outputs.expires_at && Number.isNaN(Date.parse(outputs.expires_at))) warnings.push("invalid expiry");
+  return warnings;
+}
+
+function bindConditionBlockHelper(node) {
+  const select = node.querySelector("[data-field='condition-block']");
+  select.innerHTML = [
+    `<option value="">Choose a reusable block</option>`,
+    ...conditionBlockTemplates.map((template) => `<option value="${escapeHtml(template.id)}">${escapeHtml(template.name)}</option>`)
+  ].join("");
+}
+
+function applyConditionBlock(node, branchIndex) {
+  const select = node.querySelector("[data-field='condition-block']");
+  const template = conditionBlockTemplates.find((item) => item.id === select.value);
+  if (!template) return;
+  const surface = document.querySelector("#rule-surface").value.trim();
+  const nextConditions = template.conditions.map((condition) => ({
+    source: condition.source || "attribute",
+    key: condition.key || "",
+    operator: condition.operator || "equals",
+    value: template.id === "surface_match" ? surface : (condition.value ?? ""),
+    compare_mode: "value",
+    value_source_source: "attribute",
+    value_source_key: ""
+  }));
+  builderBranches[branchIndex].conditions.push(...nextConditions);
+  renderBranchEditor();
+  syncJsonFromBuilder();
 }
 
 function bindOutputFieldEditor(node, branchIndex) {
@@ -2465,6 +2703,41 @@ function bindLookupOutputHelper(node, branchIndex) {
       editorOutput.textContent = error.message;
     }
   });
+}
+
+function bindTtlOutputHelper(node, branchIndex) {
+  const branch = builderBranches[branchIndex];
+  const ttlInput = node.querySelector("[data-helper='ttl-seconds']");
+  const expiresInput = node.querySelector("[data-helper='expires-at']");
+  const outputs = parseJsonSafe(branch.outputs || "{}");
+  ttlInput.value = outputs.ttl_seconds || "";
+  expiresInput.value = outputs.expires_at ? toDateTimeLocal(outputs.expires_at) : "";
+  node.querySelector("[data-action='apply-ttl-output']").addEventListener("click", () => {
+    const nextOutputs = parseJsonSafe(branch.outputs || "{}");
+    const ttl = Number(ttlInput.value || 0);
+    if (Number.isFinite(ttl) && ttl > 0) nextOutputs.ttl_seconds = ttl;
+    else delete nextOutputs.ttl_seconds;
+    if (expiresInput.value) nextOutputs.expires_at = new Date(expiresInput.value).toISOString();
+    else delete nextOutputs.expires_at;
+    branch.outputs = JSON.stringify(nextOutputs);
+    renderBranchEditor();
+    syncJsonFromBuilder();
+  });
+  node.querySelector("[data-action='clear-ttl-output']").addEventListener("click", () => {
+    const nextOutputs = parseJsonSafe(branch.outputs || "{}");
+    delete nextOutputs.ttl_seconds;
+    delete nextOutputs.expires_at;
+    branch.outputs = JSON.stringify(nextOutputs);
+    renderBranchEditor();
+    syncJsonFromBuilder();
+  });
+}
+
+function toDateTimeLocal(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offsetMs = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
 function firstLookupOutput(outputs) {
