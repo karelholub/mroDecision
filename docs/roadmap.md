@@ -38,7 +38,7 @@ Implemented:
 
 Important gaps:
 
-- First-pass advanced graph editor is implemented; a full drag canvas with drag/drop layout is still pending.
+- Advanced graph editor includes a draggable canvas; deeper canvas ergonomics such as minimap and snap guides remain optional polish.
 - First client behavior exists for experiment evaluation; in-app message operations are still pending.
 - First client-facing endpoint exists: `POST /v1/client/evaluate`.
 - Deterministic experiment assignment exists for configured variants.
@@ -91,7 +91,7 @@ Goal: support the full v2 graph model without forcing engineers to edit JSON.
 
 Open decision: ship a pragmatic graph editor first, then polish minimap/drag behavior, rather than blocking on a full canvas experience.
 
-Status: first-pass graph authoring is implemented with Branch/Graph mode switching, node cards for input, condition, score, lookup, frequency cap, output, fallback, and error nodes, visual route preview, JSON sync, route/reachability validation, draft/published evaluation trace cards, branch value-source comparisons, and guided helpers for lookup and frequency-cap nodes. Drag/drop positioning remains.
+Status: first-pass graph authoring is implemented with Branch/Graph mode switching, node cards for input, condition, score, lookup, frequency cap, output, fallback, and error nodes, draggable canvas positioning, visual route preview, JSON sync, route/reachability validation, draft/published evaluation trace cards, branch value-source comparisons, and guided helpers for lookup and frequency-cap nodes. Minimap and snap-guide polish remain optional.
 
 ## Phase 4: Client-Facing In-App and Experiment APIs
 
@@ -146,5 +146,5 @@ Status: readiness, request IDs, request logs, guarded bootstrap-token disablemen
 ## Recommended Next Sprint
 
 1. Add broader Meiro catalog sync if/when segment schema APIs are confirmed.
-2. Add drag/drop layout polish for the graph editor.
-3. Add managed database adapter implementation if production scale requires multiple replicas.
+2. Add managed database adapter implementation if production scale requires multiple replicas.
+3. Add optional graph-canvas minimap/snap guides if rule graphs become large in real customer use.

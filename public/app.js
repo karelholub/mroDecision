@@ -191,6 +191,11 @@ document.querySelector("#create-graph-template").addEventListener("click", () =>
   renderGraphBuilder();
   syncJsonFromBuilder();
 });
+document.querySelector("#reset-graph-layout").addEventListener("click", () => {
+  autoLayoutGraph(true);
+  renderGraphBuilder();
+  syncJsonFromBuilder();
+});
 document.querySelector("#graph-entry").addEventListener("input", () => {
   graphBuilder.entry = document.querySelector("#graph-entry").value.trim();
   renderRuleGraph();
@@ -1949,10 +1954,20 @@ function renderRuleGraph() {
 
 function renderAdvancedGraphPreview() {
   const nodes = graphBuilder.nodes || [];
+  autoLayoutGraph(false);
+  const layout = graphCanvasLayout();
   const cards = nodes.map((node) => {
     const edges = graphNodeEdges(node);
+    const nodeLayout = normalizedGraphNodeLayout(node);
     return `
-      <button type="button" class="graph-node branch-node" data-graph-node="${escapeHtml(node.id)}">
+      <button
+        type="button"
+        class="graph-node branch-node graph-node-draggable"
+        data-graph-node="${escapeHtml(node.id)}"
+        style="left:${nodeLayout.x}px; top:${nodeLayout.y}px;"
+        aria-label="Edit graph node ${escapeHtml(node.id || "node")}"
+      >
+        <span class="graph-drag-handle" data-graph-drag="${escapeHtml(node.id)}" title="Drag node">drag</span>
         <span class="graph-kicker">${escapeHtml(node.type || "node")}${node.id === graphBuilder.entry ? " / entry" : ""}</span>
         <strong>${escapeHtml(node.id || "node")}</strong>
         <span>${escapeHtml(graphNodeSummary(node))}</span>
@@ -1961,28 +1976,146 @@ function renderAdvancedGraphPreview() {
     `;
   }).join("");
   ruleGraph.innerHTML = `
-    <div class="graph-stage">
+    <div class="graph-stage advanced-graph-stage">
       <div class="graph-node input-node">
         <span class="graph-kicker">Entry</span>
         <strong>${escapeHtml(graphBuilder.entry || "input")}</strong>
         <span>${escapeHtml(nodes.length)} node${nodes.length === 1 ? "" : "s"}</span>
-      </div>
-      <div class="graph-lane">
-        ${cards || '<div class="graph-empty">Create a graph template or add a node.</div>'}
       </div>
       <div class="graph-node fallback-node">
         <span class="graph-kicker">Validation</span>
         <strong>${escapeHtml(graphReachabilitySummary())}</strong>
         <span>Draft JSON remains the source of truth.</span>
       </div>
+      <div class="graph-canvas-shell">
+        <div class="graph-canvas" style="width:${layout.width}px; height:${layout.height}px;">
+          ${graphEdgeSvg(layout.width, layout.height)}
+          ${cards || '<div class="graph-empty graph-canvas-empty">Create a graph template or add a node.</div>'}
+        </div>
+      </div>
     </div>
   `;
   ruleGraph.querySelectorAll("[data-graph-node]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (button.dataset.dragged === "true") {
+        button.dataset.dragged = "false";
+        return;
+      }
       const target = graphNodeEditor.querySelector(`[data-node-id="${cssEscape(button.dataset.graphNode)}"]`);
       target?.scrollIntoView({ behavior: "smooth", block: "center" });
       target?.classList.add("highlight");
       setTimeout(() => target?.classList.remove("highlight"), 900);
+    });
+  });
+  bindGraphNodeDrag();
+}
+
+function normalizedGraphNodeLayout(node) {
+  const layout = node.layout && typeof node.layout === "object" && !Array.isArray(node.layout) ? node.layout : {};
+  return {
+    x: Number.isFinite(Number(layout.x)) ? Math.max(16, Number(layout.x)) : 16,
+    y: Number.isFinite(Number(layout.y)) ? Math.max(16, Number(layout.y)) : 16
+  };
+}
+
+function autoLayoutGraph(force = false) {
+  const nodes = graphBuilder.nodes || [];
+  if (!nodes.length) return;
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const depthById = new Map();
+  const queue = [{ id: graphBuilder.entry || nodes[0].id, depth: 0 }];
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current.id || depthById.has(current.id)) continue;
+    depthById.set(current.id, current.depth);
+    const node = nodeMap.get(current.id);
+    if (!node) continue;
+    graphNodeEdges(node).forEach((target) => queue.push({ id: target, depth: current.depth + 1 }));
+  }
+  nodes.forEach((node) => {
+    if (!depthById.has(node.id)) depthById.set(node.id, depthById.size ? Math.max(...depthById.values()) + 1 : 0);
+  });
+  const rowsByDepth = new Map();
+  nodes.forEach((node, index) => {
+    const depth = depthById.get(node.id) || 0;
+    const row = rowsByDepth.get(depth) || 0;
+    rowsByDepth.set(depth, row + 1);
+    if (force || !node.layout || !Number.isFinite(Number(node.layout.x)) || !Number.isFinite(Number(node.layout.y))) {
+      node.layout = {
+        x: 24 + depth * 250,
+        y: 24 + row * 150 + (index % 2 ? 12 : 0)
+      };
+    }
+  });
+}
+
+function graphCanvasLayout() {
+  const nodeWidth = 210;
+  const nodeHeight = 124;
+  const layouts = (graphBuilder.nodes || []).map(normalizedGraphNodeLayout);
+  const maxX = Math.max(620, ...layouts.map((layout) => layout.x + nodeWidth + 24));
+  const maxY = Math.max(320, ...layouts.map((layout) => layout.y + nodeHeight + 24));
+  return { width: maxX, height: maxY, nodeWidth, nodeHeight };
+}
+
+function graphEdgeSvg(width, height) {
+  const nodes = new Map((graphBuilder.nodes || []).map((node) => [node.id, node]));
+  const layout = graphCanvasLayout();
+  const lines = [];
+  for (const node of graphBuilder.nodes || []) {
+    const from = normalizedGraphNodeLayout(node);
+    const targets = graphNodeEdges(node);
+    targets.forEach((target) => {
+      const targetNode = nodes.get(target);
+      if (!targetNode) return;
+      const to = normalizedGraphNodeLayout(targetNode);
+      lines.push(`
+        <line
+          x1="${from.x + layout.nodeWidth}"
+          y1="${from.y + layout.nodeHeight / 2}"
+          x2="${to.x}"
+          y2="${to.y + layout.nodeHeight / 2}"
+        ></line>
+      `);
+    });
+  }
+  return `<svg class="graph-edge-svg" width="${width}" height="${height}" aria-hidden="true">${lines.join("")}</svg>`;
+}
+
+function bindGraphNodeDrag() {
+  ruleGraph.querySelectorAll("[data-graph-drag]").forEach((handle) => {
+    handle.addEventListener("pointerdown", (event) => {
+      const button = handle.closest("[data-graph-node]");
+      const node = (graphBuilder.nodes || []).find((item) => item.id === button?.dataset.graphNode);
+      const canvas = ruleGraph.querySelector(".graph-canvas");
+      if (!button || !node || !canvas) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const start = { x: event.clientX, y: event.clientY };
+      const original = normalizedGraphNodeLayout(node);
+      let moved = false;
+      const move = (moveEvent) => {
+        const canvasRect = canvas.getBoundingClientRect();
+        const next = {
+          x: Math.max(16, Math.min(canvasRect.width - 226, original.x + moveEvent.clientX - start.x)),
+          y: Math.max(16, Math.min(canvasRect.height - 140, original.y + moveEvent.clientY - start.y))
+        };
+        moved = moved || Math.abs(next.x - original.x) > 4 || Math.abs(next.y - original.y) > 4;
+        node.layout = { x: Math.round(next.x), y: Math.round(next.y) };
+        button.style.left = `${node.layout.x}px`;
+        button.style.top = `${node.layout.y}px`;
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        if (moved) {
+          button.dataset.dragged = "true";
+          renderRuleGraph();
+          syncJsonFromBuilder();
+        }
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up, { once: true });
     });
   });
 }
