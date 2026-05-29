@@ -188,6 +188,7 @@ document.querySelector("#export-audit-csv").addEventListener("click", exportAudi
 document.querySelector("#import-schema").addEventListener("click", importSchema);
 document.querySelector("#refresh-schema").addEventListener("click", loadSchema);
 document.querySelector("#sync-schema").addEventListener("click", syncSchemaFromMeiro);
+document.querySelector("#sync-meiro-metadata").addEventListener("click", syncMeiroMetadata);
 document.querySelector("#run-eval").addEventListener("click", runEvaluate);
 document.querySelector("#run-eval-secondary").addEventListener("click", runEvaluate);
 document.querySelector("#load-preset").addEventListener("click", loadEvaluatePreset);
@@ -3996,6 +3997,10 @@ async function loadSettings() {
     document.querySelector("#setting-meiro-api-token").value = "";
     document.querySelector("#setting-meiro-api-token").placeholder = settings.meiro_api_token_configured ? "Configured" : "";
     document.querySelector("#setting-meiro-feedback-url").value = settings.meiro_feedback_url || "";
+    document.querySelector("#setting-meiro-skill-url").value = settings.meiro_skill_url || "";
+    document.querySelector("#setting-meiro-cli-url").value = settings.meiro_cli_url || settings.meiro_url || "";
+    document.querySelector("#setting-meiro-cli-token").value = "";
+    document.querySelector("#setting-meiro-cli-token").placeholder = settings.meiro_cli_token_configured ? "Configured" : "Uses Profile API token";
     document.querySelector("#setting-schema-sync-interval").value = settings.schema_sync_interval_minutes || 15;
     document.querySelector("#schema-sync-identifier-type").value = settings.schema_sync_identifier_type || "";
     document.querySelector("#schema-sync-identifier-value").value = settings.schema_sync_identifier_value || "";
@@ -4021,6 +4026,9 @@ async function testMeiroConnection(target) {
       meiro_api_url: document.querySelector("#setting-meiro-api-url").value.trim(),
       meiro_api_token: document.querySelector("#setting-meiro-api-token").value.trim(),
       meiro_feedback_url: document.querySelector("#setting-meiro-feedback-url").value.trim(),
+      meiro_skill_url: document.querySelector("#setting-meiro-skill-url").value.trim(),
+      meiro_cli_url: document.querySelector("#setting-meiro-cli-url").value.trim(),
+      meiro_cli_token: document.querySelector("#setting-meiro-cli-token").value.trim(),
       identifier_type: document.querySelector("#schema-sync-identifier-type").value.trim(),
       identifier_value: document.querySelector("#schema-sync-identifier-value").value.trim()
     };
@@ -4047,12 +4055,16 @@ async function saveSettings(event) {
       meiro_source_slug: document.querySelector("#setting-meiro-source-slug").value.trim(),
       meiro_api_url: document.querySelector("#setting-meiro-api-url").value.trim(),
       meiro_feedback_url: document.querySelector("#setting-meiro-feedback-url").value.trim(),
+      meiro_skill_url: document.querySelector("#setting-meiro-skill-url").value.trim(),
+      meiro_cli_url: document.querySelector("#setting-meiro-cli-url").value.trim(),
       schema_sync_interval_minutes: Number(document.querySelector("#setting-schema-sync-interval").value || 15),
       schema_sync_identifier_type: document.querySelector("#schema-sync-identifier-type").value.trim(),
       schema_sync_identifier_value: document.querySelector("#schema-sync-identifier-value").value.trim()
     };
     const apiToken = document.querySelector("#setting-meiro-api-token").value.trim();
     if (apiToken) payload.meiro_api_token = apiToken;
+    const cliToken = document.querySelector("#setting-meiro-cli-token").value.trim();
+    if (cliToken) payload.meiro_cli_token = cliToken;
     const body = await api("/v1/settings", {
       method: "PUT",
       body: JSON.stringify(payload)
@@ -4085,6 +4097,35 @@ async function syncSchemaFromMeiro() {
     renderBranchEditor();
     schemaOutput.textContent = JSON.stringify(body, null, 2);
     renderSchemaDiagnostics(body.diagnostics);
+  } catch (error) {
+    schemaOutput.textContent = error.message;
+  }
+}
+
+async function syncMeiroMetadata() {
+  try {
+    schemaOutput.textContent = "Syncing Meiro metadata...";
+    const body = await api("/v1/meiro/metadata/sync", {
+      method: "POST",
+      body: JSON.stringify({
+        meiro_skill_url: document.querySelector("#setting-meiro-skill-url").value.trim(),
+        meiro_cli_url: document.querySelector("#setting-meiro-cli-url").value.trim(),
+        meiro_cli_token: document.querySelector("#setting-meiro-cli-token").value.trim(),
+        meiro_api_url: document.querySelector("#setting-meiro-api-url").value.trim(),
+        meiro_api_token: document.querySelector("#setting-meiro-api-token").value.trim(),
+        identifier_type: document.querySelector("#schema-sync-identifier-type").value.trim(),
+        identifier_value: document.querySelector("#schema-sync-identifier-value").value.trim()
+      })
+    });
+    cachedSchema = [
+      ...(body.imported?.attributes || []),
+      ...(body.imported?.segments || []),
+      ...(body.imported?.context || [])
+    ];
+    await loadSettings();
+    renderBranchEditor();
+    schemaOutput.textContent = JSON.stringify(body, null, 2);
+    renderSchemaDiagnostics(body.diagnostics?.profile_api?.diagnostics || body.diagnostics);
   } catch (error) {
     schemaOutput.textContent = error.message;
   }
@@ -4169,6 +4210,7 @@ function renderSettingsSummary(settings, runtime, error = null) {
   const collectorConfigured = Boolean(settings?.meiro_url && settings?.meiro_source_slug);
   const feedbackConfigured = Boolean(settings?.meiro_feedback_url);
   const apiConfigured = Boolean(settings?.meiro_api_url && settings?.meiro_api_token_configured);
+  const metadataConfigured = Boolean((settings?.meiro_cli_url || settings?.meiro_url) && (settings?.meiro_cli_token_configured || settings?.meiro_api_token_configured));
   const schemaStatus = settings?.schema_last_sync_status || "never";
   const schemaHealthy = ["ok", "success"].includes(schemaStatus);
   const schemaDetail = settings?.schema_last_synced_at
@@ -4199,6 +4241,12 @@ function renderSettingsSummary(settings, runtime, error = null) {
       value: apiConfigured ? "Configured" : "Incomplete",
       detail: apiConfigured ? settings.meiro_api_url : "Set API URL and token for schema import",
       ok: apiConfigured
+    },
+    {
+      label: "Meiro Metadata",
+      value: metadataConfigured ? "Configured" : "Fallback only",
+      detail: metadataConfigured ? (settings.meiro_cli_url || settings.meiro_url) : "Add shared API token for mpcli catalog sync",
+      ok: metadataConfigured
     },
     {
       label: "Schema Sync",

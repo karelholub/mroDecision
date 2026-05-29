@@ -1042,6 +1042,22 @@
                     <input id="setting-meiro-feedback-url" placeholder="https://.../collect/decision-engine-feedback" />
                   </label>
                 </div>
+                <div class="settings-card wide">
+                  <div class="grid-three">
+                    <label>
+                      Meiro skill URL
+                      <input id="setting-meiro-skill-url" placeholder="https://.../skill" />
+                    </label>
+                    <label>
+                      Shared API URL
+                      <input id="setting-meiro-cli-url" placeholder="https://..." />
+                    </label>
+                    <label>
+                      Shared API token
+                      <input id="setting-meiro-cli-token" type="password" />
+                    </label>
+                  </div>
+                </div>
               </div>
               <div class="actions left">
                 <button type="submit">Save Settings</button>
@@ -1082,6 +1098,7 @@
                   <div class="actions left">
                     <button type="submit">Save Settings</button>
                     <button type="button" id="sync-schema">Sync From Meiro</button>
+                    <button type="button" id="sync-meiro-metadata">Sync Metadata From Meiro</button>
                   </div>
                   <div id="schema-sync-status" class="status-line"></div>
                 </div>

@@ -966,6 +966,45 @@ paths:
                     type: array
                     items:
                       type: string
+  /v1/meiro/metadata/sync:
+    post:
+      summary: Sync Meiro metadata for rule authoring
+      description: Uses the Meiro skill/mpcli shared API contract when a compatible shared API token is configured, with Profile API sampling as a fallback for condition-builder schema suggestions.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                meiro_skill_url:
+                  type: string
+                meiro_cli_url:
+                  type: string
+                meiro_cli_token:
+                  type: string
+                meiro_api_url:
+                  type: string
+                meiro_api_token:
+                  type: string
+                identifier_type:
+                  type: string
+                identifier_value:
+                  type: string
+      responses:
+        "200":
+          description: Imported authoring metadata and diagnostics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imported:
+                    type: object
+                  metadata:
+                    type: object
+                  diagnostics:
+                    type: object
   /v1/export:
     get:
       summary: Export rule sets and lookup tables as a promotion bundle
@@ -1141,6 +1180,12 @@ paths:
                 meiro_api_token:
                   type: string
                 meiro_feedback_url:
+                  type: string
+                meiro_skill_url:
+                  type: string
+                meiro_cli_url:
+                  type: string
+                meiro_cli_token:
                   type: string
                 identifier_type:
                   type: string
@@ -2132,6 +2177,14 @@ components:
           type: string
         meiro_feedback_url:
           type: string
+        meiro_skill_url:
+          type: string
+        meiro_cli_url:
+          type: string
+        meiro_cli_token:
+          type: string
+        meiro_cli_token_configured:
+          type: boolean
         schema_sync_interval_minutes:
           type: integer
         schema_sync_identifier_type:

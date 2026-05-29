@@ -382,6 +382,16 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  if (req.method === "POST" && pathname === "/v1/meiro/metadata/sync") {
+    requireScope(req, "admin");
+    const body = await readJson(req);
+    const synced = await syncMeiroMetadata(body, req.auth.name);
+    recordSchemaSyncSuccess(synced, req.auth.name);
+    await store.save();
+    sendJson(res, 200, synced);
+    return;
+  }
+
   notFound(res);
 }
 
@@ -443,6 +453,225 @@ async function testSettingsConnection(input = {}) {
   if (target === "collector") return testMeiroCollectorConnection(input);
   if (target === "feedback") return testMeiroFeedbackConnection(input);
   badRequest("target must be profile, collector, or feedback");
+}
+
+async function syncMeiroMetadata(input = {}, author) {
+  const settings = store.getSettings();
+  const skillUrl = String(input.meiro_skill_url || settings.meiro_skill_url || "").trim();
+  const cliBase = String(input.meiro_cli_url || settings.meiro_cli_url || settings.meiro_url || "").trim();
+  const cliToken = String(input.meiro_cli_token || settings.meiro_cli_token || input.meiro_api_token || settings.meiro_api_token || "").trim();
+  const diagnostics = {
+    summary: { imported: 0, skipped: 0, failed: 0 },
+    skill: null,
+    shared_api: [],
+    profile_api: null
+  };
+  let imported = { attributes: [], segments: [], context: [] };
+  const metadata = {};
+
+  if (skillUrl) diagnostics.skill = await inspectMeiroSkill(skillUrl);
+
+  if (cliBase && cliToken) {
+    const shared = await fetchMeiroSharedMetadata(cliBase, cliToken);
+    diagnostics.shared_api = shared.diagnostics;
+    metadata.identifier_types = shared.identifier_types;
+    metadata.audiences = shared.audiences;
+    metadata.catalogs = shared.catalogs;
+    metadata.event_types = shared.event_types;
+    if (shared.schema.attributes.length || shared.schema.segments.length || shared.schema.context.length) {
+      const diagnosed = diagnoseSchemaImport(shared.schema);
+      imported = {
+        attributes: diagnosed.replace.attributes ? store.replaceSchemaItems("attribute", diagnosed.valid.attributes, author) : [],
+        segments: diagnosed.replace.segments ? store.replaceSchemaItems("segment", diagnosed.valid.segments, author) : [],
+        context: diagnosed.replace.context ? store.replaceSchemaItems("context", diagnosed.valid.context, author) : []
+      };
+      mergeSchemaDiagnostics(diagnostics.summary, diagnosed.diagnostics.summary);
+    }
+  }
+
+  if (!imported.attributes.length && profileSchemaSyncInputsConfigured(input, settings)) {
+    try {
+      const profileSynced = await syncSchemaFromMeiroProfile(input, author);
+      imported = profileSynced.imported;
+      diagnostics.profile_api = {
+        ok: true,
+        source: profileSynced.source,
+        profile_shape: profileSynced.profile_shape,
+        diagnostics: profileSynced.diagnostics
+      };
+      mergeSchemaDiagnostics(diagnostics.summary, profileSynced.diagnostics.summary);
+    } catch (error) {
+      diagnostics.profile_api = { ok: false, message: error.message };
+      diagnostics.summary.failed += 1;
+    }
+  }
+
+  if (!imported.attributes.length && !imported.segments.length && !imported.context.length) {
+    const sharedFailures = diagnostics.shared_api.filter((item) => !item.ok).map((item) => `${item.path}: ${item.message}`).join("; ");
+    badRequest(sharedFailures || diagnostics.profile_api?.message || "No Meiro metadata could be imported");
+  }
+
+  return {
+    source: cliBase || settings.meiro_api_url || "",
+    imported,
+    metadata,
+    diagnostics
+  };
+}
+
+async function inspectMeiroSkill(skillUrl) {
+  try {
+    const response = await fetchWithTimeout(skillUrl, { headers: { accept: "text/markdown,text/plain,*/*" } });
+    const text = await response.text();
+    return {
+      ok: response.ok,
+      status: response.status,
+      url: skillUrl,
+      name: text.match(/^name:\s*(.+)$/m)?.[1]?.trim() || "",
+      mpcli: text.includes("mpcli"),
+      references: [...text.matchAll(/\[references\/([^\]]+\.md)\]/g)].map((match) => match[1]).slice(0, 30)
+    };
+  } catch (error) {
+    return { ok: false, status: 0, url: skillUrl, message: error.message };
+  }
+}
+
+async function fetchMeiroSharedMetadata(base, token) {
+  const endpoints = [
+    ["attributes", "/api/attributes"],
+    ["audiences", "/api/audiences"],
+    ["identifier_types", "/api/identifier-types"],
+    ["catalogs", "/api/catalogs"],
+    ["event_types", "/api/event-types"]
+  ];
+  const results = await Promise.all(endpoints.map(async ([name, path]) => {
+    const result = await fetchMeiroApi(base, token, path);
+    return { name, path, ...result };
+  }));
+  const byName = Object.fromEntries(results.map((item) => [item.name, item]));
+  const attributes = normalizeMeiroAttributes(extractMeiroList(byName.attributes?.body), "meiro_shared_api");
+  const audiences = normalizeMeiroAudiences(extractMeiroList(byName.audiences?.body));
+  const identifierTypes = normalizeMeiroIdentifierTypes(extractMeiroList(byName.identifier_types?.body));
+  const catalogs = normalizeMeiroCatalogs(extractMeiroList(byName.catalogs?.body));
+  const eventTypes = normalizeMeiroEventTypes(extractMeiroList(byName.event_types?.body));
+  return {
+    diagnostics: results.map((item) => ({
+      path: item.path,
+      ok: item.ok,
+      status: item.status,
+      count: Array.isArray(extractMeiroList(item.body)) ? extractMeiroList(item.body).length : 0,
+      message: item.message
+    })),
+    schema: {
+      attributes,
+      segments: audiences.map((audience) => ({
+        name: audience.id || audience.key || audience.name,
+        type: "boolean",
+        dimension: audience.type || "audience",
+        source: "meiro_shared_api",
+        raw: audience
+      })).filter((item) => item.name),
+      context: [
+        ...identifierTypes.map((item) => ({ name: `identifier.${item.id || item.name}`, type: "string", dimension: item.name || "identifier", source: "meiro_shared_api", raw: item })),
+        ...eventTypes.map((item) => ({ name: `event.${item.id || item.name}`, type: "object", dimension: item.name || "event", source: "meiro_shared_api", raw: item }))
+      ].filter((item) => item.name)
+    },
+    audiences,
+    identifier_types: identifierTypes,
+    catalogs,
+    event_types: eventTypes
+  };
+}
+
+async function fetchMeiroApi(base, token, path) {
+  const url = new URL(path, base.endsWith("/") ? base : `${base}/`);
+  try {
+    const response = await fetchWithTimeout(url, {
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-api-token": token,
+        accept: "application/json"
+      }
+    });
+    const text = await response.text();
+    let body = {};
+    try {
+      body = text ? JSON.parse(text) : {};
+    } catch {
+      body = { raw_preview: text.slice(0, 300) };
+    }
+    return {
+      ok: response.ok,
+      status: response.status,
+      body,
+      message: response.ok ? "ok" : body.message || body.error || `returned ${response.status}`
+    };
+  } catch (error) {
+    return { ok: false, status: 0, body: {}, message: error.message };
+  }
+}
+
+function extractMeiroList(body) {
+  if (Array.isArray(body)) return body;
+  for (const key of ["data", "items", "attributes", "audiences", "identifier_types", "identifierTypes", "catalogs", "event_types", "eventTypes", "results"]) {
+    if (Array.isArray(body?.[key])) return body[key];
+  }
+  return [];
+}
+
+function normalizeMeiroAttributes(items, source) {
+  return items.flatMap((item) => {
+    const name = item.id || item.key || item.slug || item.name;
+    const dimensions = Array.isArray(item.dimensions) && item.dimensions.length ? item.dimensions : [{ name: item.dimension || "value", type: item.type || item.value_type }];
+    if (!name) return [];
+    return dimensions.map((dimension) => ({
+      name,
+      type: dimension.type || item.type || "string",
+      dimension: dimension.name || "value",
+      source,
+      raw: item
+    }));
+  });
+}
+
+function normalizeMeiroAudiences(items) {
+  return items.map((item) => ({
+    id: item.id || item.audienceId || item.key || item.slug || item.name,
+    name: item.name || item.label || item.id,
+    type: item.type || item.audience_type || item.mode || "",
+    status: item.status || ""
+  })).filter((item) => item.id || item.name);
+}
+
+function normalizeMeiroIdentifierTypes(items) {
+  return items.map((item) => ({
+    id: item.id || item.identifierTypeId || item.key || item.slug || item.name,
+    name: item.name || item.label || item.id,
+    type: item.type || item.value_type || "string"
+  })).filter((item) => item.id || item.name);
+}
+
+function normalizeMeiroCatalogs(items) {
+  return items.map((item) => ({
+    id: item.id || item.catalogId || item.key || item.slug || item.name,
+    name: item.name || item.label || item.id,
+    primary_key: item.primaryKeyField || item.primary_key || item.primaryKey || "",
+    fields: Array.isArray(item.fields) ? item.fields.map((field) => field.key || field.name || field.id).filter(Boolean) : []
+  })).filter((item) => item.id || item.name);
+}
+
+function normalizeMeiroEventTypes(items) {
+  return items.map((item) => ({
+    id: item.id || item.eventTypeId || item.key || item.slug || item.name,
+    name: item.name || item.label || item.id,
+    source: item.source || item.source_id || ""
+  })).filter((item) => item.id || item.name);
+}
+
+function mergeSchemaDiagnostics(target, source = {}) {
+  target.imported += Number(source.imported || 0);
+  target.skipped += Number(source.skipped || 0);
+  target.failed += Number(source.failed || 0);
 }
 
 async function testMeiroProfileConnection(input = {}) {
@@ -722,6 +951,15 @@ function schemaSyncConfigured(settings) {
   );
 }
 
+function profileSchemaSyncInputsConfigured(input = {}, settings = store.getSettings()) {
+  return Boolean(
+    String(input.meiro_api_url || settings.meiro_api_url || "").trim() &&
+    String(input.meiro_api_token || settings.meiro_api_token || "").trim() &&
+    String(input.identifier_type || settings.schema_sync_identifier_type || "").trim() &&
+    String(input.identifier_value || settings.schema_sync_identifier_value || "").trim()
+  );
+}
+
 function schemaSyncRuntime() {
   const settings = store.getSettings();
   return {
@@ -773,9 +1011,24 @@ function objectToSchemaItems(object, kind) {
   return Object.entries(object).map(([name, raw]) => ({
     name,
     type: inferValueType(raw, kind),
+    dimension: inferValueDimension(raw, kind),
     source: "meiro_profile_api",
     raw
   }));
+}
+
+function inferValueDimension(raw, kind) {
+  if (kind === "segment") return "audience";
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const keys = Object.keys(value).filter((key) => value[key] != null);
+    if (keys.length === 1) return keys[0];
+    for (const key of ["value", "score", "count", "ltv", "total_spent", "tier", "segment", "language_code", "balance"]) {
+      if (key in value) return key;
+    }
+    return keys.slice(0, 3).join(", ");
+  }
+  return "value";
 }
 
 function inferValueType(raw, kind) {
@@ -805,7 +1058,9 @@ function unwrapProfileValue(raw) {
 function publicSettings(settings) {
   const copy = { ...settings };
   if (copy.meiro_api_token) copy.meiro_api_token_configured = true;
+  if (copy.meiro_cli_token) copy.meiro_cli_token_configured = true;
   delete copy.meiro_api_token;
+  delete copy.meiro_cli_token;
   return copy;
 }
 
