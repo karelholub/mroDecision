@@ -110,6 +110,22 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
     context: { channel: "web" }
   });
   assert.equal(clientEvent.event_id, "evt-test-1");
+  assert.equal(clientEvent.accepted, true);
+  assert.equal(clientEvent.duplicate, false);
+  const duplicateClientEvent = store.addClientEvent({
+    event_id: "evt-test-1",
+    event_type: "exposure",
+    occurred_at: "2026-05-27T00:02:00.000Z",
+    decision_key: "campaign_suppression",
+    profile_key: "p-1",
+    rule_version: 1,
+    variant_key: "control",
+    surface: "homepage",
+    context: { channel: "retry" }
+  });
+  assert.equal(duplicateClientEvent.accepted, false);
+  assert.equal(duplicateClientEvent.duplicate, true);
+  assert.equal(duplicateClientEvent.context.channel, "web");
   const eventMetrics = store.getMetrics().client_events;
   assert.equal(eventMetrics.total, 1);
   assert.equal(eventMetrics.by_type[0].event_type, "exposure");

@@ -149,8 +149,9 @@ Goal: make the service deployable beyond local demo.
 - Add backup/restore guidance for SQLite or migration path to a managed database.
 - Add data-retention controls for audit, impression, and exposure events.
 - Add traffic guardrails for high-volume client endpoints.
+- Add idempotent client feedback ingestion for retry-safe website integrations.
 
-Status: readiness, request IDs, request logs, guarded bootstrap-token disablement, CI checks, production Compose/nginx examples, backup guidance, managed database migration guidance, a simple p50/p95/p99 benchmark harness, SQLite retention controls for audits and client events, portable config bundles with reusable condition blocks plus non-secret settings, Settings UI export/import for those bundles, configurable body/request/socket limits, and client endpoint rate limiting with metrics are implemented. A managed database adapter remains.
+Status: readiness, request IDs, request logs, guarded bootstrap-token disablement, CI checks, production Compose/nginx examples, backup guidance, managed database migration guidance, a simple p50/p95/p99 benchmark harness, SQLite retention controls for audits and client events, portable config bundles with reusable condition blocks plus non-secret settings, Settings UI export/import for those bundles, configurable body/request/socket limits, client endpoint rate limiting with metrics, and idempotent client feedback ingestion are implemented. A managed database adapter remains.
 
 ## Recommended Next Sprint
 

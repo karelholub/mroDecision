@@ -212,6 +212,8 @@ paths:
       description: Requires a token with the `client` scope. Used when a message or placement was rendered.
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -219,6 +221,12 @@ paths:
             schema:
               $ref: "#/components/schemas/ClientEventRequest"
       responses:
+        "200":
+          description: Duplicate client event ignored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientEventResponse"
         "202":
           description: Accepted client event
           content:
@@ -231,6 +239,8 @@ paths:
       description: Requires a token with the `client` scope. Used when a variant assignment was actually exposed to the customer.
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -238,6 +248,12 @@ paths:
             schema:
               $ref: "#/components/schemas/ClientEventRequest"
       responses:
+        "200":
+          description: Duplicate client event ignored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientEventResponse"
         "202":
           description: Accepted client event
           content:
@@ -250,6 +266,8 @@ paths:
       description: Requires a token with the `client` scope. Used when a customer completes a tracked outcome after variant exposure.
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -257,6 +275,12 @@ paths:
             schema:
               $ref: "#/components/schemas/ClientEventRequest"
       responses:
+        "200":
+          description: Duplicate client event ignored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientEventResponse"
         "202":
           description: Accepted client event
           content:
@@ -1320,6 +1344,13 @@ components:
       schema:
         type: string
         pattern: "^[a-z0-9_]+$"
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Optional retry key for client event ingestion. Used as event_id when the JSON body omits event_id.
+      schema:
+        type: string
   responses:
     Error:
       description: Error response
@@ -1639,8 +1670,14 @@ components:
           additionalProperties: true
     ClientEventResponse:
       type: object
-      required: [event]
+      required: [event, accepted, duplicate]
       properties:
+        accepted:
+          type: boolean
+          description: True when the event was newly stored.
+        duplicate:
+          type: boolean
+          description: True when an existing event with the same idempotency key was ignored.
         event:
           type: object
           properties:
@@ -1667,6 +1704,10 @@ components:
               type: string
             context:
               type: object
+            accepted:
+              type: boolean
+            duplicate:
+              type: boolean
     RuleSetSummary:
       type: object
       required: [name, decision_key, status]

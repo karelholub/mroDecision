@@ -316,7 +316,7 @@ export class Store {
       context: input.context || {},
       event: isPlainObject(input.event) ? input.event : {}
     };
-    this.db
+    const result = this.db
       .prepare(
         `INSERT OR IGNORE INTO client_events (
           event_id, event_type, occurred_at, decision_key, profile_key,
@@ -336,9 +336,18 @@ export class Store {
         stringify(event.context),
         stringify(event)
       );
+    const accepted = result.changes > 0;
+    if (!accepted) {
+      const existing = this.db.prepare("SELECT event_json FROM client_events WHERE event_id = ?").get(event.event_id);
+      return {
+        ...(existing ? parse(existing.event_json) : event),
+        accepted: false,
+        duplicate: true
+      };
+    }
     const cutoff = new Date(Date.now() - this.getClientEventRetentionDays() * 24 * 60 * 60 * 1000).toISOString();
     this.db.prepare("DELETE FROM client_events WHERE occurred_at < ?").run(cutoff);
-    return event;
+    return { ...event, accepted: true, duplicate: false };
   }
 
   countClientEvents(params = {}) {

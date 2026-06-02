@@ -150,10 +150,16 @@ async function routeApi(req, res, url) {
     const body = await readJson(req, config.requestBodyLimitBytes);
     validateClientEventRequest(body);
     enforceAllowedDecision(req, body.decision_key);
-    const event = store.addClientEvent(clientEventFromRequest(clientEventMatch[1], body));
-    await store.save();
-    clientResultCache.clear();
-    sendJson(res, 202, { event });
+    const event = store.addClientEvent(clientEventFromRequest(clientEventMatch[1], body, req));
+    if (event.accepted) {
+      await store.save();
+      clientResultCache.clear();
+    }
+    sendJson(res, event.accepted ? 202 : 200, {
+      event,
+      accepted: event.accepted,
+      duplicate: event.duplicate
+    });
     return;
   }
 
@@ -1867,10 +1873,10 @@ async function evaluateClientSurface(body, auth) {
   };
 }
 
-function clientEventFromRequest(eventType, body) {
+function clientEventFromRequest(eventType, body, req) {
   return {
     event_type: eventType,
-    event_id: body.event_id,
+    event_id: body.event_id || idempotencyKey(req),
     occurred_at: body.occurred_at ? new Date(body.occurred_at).toISOString() : createdAtIso(),
     decision_key: body.decision_key,
     profile_key: body.profile_key,
@@ -1881,6 +1887,11 @@ function clientEventFromRequest(eventType, body) {
     context: body.context || {},
     event: body.event || {}
   };
+}
+
+function idempotencyKey(req) {
+  const value = req.headers["idempotency-key"];
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function enforceAllowedDecision(req, decisionKey) {

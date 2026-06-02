@@ -137,6 +137,8 @@ Open `http://localhost:8091`, enter a published experiment `decision_key`, and c
 
 Experiment operations are available in the DEE UI and through `GET /v1/experiments`. The endpoint reports baseline variant, current winner, lift versus baseline, exposure/impression/conversion counts, and conversion rates. Add `?format=csv` to export the same analysis for downstream reporting.
 
+For website retry safety, send `event_id` in the JSON body or an `Idempotency-Key` header when calling impression, exposure, or conversion endpoints. New events return `202`; duplicate retry events return `200` with `duplicate: true` and do not increment metrics.
+
 For real external websites, allow their browser origin with `DEE_CORS_ORIGINS`, for example:
 
 ```bash

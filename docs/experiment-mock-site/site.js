@@ -110,11 +110,13 @@ async function sendClientEvent(type) {
   };
 
   try {
-    const body = await api(`/v1/client/${type}`, payload);
+    const body = await api(`/v1/client/${type}`, payload, {
+      "Idempotency-Key": clientEventKey(type, decision)
+    });
     if (type === "exposure") state.exposureSent = true;
     if (type === "impression") state.impressionSent = true;
     if (type === "conversion") state.conversionSent = true;
-    setStatus(`${type} sent`);
+    setStatus(body.duplicate ? `${type} duplicate` : `${type} sent`);
     elements.output.textContent = JSON.stringify({ last_decision: decision, feedback: body }, null, 2);
     renderSummary();
   } catch (error) {
@@ -191,13 +193,14 @@ function summaryItem(label, value) {
   return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`;
 }
 
-async function api(path, payload) {
+async function api(path, payload, extraHeaders = {}) {
   const base = elements.baseUrl.value.trim().replace(/\/$/, "");
   const response = await fetch(`${base}${path}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${elements.token.value.trim()}`
+      authorization: `Bearer ${elements.token.value.trim()}`,
+      ...extraHeaders
     },
     body: JSON.stringify(payload)
   });
@@ -208,6 +211,18 @@ async function api(path, payload) {
 
 function messageIdFromDecision(decision) {
   return decision.outputs?.message_id || decision.outputs?.message?.id || "";
+}
+
+function clientEventKey(type, decision) {
+  return [
+    "mock",
+    type,
+    decision.decision_key,
+    decision.rule_version || "v0",
+    decision.profile_key,
+    decision.experiment?.variant_key || "none",
+    elements.sessionId.value.trim()
+  ].join(":");
 }
 
 function setStatus(value) {

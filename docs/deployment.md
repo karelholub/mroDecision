@@ -60,6 +60,8 @@ Runtime knobs:
 
 Rate-limited responses return `429`, `retry-after`, and `x-ratelimit-*` headers. Watch `/v1/metrics` for `client_rate_limit.block_rate`, `client_cache.hit_rate`, `profile_cache.hit_rate`, and request latency before increasing limits. For browser integrations, keep request payloads small and prefer profile/context keys over large profile snapshots.
 
+Client feedback endpoints are idempotent by `event_id` or `Idempotency-Key`. Use a stable key for impression, exposure, and conversion retries so browser retry queues, CDN retries, and network timeouts do not inflate operational metrics or experiment conversion rates.
+
 ## SQLite Operations
 
 Mount `DEE_DATA_DIR` on persistent storage. With the default settings, the important files are:
