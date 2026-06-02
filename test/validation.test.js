@@ -163,6 +163,7 @@ test("validates experiment variant allocation", () => {
       type: "experiment",
       metadata: {
         experiment: {
+          status: "running",
           unit: "profile",
           variants: [
             { key: "control", weight: 50, outputs: { banner: "A" } },
@@ -183,6 +184,17 @@ test("validates experiment variant allocation", () => {
         draft: { fallback: { result: "eligible", outputs: {} }, branches: [] }
       }),
     /weights must sum to 100/
+  );
+  assert.throws(
+    () =>
+      validateRuleSetPayload({
+        name: "Bad Experiment Status",
+        decision_key: "bad_experiment_status",
+        type: "experiment",
+        metadata: { experiment: { status: "launched", variants: [{ key: "a", weight: 100 }] } },
+        draft: { fallback: { result: "eligible", outputs: {} }, branches: [] }
+      }),
+    /status/
   );
 });
 

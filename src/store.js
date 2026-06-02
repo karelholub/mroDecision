@@ -167,15 +167,16 @@ export class Store {
       version: nextVersion,
       published_at: createdAtNow(),
       author,
-      definition: structuredClone(ruleSet.draft)
+      definition: structuredClone(ruleSet.draft),
+      metadata: structuredClone(ruleSet.metadata || {})
     };
 
     this.db
       .prepare(
-        `INSERT INTO rule_versions (decision_key, version, published_at, author, definition_json)
-         VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO rule_versions (decision_key, version, published_at, author, definition_json, metadata_json)
+         VALUES (?, ?, ?, ?, ?, ?)`
       )
-      .run(key, version.version, version.published_at, version.author, stringify(version.definition));
+      .run(key, version.version, version.published_at, version.author, stringify(version.definition), stringify(version.metadata));
 
     const updated = {
       ...ruleSet,
@@ -252,6 +253,7 @@ export class Store {
     const updated = {
       ...ruleSet,
       draft: structuredClone(version.definition),
+      metadata: isPlainObject(version.metadata) ? structuredClone(version.metadata) : ruleSet.metadata,
       status: "draft",
       author,
       updated_at: createdAtNow()
@@ -1096,6 +1098,7 @@ function migrate(db) {
       published_at TEXT NOT NULL,
       author TEXT NOT NULL,
       definition_json TEXT NOT NULL,
+      metadata_json TEXT NOT NULL DEFAULT '{}',
       PRIMARY KEY (decision_key, version),
       FOREIGN KEY (decision_key) REFERENCES rule_sets(decision_key) ON DELETE CASCADE
     );
@@ -1247,6 +1250,7 @@ function migrate(db) {
   ensureColumn(db, "rule_sets", "surface", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "rule_sets", "cache_policy_json", "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn(db, "rule_sets", "metadata_json", "TEXT NOT NULL DEFAULT '{}'");
+  ensureColumn(db, "rule_versions", "metadata_json", "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn(db, "api_tokens", "decision_keys_json", "TEXT NOT NULL DEFAULT '[]'");
   seedLookupHistory(db);
   seedSettings(db);
@@ -1491,8 +1495,8 @@ function updateRuleSet(db, ruleSet) {
 function replaceVersions(db, decisionKey, versions) {
   db.prepare("DELETE FROM rule_versions WHERE decision_key = ?").run(decisionKey);
   const insert = db.prepare(
-    `INSERT INTO rule_versions (decision_key, version, published_at, author, definition_json)
-     VALUES (?, ?, ?, ?, ?)`
+    `INSERT INTO rule_versions (decision_key, version, published_at, author, definition_json, metadata_json)
+     VALUES (?, ?, ?, ?, ?, ?)`
   );
   for (const version of versions || []) {
     insert.run(
@@ -1500,7 +1504,8 @@ function replaceVersions(db, decisionKey, versions) {
       Number(version.version),
       version.published_at || createdAtNow(),
       version.author || "system",
-      stringify(version.definition || {})
+      stringify(version.definition || {}),
+      stringify(isPlainObject(version.metadata) ? version.metadata : {})
     );
   }
 }
@@ -1578,7 +1583,8 @@ function rowToVersion(row) {
     version: row.version,
     published_at: row.published_at,
     author: row.author,
-    definition: parse(row.definition_json)
+    definition: parse(row.definition_json),
+    metadata: parse(row.metadata_json || "{}")
   };
 }
 

@@ -1683,7 +1683,8 @@ function enforceAllowedDecision(req, decisionKey) {
 function assignExperimentVariant(ruleSet, request, evaluated) {
   if (ruleSet.type !== "experiment") return null;
   if (["ineligible", "suppressed"].includes(evaluated.result)) return null;
-  const experiment = ruleSet.metadata?.experiment || {};
+  const experiment = evaluated.version_metadata?.experiment || ruleSet.metadata?.experiment || {};
+  if (experiment.status && experiment.status !== "running") return null;
   const variants = Array.isArray(experiment.variants) ? experiment.variants : [];
   if (!variants.length) return null;
   const forced = request.context?.force_variant || request.context?.forced_variants?.[ruleSet.decision_key];

@@ -61,6 +61,8 @@ const inspectorFallback = document.querySelector("#inspector-fallback");
 const inspectorBranches = document.querySelector("#inspector-branches");
 const inspectorNodes = document.querySelector("#inspector-nodes");
 const inspectorMode = document.querySelector("#inspector-mode");
+const experimentPanel = document.querySelector("#experiment-panel");
+const experimentSummary = document.querySelector("#experiment-summary");
 const ruleDetailModal = document.querySelector("#rule-detail-modal");
 const ruleBuilderModal = document.querySelector("#rule-builder-modal");
 const publishConfirmModal = document.querySelector("#publish-confirm-modal");
@@ -74,6 +76,7 @@ let selectedRuleKey = null;
 let selectedLookupId = null;
 let selectedMessageId = null;
 let selectedPublishedDefinition = null;
+let selectedPublishedMetadata = null;
 let builderBranches = [];
 let graphBuilder = { entry: "input", nodes: [] };
 let cachedRuleSets = [];
@@ -267,6 +270,12 @@ document.querySelector("#rule-draft").addEventListener("change", syncBuilderFrom
   document.querySelector(selector).addEventListener("input", renderRuleInspector);
   document.querySelector(selector).addEventListener("change", renderRuleInspector);
 });
+["#experiment-status", "#experiment-unit", "#experiment-variants"].forEach((selector) => {
+  document.querySelector(selector).addEventListener("input", renderRuleInspector);
+  document.querySelector(selector).addEventListener("change", renderRuleInspector);
+});
+document.querySelector("#experiment-launch").addEventListener("click", () => setExperimentStatus("running"));
+document.querySelector("#experiment-pause").addEventListener("click", () => setExperimentStatus("paused"));
 document.querySelector("#fallback-result").addEventListener("input", syncJsonFromBuilder);
 document.querySelector("#fallback-outputs").addEventListener("change", syncJsonFromBuilder);
 document.querySelector("#lookup-editor").addEventListener("submit", saveLookup);
@@ -785,6 +794,7 @@ function renderRuleInspector() {
     statusItem("Type", type),
     statusItem("Priority", priority)
   ].join("");
+  renderExperimentPanel();
   inspectorKey.textContent = key;
   inspectorSurface.textContent = surface;
   inspectorCache.textContent = ttl > 0 ? `${ttl}s / ${scope === "none" ? "profile" : scope}` : "No cache hint";
@@ -797,6 +807,87 @@ function renderRuleInspector() {
   logicSummaryTitle.textContent = mode === "graph" ? "Advanced graph" : "Branch rules";
   logicSummaryMeta.textContent = mode === "graph" ? nodeLabel : `${branchLabel} · fallback ${fallback}`;
   logicModalSubtitle.textContent = mode === "graph" ? "Advanced graph routing and node outputs" : "Branch rules, conditions, lookup outputs, and fallback";
+}
+
+function renderExperimentPanel() {
+  if (!experimentPanel) return;
+  const type = document.querySelector("#rule-type").value || "decision";
+  experimentPanel.hidden = type !== "experiment";
+  if (type !== "experiment") return;
+  const experiment = readExperimentMetadata({ tolerateInvalid: true });
+  const variants = Array.isArray(experiment.variants) ? experiment.variants : [];
+  const total = variants.reduce((sum, variant) => sum + Number(variant.weight || 0), 0);
+  const status = experiment.status || "draft";
+  const warnings = experimentMetadataWarnings(experiment);
+  experimentSummary.innerHTML = [
+    statusItem("Status", status),
+    statusItem("Assignment", experiment.unit || "profile"),
+    statusItem("Variants", variants.length),
+    statusItem("Allocation", `${Number.isFinite(total) ? total : 0}%`),
+    ...warnings.map((warning) => statusItem("Warning", warning))
+  ].join("");
+}
+
+function setExperimentMetadata(experiment = {}) {
+  document.querySelector("#experiment-status").value = experiment.status || "draft";
+  document.querySelector("#experiment-unit").value = experiment.unit || "profile";
+  document.querySelector("#experiment-variants").value = JSON.stringify(
+    Array.isArray(experiment.variants) && experiment.variants.length
+      ? experiment.variants
+      : defaultExperimentVariants(),
+    null,
+    2
+  );
+  renderExperimentPanel();
+}
+
+function defaultExperimentVariants() {
+  return [
+    { key: "control", weight: 50, outputs: {} },
+    { key: "treatment", weight: 50, outputs: {} }
+  ];
+}
+
+function setExperimentStatus(status) {
+  document.querySelector("#experiment-status").value = status;
+  renderRuleInspector();
+}
+
+function readExperimentMetadata({ tolerateInvalid = false } = {}) {
+  try {
+    const variants = parseJsonStrict(document.querySelector("#experiment-variants").value || "[]", "Variants JSON");
+    return {
+      status: document.querySelector("#experiment-status").value || "draft",
+      unit: document.querySelector("#experiment-unit").value || "profile",
+      variants
+    };
+  } catch (error) {
+    if (!tolerateInvalid) throw error;
+    return {
+      status: document.querySelector("#experiment-status").value || "draft",
+      unit: document.querySelector("#experiment-unit").value || "profile",
+      variants: []
+    };
+  }
+}
+
+function experimentMetadataWarnings(experiment = {}) {
+  const warnings = [];
+  const variants = Array.isArray(experiment.variants) ? experiment.variants : [];
+  if (!variants.length) warnings.push("No variants configured.");
+  const keys = new Set();
+  let total = 0;
+  for (const variant of variants) {
+    if (!variant.key) warnings.push("A variant is missing a key.");
+    if (keys.has(variant.key)) warnings.push(`Duplicate variant key: ${variant.key}`);
+    keys.add(variant.key);
+    const weight = Number(variant.weight || 0);
+    if (!Number.isFinite(weight) || weight < 0) warnings.push(`${variant.key || "variant"} has an invalid weight.`);
+    total += Number.isFinite(weight) ? weight : 0;
+  }
+  if (variants.length && Math.round(total * 1000) !== 100000) warnings.push("Variant weights must sum to 100%.");
+  if (experiment.status === "running" && variants.length < 2) warnings.push("Running experiments should have at least two variants.");
+  return [...new Set(warnings)];
 }
 
 function renderRuleList() {
@@ -885,6 +976,7 @@ async function loadRule(key) {
     const body = await api(`/v1/rule-sets/${encodeURIComponent(key)}`);
     selectedRuleKey = key;
     selectedPublishedDefinition = body.version?.definition || null;
+    selectedPublishedMetadata = body.version?.metadata || null;
     document.querySelector("#rule-name").value = body.rule_set.name;
     document.querySelector("#rule-key").value = body.rule_set.decision_key;
     document.querySelector("#rule-key").disabled = true;
@@ -894,6 +986,7 @@ async function loadRule(key) {
     document.querySelector("#rule-client-ttl").value = body.rule_set.cache_policy?.client_ttl ?? "";
     document.querySelector("#rule-cache-scope").value = body.rule_set.cache_policy?.scope || (body.rule_set.cache_policy?.client_ttl ? "profile" : "none");
     document.querySelector("#rule-description").value = body.rule_set.description || "";
+    setExperimentMetadata(body.rule_set.metadata?.experiment || body.version?.metadata?.experiment || {});
     document.querySelector("#rule-draft").value = JSON.stringify(
       body.draft || body.version?.definition || { fallback: { result: "deferred", outputs: {} }, branches: [] },
       null,
@@ -912,6 +1005,7 @@ async function loadRule(key) {
 function newRule(options = {}) {
   selectedRuleKey = null;
   selectedPublishedDefinition = null;
+  selectedPublishedMetadata = null;
   document.querySelector("#rule-name").value = "New Eligibility Rule";
   document.querySelector("#rule-key").value = "new_eligibility_rule";
   document.querySelector("#rule-key").disabled = false;
@@ -921,6 +1015,7 @@ function newRule(options = {}) {
   document.querySelector("#rule-client-ttl").value = "";
   document.querySelector("#rule-cache-scope").value = "none";
   document.querySelector("#rule-description").value = "";
+  setExperimentMetadata({});
   document.querySelector("#fallback-result").value = "ineligible";
   document.querySelector("#fallback-outputs").value = "{}";
   versionList.innerHTML = row(["No published versions yet", "", "", ""]);
@@ -991,6 +1086,7 @@ async function confirmPublishSelectedRule() {
     const body = await api(`/v1/rule-sets/${encodeURIComponent(selectedRuleKey)}/publish`, { method: "POST", body: "{}" });
     editorOutput.textContent = JSON.stringify(body, null, 2);
     selectedPublishedDefinition = payload.draft;
+    selectedPublishedMetadata = payload.metadata || {};
     closePublishConfirm();
     await loadRules();
     await loadVersions(selectedRuleKey);
@@ -1006,7 +1102,12 @@ async function confirmPublishSelectedRule() {
 function renderPublishReview(payload, schemaWarnings = []) {
   const draft = payload.draft;
   const stats = draftPublishStats(draft);
-  const changes = clientDiffValues(selectedPublishedDefinition || {}, draft).slice(0, 40);
+  const definitionChanges = clientDiffValues(selectedPublishedDefinition || {}, draft);
+  const metadataChanges = clientDiffValues(selectedPublishedMetadata || {}, payload.metadata || {}).map((item) => ({
+    ...item,
+    path: `metadata${item.path.replace(/^\$/, "")}`
+  }));
+  const changes = [...definitionChanges, ...metadataChanges].slice(0, 40);
   const validations = publishValidationItems(payload, schemaWarnings);
   publishConfirmSummary.innerHTML = [
     statusItem("Decision key", payload.decision_key || "-"),
@@ -1028,7 +1129,7 @@ function renderPublishReview(payload, schemaWarnings = []) {
       <span>${escapeHtml(item.detail)}</span>
     </div>
   `).join("");
-  document.querySelector("#confirm-publish-rule").disabled = schemaWarnings.length > 0;
+  document.querySelector("#confirm-publish-rule").disabled = schemaWarnings.length > 0 || hasBlockingExperimentWarnings(payload);
 }
 
 function renderPublishReviewError(error) {
@@ -1062,13 +1163,51 @@ function publishValidationItems(payload, schemaWarnings = []) {
     items.push({ title: "Response TTL", detail: "No client-side cache hint is configured.", level: "warn" });
   }
   const branchWarnings = branchPublishWarnings(draft);
+  const experimentWarnings = experimentPublishWarnings(payload);
   if (schemaWarnings.length) {
     items.push({ title: "Publish blocked", detail: "Fix schema reference warnings before publishing this rule.", level: "warn" });
   }
-  [...schemaWarnings, ...branchWarnings].forEach((warning) => {
+  [...schemaWarnings, ...branchWarnings, ...experimentWarnings].forEach((warning) => {
     items.push({ title: "Review warning", detail: warning, level: "warn" });
   });
   return items;
+}
+
+function experimentPublishWarnings(payload) {
+  if (payload.type !== "experiment") return [];
+  const experiment = payload.metadata?.experiment || {};
+  const warnings = experimentMetadataWarnings(experiment);
+  const current = selectedPublishedMetadata?.experiment || {};
+  const currentAllocation = variantAllocationSignature(current.variants);
+  const nextAllocation = variantAllocationSignature(experiment.variants);
+  if (currentAllocation && nextAllocation && currentAllocation !== nextAllocation) {
+    warnings.push(`Variant allocation changes from ${currentAllocation} to ${nextAllocation}. Existing assignment distribution can shift.`);
+  }
+  if (current.status === "running" && experiment.status === "running" && current.unit && current.unit !== experiment.unit) {
+    warnings.push(`Assignment unit changes from ${current.unit} to ${experiment.unit}. Existing users may be re-bucketed.`);
+  }
+  if (experiment.status !== "running") {
+    warnings.push(`Experiment will publish with status ${experiment.status || "draft"}; no variants will be assigned until status is running.`);
+  }
+  return warnings;
+}
+
+function hasBlockingExperimentWarnings(payload) {
+  if (payload.type !== "experiment") return false;
+  const warnings = experimentMetadataWarnings(payload.metadata?.experiment || {});
+  return warnings.some((warning) =>
+    warning.includes("must sum to 100") ||
+    warning.includes("missing a key") ||
+    warning.includes("Duplicate variant key") ||
+    warning.includes("invalid weight") ||
+    warning.includes("No variants")
+  );
+}
+
+function variantAllocationSignature(variants = []) {
+  return Array.isArray(variants) && variants.length
+    ? variants.map((variant) => `${variant.key}:${Number(variant.weight || 0)}`).join(", ")
+    : "";
 }
 
 function branchPublishWarnings(draft) {
@@ -1860,17 +1999,20 @@ function formatNumber(value) {
 }
 
 function readEditorPayload() {
-  return {
+  const type = document.querySelector("#rule-type").value;
+  const payload = {
     name: document.querySelector("#rule-name").value.trim(),
     decision_key: document.querySelector("#rule-key").value.trim(),
     description: document.querySelector("#rule-description").value.trim(),
-    type: document.querySelector("#rule-type").value,
+    type,
     priority: Number(document.querySelector("#rule-priority").value || 0),
     surface: document.querySelector("#rule-surface").value.trim(),
     cache_policy: readCachePolicy(),
     draft: JSON.parse(document.querySelector("#rule-draft").value),
     tags: []
   };
+  if (type === "experiment") payload.metadata = { experiment: readExperimentMetadata() };
+  return payload;
 }
 
 function readCachePolicy() {

@@ -212,6 +212,40 @@
                   Description
                   <input id="rule-description" />
                 </label>
+                <div id="experiment-panel" class="experiment-panel" hidden>
+                  <div class="settings-section-head compact-section-head">
+                    <div>
+                      <div class="editor-title compact-title">Experiment Operations</div>
+                      <p>Control assignment status, unit, and variant allocation.</p>
+                    </div>
+                    <div class="actions">
+                      <button type="button" id="experiment-launch">Launch</button>
+                      <button type="button" id="experiment-pause">Pause</button>
+                    </div>
+                  </div>
+                  <div class="grid-two">
+                    <label>
+                      Status
+                      <select id="experiment-status">
+                        <option value="draft">Draft</option>
+                        <option value="running">Running</option>
+                        <option value="paused">Paused</option>
+                      </select>
+                    </label>
+                    <label>
+                      Assignment unit
+                      <select id="experiment-unit">
+                        <option value="profile">Profile</option>
+                        <option value="identifier">Identifier</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label>
+                    Variants JSON
+                    <textarea id="experiment-variants" spellcheck="false"></textarea>
+                  </label>
+                  <div id="experiment-summary" class="status-panel compact-status-panel"></div>
+                </div>
                 <div class="logic-summary-card">
                   <div>
                     <span>Logic authoring</span>

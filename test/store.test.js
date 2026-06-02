@@ -42,10 +42,12 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   const version = store.publish("campaign_suppression", "tester");
   assert.equal(version.version, 1);
   assert.equal(store.getVersion("campaign_suppression").definition.branches[0].id, "risk_segment");
+  assert.equal(store.getVersion("campaign_suppression").metadata.owner, "growth");
 
   store.updateDraft(
     "campaign_suppression",
     {
+      metadata: { owner: "retention" },
       draft: {
         fallback: { result: "eligible", outputs: {} },
         branches: [
@@ -61,9 +63,11 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
     "tester"
   );
   assert.equal(store.getRuleSet("campaign_suppression").draft.branches[0].id, "new_risk_segment");
+  assert.equal(store.getRuleSet("campaign_suppression").metadata.owner, "retention");
   const rolledBack = store.rollbackDraftToVersion("campaign_suppression", 1, "tester");
   assert.equal(rolledBack.status, "draft");
   assert.equal(rolledBack.draft.branches[0].id, "risk_segment");
+  assert.equal(rolledBack.metadata.owner, "growth");
 
   const copy = store.duplicateRuleSet("campaign_suppression", { decision_key: "campaign_suppression_copy" }, "tester");
   assert.equal(copy.status, "draft");

@@ -402,6 +402,26 @@ aside input {
   min-height: 170px;
 }
 
+.experiment-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel-soft);
+  display: grid;
+  gap: 12px;
+}
+
+.experiment-panel[hidden] {
+  display: none;
+}
+
+.experiment-panel textarea {
+  min-height: 150px;
+  max-height: 280px;
+  overflow: auto;
+  resize: vertical;
+}
+
 .integration-workspace,
 .token-workspace {
   grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);

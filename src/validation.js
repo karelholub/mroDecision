@@ -92,6 +92,12 @@ export function validateClientEventRequest(body) {
 
 function validateExperimentMetadata(experiment) {
   if (!isPlainObject(experiment)) badRequest("metadata.experiment must be an object");
+  if (experiment.status != null && !["draft", "running", "paused"].includes(experiment.status)) {
+    badRequest("metadata.experiment.status must be draft, running, or paused");
+  }
+  if (experiment.unit != null && !["profile", "identifier"].includes(experiment.unit)) {
+    badRequest("metadata.experiment.unit must be profile or identifier");
+  }
   if (experiment.variants == null) return;
   if (!Array.isArray(experiment.variants) || experiment.variants.length === 0) {
     badRequest("metadata.experiment.variants must be a non-empty array");

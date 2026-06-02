@@ -24,6 +24,7 @@ export function evaluateDecision({ request, version, lookupTables, now = new Dat
     profile_key: request.profile_key,
     evaluated_at: now.toISOString(),
     rule_version: version.version,
+    version_metadata: version.metadata || {},
     result: outcome.result || "deferred",
     outputs: outcome.outputs || {},
     matched_rules: matchedRules,

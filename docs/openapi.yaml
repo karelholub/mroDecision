@@ -1707,6 +1707,9 @@ components:
         experiment:
           type: object
           properties:
+            status:
+              type: string
+              enum: [draft, running, paused]
             unit:
               type: string
               enum: [profile, identifier]
@@ -1737,6 +1740,8 @@ components:
           type: string
         definition:
           $ref: "#/components/schemas/RuleDefinition"
+        metadata:
+          $ref: "#/components/schemas/RuleSetMetadata"
     LookupTable:
       type: object
       required: [id, name, key_column, rows, version]
