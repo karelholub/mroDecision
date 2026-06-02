@@ -8,6 +8,7 @@ import { evaluateDecision } from "./evaluator.js";
 import { notFound, readJson, sendError, sendJson, sendText, serveStatic } from "./http.js";
 import { createProfileCache, profileCacheKey } from "./profileCache.js";
 import { createRateLimiter } from "./rateLimiter.js";
+import { createRequestMetrics } from "./requestMetrics.js";
 import { Store } from "./store.js";
 import {
   validateBundle,
@@ -26,6 +27,7 @@ const clientRateLimiter = createRateLimiter({
   windowMs: config.clientRateLimitWindowMs,
   max: config.clientRateLimitMax
 });
+const requestMetrics = createRequestMetrics();
 setAuthStore(store);
 let schemaSyncTimer = null;
 let schemaSyncNextRunAt = "";
@@ -176,7 +178,8 @@ async function routeApi(req, res, url) {
         ...store.getMetrics(),
         client_cache: clientResultCache.metrics(),
         profile_cache: meiroProfileCache.metrics(),
-        client_rate_limit: clientRateLimiter.metrics()
+        client_rate_limit: clientRateLimiter.metrics(),
+        runtime_requests: requestMetrics.metrics()
       }
     });
     return;
@@ -268,6 +271,7 @@ async function routeApi(req, res, url) {
         docker_url: "http://localhost:8090",
         db_path: config.dbPath,
         client_rate_limit: clientRateLimiter.metrics(),
+        runtime_requests: requestMetrics.metrics(),
         schema_sync: schemaSyncRuntime(),
         profile_cache: meiroProfileCache.metrics(),
         meiro_deliveries: store.listMeiroDeliveries({ limit: 10 })
@@ -1051,6 +1055,7 @@ function createdAtIso() {
 
 function logRequest(req, res, startedAt, error) {
   const statusCode = res.statusCode || error?.statusCode || 500;
+  const durationMs = Date.now() - startedAt;
   const record = {
     level: statusCode >= 500 ? "error" : "info",
     at: createdAtIso(),
@@ -1058,9 +1063,15 @@ function logRequest(req, res, startedAt, error) {
     method: req.method,
     path: req.url?.split("?")[0] || "",
     status: statusCode,
-    duration_ms: Date.now() - startedAt
+    duration_ms: durationMs
   };
   if (error) record.error = error.message;
+  requestMetrics.record({
+    method: req.method,
+    path: record.path,
+    status: statusCode,
+    duration_ms: durationMs
+  });
   console.log(JSON.stringify(record));
 }
 

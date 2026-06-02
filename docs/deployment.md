@@ -58,7 +58,7 @@ Runtime knobs:
 - `DEE_REQUEST_TIMEOUT_MS` limits full request processing time at the Node HTTP layer.
 - `DEE_HEADERS_TIMEOUT_MS`, `DEE_KEEP_ALIVE_TIMEOUT_MS`, and `DEE_MAX_REQUESTS_PER_SOCKET` tune socket reuse for reverse-proxy traffic.
 
-Rate-limited responses return `429`, `retry-after`, and `x-ratelimit-*` headers. Watch `/v1/metrics` for `client_rate_limit.block_rate`, `client_cache.hit_rate`, `profile_cache.hit_rate`, and request latency before increasing limits. For browser integrations, keep request payloads small and prefer profile/context keys over large profile snapshots.
+Rate-limited responses return `429`, `retry-after`, and `x-ratelimit-*` headers. Watch `/v1/metrics` for `runtime_requests.p95_ms`, `runtime_requests.error_rate`, `runtime_requests.slow_routes`, `client_rate_limit.block_rate`, `client_cache.hit_rate`, and `profile_cache.hit_rate` before increasing limits. For browser integrations, keep request payloads small and prefer profile/context keys over large profile snapshots.
 
 Client feedback endpoints are idempotent by `event_id` or `Idempotency-Key`. Use a stable key for impression, exposure, and conversion retries so browser retry queues, CDN retries, and network timeouts do not inflate operational metrics or experiment conversion rates.
 
@@ -97,7 +97,7 @@ Until that adapter exists, run one service replica per SQLite database volume. M
 
 Every response includes `x-request-id`. Pass your own `x-request-id` from upstream systems when available. The service writes one JSON log line per request, including status, method, path, duration, and request ID.
 
-Use `/v1/metrics` and `/v1/metrics/client-events` from an admin or viewer token for rule usage, client-event reporting, client cache performance, profile cache performance, and client rate-limit pressure.
+Use `/v1/metrics` and `/v1/metrics/client-events` from an admin or viewer token for rule usage, runtime latency/status telemetry, client-event reporting, client cache performance, profile cache performance, and client rate-limit pressure.
 
 ## Benchmark Gates
 

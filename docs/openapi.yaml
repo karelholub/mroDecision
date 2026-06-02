@@ -2305,6 +2305,8 @@ components:
               type: number
         client_rate_limit:
           $ref: "#/components/schemas/RateLimitMetrics"
+        runtime_requests:
+          $ref: "#/components/schemas/RuntimeRequestMetrics"
         client_events:
           type: object
           properties:
@@ -2499,6 +2501,47 @@ components:
           type: integer
         block_rate:
           type: number
+    RuntimeRequestMetrics:
+      type: object
+      properties:
+        started_at:
+          type: string
+          format: date-time
+        sample_size:
+          type: integer
+        total:
+          type: integer
+        errors:
+          type: integer
+        error_rate:
+          type: number
+        p50_ms:
+          type: integer
+        p95_ms:
+          type: integer
+        p99_ms:
+          type: integer
+        max_ms:
+          type: integer
+        statuses:
+          type: object
+          additionalProperties:
+            type: integer
+        slow_routes:
+          type: array
+          items:
+            type: object
+            properties:
+              route:
+                type: string
+              requests:
+                type: integer
+              errors:
+                type: integer
+              avg_ms:
+                type: integer
+              max_ms:
+                type: integer
     ExperimentOperation:
       type: object
       properties:

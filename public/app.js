@@ -432,8 +432,11 @@ function renderMetrics(metrics) {
   const cache = metrics.client_cache || {};
   const profileCache = metrics.profile_cache || {};
   const events = metrics.client_events || {};
+  const runtime = metrics.runtime_requests || {};
+  const rateLimit = metrics.client_rate_limit || {};
   metricCards.innerHTML = [
     metricCard("Requests 24h", formatNumber(requests.last_24h), `${formatNumber(requests.total)} total`, "RQ", "teal"),
+    metricCard("P95 Latency", `${formatNumber(runtime.p95_ms || 0)}ms`, `${formatNumber(runtime.sample_size || 0)} recent samples`, "P95", "blue"),
     metricCard("Unique Profiles", formatNumber(requests.unique_profiles), "Seen in audit log", "UP", "blue"),
     metricCard("Published Rules", formatNumber(rules.published), `${formatNumber(rules.draft)} drafts`, "PR", "purple"),
     metricCard("Schema Items", formatNumber(schema.total), `${schema.last_sync_status || "never"} sync`, "SC", "teal"),
@@ -459,6 +462,9 @@ function renderMetrics(metrics) {
     statusItem("Decision cache misses", formatNumber(cache.misses || 0)),
     statusItem("Profile cache hits", formatNumber(profileCache.hits || 0)),
     statusItem("Profile cache errors", formatNumber(profileCache.errors || 0)),
+    statusItem("Runtime error rate", formatPercent(runtime.error_rate || 0)),
+    statusItem("Rate limit blocks", formatNumber(rateLimit.blocked || 0)),
+    statusItem("Slowest route", runtime.slow_routes?.[0] ? `${runtime.slow_routes[0].route} · ${formatNumber(runtime.slow_routes[0].avg_ms)}ms avg` : "-"),
     ...clientEventStatusItems(events.by_type || [])
   ].join("");
   if (ruleDetailPanel && !ruleDetailPanel.textContent.trim()) {
