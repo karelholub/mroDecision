@@ -98,3 +98,20 @@ Until that adapter exists, run one service replica per SQLite database volume. M
 Every response includes `x-request-id`. Pass your own `x-request-id` from upstream systems when available. The service writes one JSON log line per request, including status, method, path, duration, and request ID.
 
 Use `/v1/metrics` and `/v1/metrics/client-events` from an admin or viewer token for rule usage, client-event reporting, client cache performance, profile cache performance, and client rate-limit pressure.
+
+## Benchmark Gates
+
+Run the benchmark from a network location close to the service before exposing DEE to a high-traffic website:
+
+```bash
+DEE_BENCH_ENDPOINT=/v1/client/evaluate \
+DEE_BENCH_REQUESTS=1000 \
+DEE_BENCH_CONCURRENCY=50 \
+DEE_BENCH_WARMUP_REQUESTS=100 \
+DEE_BENCH_MAX_P95_MS=150 \
+DEE_BENCH_MAX_P99_MS=300 \
+DEE_BENCH_MAX_ERROR_RATE=0 \
+npm run bench
+```
+
+The benchmark emits JSON with request counts, status distribution, error rate, RPS, p50/p95/p99, max latency, configured thresholds, and `passed`. It exits non-zero when a configured threshold fails, so it can be used in staging release checks.

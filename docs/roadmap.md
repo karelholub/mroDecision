@@ -145,13 +145,13 @@ Goal: make the service deployable beyond local demo.
 - Add optional bootstrap-token disablement once DB admin tokens exist.
 - Add health/readiness checks with database status.
 - Add structured logs and request IDs.
-- Add performance benchmark harness for p95/p99 latency and batch throughput.
+- Add performance benchmark harness for p95/p99 latency, throughput, and SLO gates.
 - Add backup/restore guidance for SQLite or migration path to a managed database.
 - Add data-retention controls for audit, impression, and exposure events.
 - Add traffic guardrails for high-volume client endpoints.
 - Add idempotent client feedback ingestion for retry-safe website integrations.
 
-Status: readiness, request IDs, request logs, guarded bootstrap-token disablement, CI checks, production Compose/nginx examples, backup guidance, managed database migration guidance, a simple p50/p95/p99 benchmark harness, SQLite retention controls for audits and client events, portable config bundles with reusable condition blocks plus non-secret settings, Settings UI export/import for those bundles, configurable body/request/socket limits, client endpoint rate limiting with metrics, and idempotent client feedback ingestion are implemented. A managed database adapter remains.
+Status: readiness, request IDs, request logs, guarded bootstrap-token disablement, CI checks, production Compose/nginx examples, backup guidance, managed database migration guidance, a p50/p95/p99 benchmark harness with throughput/error reporting and optional SLO gates, SQLite retention controls for audits and client events, portable config bundles with reusable condition blocks plus non-secret settings, Settings UI export/import for those bundles, configurable body/request/socket limits, client endpoint rate limiting with metrics, and idempotent client feedback ingestion are implemented. A managed database adapter remains.
 
 ## Recommended Next Sprint
 

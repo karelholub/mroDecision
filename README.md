@@ -187,6 +187,12 @@ Run a simple local latency check against the Docker service with:
 npm run bench
 ```
 
-Tune it with `DEE_BENCH_URL`, `DEE_BENCH_TOKEN`, `DEE_BENCH_REQUESTS`, `DEE_BENCH_CONCURRENCY`, and `DEE_BENCH_DECISION_KEY`.
+For browser-facing traffic, run the client endpoint benchmark:
+
+```bash
+npm run bench:client
+```
+
+Tune it with `DEE_BENCH_URL`, `DEE_BENCH_TOKEN`, `DEE_BENCH_ENDPOINT`, `DEE_BENCH_REQUESTS`, `DEE_BENCH_CONCURRENCY`, `DEE_BENCH_WARMUP_REQUESTS`, and `DEE_BENCH_DECISION_KEY`. Add SLO gates with `DEE_BENCH_MAX_P95_MS`, `DEE_BENCH_MAX_P99_MS`, `DEE_BENCH_MAX_ERROR_RATE`, and `DEE_BENCH_MIN_RPS`; the command exits non-zero when a configured gate fails.
 
 Pull requests and pushes to `main` run GitHub Actions checks for JavaScript syntax, the Node test suite, and a Docker image build.
