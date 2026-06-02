@@ -1,7 +1,8 @@
 const state = {
   lastDecision: null,
   exposureSent: false,
-  impressionSent: false
+  impressionSent: false,
+  conversionSent: false
 };
 
 const elements = {
@@ -18,6 +19,7 @@ const elements = {
   newProfile: document.querySelector("#new-profile"),
   sendExposure: document.querySelector("#send-exposure"),
   sendImpression: document.querySelector("#send-impression"),
+  sendConversion: document.querySelector("#send-conversion"),
   status: document.querySelector("#status-pill"),
   summary: document.querySelector("#summary"),
   output: document.querySelector("#output"),
@@ -40,6 +42,7 @@ elements.newProfile.addEventListener("click", () => {
 });
 elements.sendExposure.addEventListener("click", () => sendClientEvent("exposure"));
 elements.sendImpression.addEventListener("click", () => sendClientEvent("impression"));
+elements.sendConversion.addEventListener("click", () => sendClientEvent("conversion"));
 
 function initializeVisitor(force = false) {
   if (force || !elements.profileKey.value) elements.profileKey.value = `visitor-${randomId()}`;
@@ -47,6 +50,7 @@ function initializeVisitor(force = false) {
   state.lastDecision = null;
   state.exposureSent = false;
   state.impressionSent = false;
+  state.conversionSent = false;
   renderSummary();
 }
 
@@ -54,6 +58,7 @@ async function evaluateVariant() {
   setStatus("Evaluating");
   state.exposureSent = false;
   state.impressionSent = false;
+  state.conversionSent = false;
   const request = buildEvaluateRequest();
   try {
     const decision = await api("/v1/client/evaluate", request);
@@ -94,13 +99,21 @@ async function sendClientEvent(type) {
       session_id: elements.sessionId.value.trim(),
       page_url: window.location.href,
       source: "experiment_mock_site"
-    }
+    },
+    event: type === "conversion"
+      ? {
+          name: "mock_signup",
+          value: 1,
+          currency: "EUR"
+        }
+      : undefined
   };
 
   try {
     const body = await api(`/v1/client/${type}`, payload);
     if (type === "exposure") state.exposureSent = true;
     if (type === "impression") state.impressionSent = true;
+    if (type === "conversion") state.conversionSent = true;
     setStatus(`${type} sent`);
     elements.output.textContent = JSON.stringify({ last_decision: decision, feedback: body }, null, 2);
     renderSummary();
@@ -169,6 +182,7 @@ function renderSummary() {
     summaryItem("Rule version", decision.rule_version || "-"),
     summaryItem("Exposure", state.exposureSent ? "sent" : "pending"),
     summaryItem("Impression", state.impressionSent ? "sent" : "pending"),
+    summaryItem("Conversion", state.conversionSent ? "sent" : "pending"),
     summaryItem("TTL", Number.isFinite(decision.ttl_seconds) ? `${decision.ttl_seconds}s` : "-")
   ].join("");
 }

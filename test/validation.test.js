@@ -223,7 +223,8 @@ test("validates client event requests", () => {
       rule_version: 1,
       variant_key: "control",
       occurred_at: "2026-05-27T00:00:00.000Z",
-      context: { channel: "web" }
+      context: { channel: "web" },
+      event: { name: "signup", value: 1 }
     })
   );
   assert.throws(

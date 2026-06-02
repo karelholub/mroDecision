@@ -150,12 +150,27 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
     variant_key: "treatment",
     surface: "homepage"
   });
+  store.addClientEvent({
+    event_id: "evt-experiment-2",
+    event_type: "conversion",
+    occurred_at: "2026-05-27T00:03:00.000Z",
+    decision_key: "hero_experiment",
+    profile_key: "p-1",
+    rule_version: 1,
+    variant_key: "treatment",
+    surface: "homepage",
+    event: { name: "signup", value: 1 }
+  });
   const experimentOps = store.getExperimentOperations();
   assert.equal(experimentOps.summary.total, 1);
   assert.equal(experimentOps.summary.running, 1);
   assert.equal(experimentOps.summary.archived, 0);
   assert.equal(experimentOps.summary.exposures, 1);
-  assert.equal(experimentOps.experiments[0].variants.find((variant) => variant.key === "treatment").events.exposure.count, 1);
+  assert.equal(experimentOps.summary.conversions, 1);
+  const treatmentVariant = experimentOps.experiments[0].variants.find((variant) => variant.key === "treatment");
+  assert.equal(treatmentVariant.events.exposure.count, 1);
+  assert.equal(treatmentVariant.events.conversion.count, 1);
+  assert.equal(treatmentVariant.conversion_rate, 1);
 
   const table = store.replaceLookupTable("tiers", { key_column: "country", rows: [{ country: "CZ", tier: "A" }] }, "tester");
   assert.equal(table.version, 1);

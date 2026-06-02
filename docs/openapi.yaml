@@ -244,6 +244,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientEventResponse"
+  /v1/client/conversion:
+    post:
+      summary: Record an experiment conversion
+      description: Requires a token with the `client` scope. Used when a customer completes a tracked outcome after variant exposure.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientEventRequest"
+      responses:
+        "202":
+          description: Accepted client event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientEventResponse"
   /v1/rule-sets:
     get:
       summary: List rule sets
@@ -322,7 +341,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [impression, exposure]
+            enum: [impression, exposure, conversion]
         - name: variant_key
           in: query
           schema:
@@ -1376,6 +1395,10 @@ components:
         context:
           type: object
           additionalProperties: true
+        event:
+          type: object
+          description: Optional conversion details such as name, value, currency, or order id.
+          additionalProperties: true
     EvaluateResponse:
       type: object
       required: [decision_key, profile_key, evaluated_at, rule_version, result, outputs, matched_rules, errors]
@@ -1616,7 +1639,7 @@ components:
               type: string
             event_type:
               type: string
-              enum: [impression, exposure]
+              enum: [impression, exposure, conversion]
             occurred_at:
               type: string
               format: date-time
@@ -2244,7 +2267,7 @@ components:
                 properties:
                   event_type:
                     type: string
-                    enum: [impression, exposure]
+                    enum: [impression, exposure, conversion]
                   count:
                     type: integer
                   count_24h:
@@ -2370,7 +2393,7 @@ components:
           type: string
         event_type:
           type: string
-          enum: [impression, exposure]
+          enum: [impression, exposure, conversion]
         count:
           type: integer
         unique_profiles:
@@ -2400,6 +2423,8 @@ components:
             exposures:
               type: integer
             impressions:
+              type: integer
+            conversions:
               type: integer
         experiments:
           type: array
@@ -2440,6 +2465,8 @@ components:
             $ref: "#/components/schemas/ExperimentVariantOperation"
         events:
           type: object
+        conversion_rate:
+          type: number
     ExperimentVariantOperation:
       type: object
       properties:
@@ -2451,6 +2478,8 @@ components:
           type: object
         events:
           type: object
+        conversion_rate:
+          type: number
         configured:
           type: boolean
     Settings:

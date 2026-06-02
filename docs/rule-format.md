@@ -157,7 +157,7 @@ Rule sets with `"type": "experiment"` can define deterministic variant allocatio
 
 `cache_policy.client_ttl` enables in-process caching for client responses. Supported scopes are `profile`, `session`, `global`, and `request`. `session` uses `context.session_id` when present, while `request` includes the full request payload in the cache key.
 
-After rendering a message or exposing an experiment variant, clients can send feedback events to `POST /v1/client/impression` and `POST /v1/client/exposure`. Include `decision_key`, `profile_key`, and any available `rule_version`, `variant_key`, `message_id`, `surface`, or `context` values.
+After rendering a message, exposing an experiment variant, or recording an outcome, clients can send feedback events to `POST /v1/client/impression`, `POST /v1/client/exposure`, and `POST /v1/client/conversion`. Include `decision_key`, `profile_key`, and any available `rule_version`, `variant_key`, `message_id`, `surface`, `context`, or conversion `event` details.
 
 For in-app messages, store reusable content in the message library and return `outputs.message_id` from the rule. `POST /v1/client/evaluate` expands active library content into `outputs.message`, and optional `outputs.message_content` values override the library defaults for that decision.
 

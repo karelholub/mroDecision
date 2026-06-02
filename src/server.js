@@ -132,7 +132,7 @@ async function routeApi(req, res, url) {
     return;
   }
 
-  const clientEventMatch = pathname.match(/^\/v1\/client\/(impression|exposure)$/);
+  const clientEventMatch = pathname.match(/^\/v1\/client\/(impression|exposure|conversion)$/);
   if (clientEventMatch && req.method === "POST") {
     requireScope(req, "client");
     const body = await readJson(req);
@@ -1773,7 +1773,8 @@ function clientEventFromRequest(eventType, body) {
     variant_key: body.variant_key || "",
     message_id: body.message_id || "",
     surface: body.surface || "",
-    context: body.context || {}
+    context: body.context || {},
+    event: body.event || {}
   };
 }
 

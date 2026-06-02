@@ -82,6 +82,7 @@ export function validateClientEventRequest(body) {
   optionalString(body, "message_id");
   optionalString(body, "surface");
   optionalObject(body, "context");
+  optionalObject(body, "event");
   if (body.rule_version != null && !Number.isInteger(Number(body.rule_version))) {
     badRequest("rule_version must be an integer when provided");
   }

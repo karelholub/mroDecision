@@ -484,7 +484,8 @@ function renderExperiments(body) {
       metricCard("Experiments", formatNumber(summary.total || 0), `${formatNumber(summary.running || 0)} running`, "EX", "teal"),
       metricCard("Paused", formatNumber(summary.paused || 0), `${formatNumber(summary.draft || 0)} draft · ${formatNumber(summary.archived || 0)} archived`, "PA", "blue"),
       metricCard("Exposures", formatNumber(summary.exposures || 0), "Variant shown to users", "EV", "purple"),
-      metricCard("Impressions", formatNumber(summary.impressions || 0), "Message rendered events", "IM", "teal")
+      metricCard("Conversions", formatNumber(summary.conversions || 0), `${formatPercent(rate(summary.conversions || 0, summary.exposures || 0))} of exposures`, "CV", "teal"),
+      metricCard("Impressions", formatNumber(summary.impressions || 0), "Message rendered events", "IM", "blue")
     ].join("");
   }
   if (!cachedExperiments.length) {
@@ -502,6 +503,7 @@ function renderExperiments(body) {
 function experimentOpsCard(experiment, index) {
   const exposureCount = experiment.events?.exposure?.count || 0;
   const impressionCount = experiment.events?.impression?.count || 0;
+  const conversionCount = experiment.events?.conversion?.count || 0;
   const allocationState = Math.round(Number(experiment.allocation_total || 0) * 1000) === 100000 ? "ok" : "warn";
   return `
     <button type="button" class="experiment-ops-card" data-experiment-index="${index}">
@@ -522,6 +524,7 @@ function experimentOpsCard(experiment, index) {
       </div>
       <div class="experiment-ops-events">
         ${statusItem("Exposures", formatNumber(exposureCount))}
+        ${statusItem("Conversions", `${formatNumber(conversionCount)} · ${formatPercent(experiment.conversion_rate || 0)}`)}
         ${statusItem("Impressions", formatNumber(impressionCount))}
       </div>
     </button>
@@ -560,6 +563,8 @@ function renderExperimentDetail(experiment) {
         <span>Variant</span>
         <span>Weight</span>
         <span>Exposures</span>
+        <span>Conversions</span>
+        <span>Conv. rate</span>
         <span>Impressions</span>
         <span>Last event</span>
       </div>
@@ -570,13 +575,16 @@ function renderExperimentDetail(experiment) {
 
 function experimentVariantRow(variant) {
   const exposure = variant.events?.exposure || {};
+  const conversion = variant.events?.conversion || {};
   const impression = variant.events?.impression || {};
-  const lastSeen = [exposure.last_seen_at, impression.last_seen_at].filter(Boolean).sort().at(-1);
+  const lastSeen = [exposure.last_seen_at, conversion.last_seen_at, impression.last_seen_at].filter(Boolean).sort().at(-1);
   return `
     <div class="experiment-variant-row">
       <strong>${escapeHtml(variant.key || "(empty)")}${variant.configured === false ? " *" : ""}</strong>
       <span>${formatNumber(variant.weight || 0)}%</span>
       <span>${formatNumber(exposure.count || 0)} / ${formatNumber(exposure.unique_profiles || 0)} profiles</span>
+      <span>${formatNumber(conversion.count || 0)} / ${formatNumber(conversion.unique_profiles || 0)} profiles</span>
+      <span>${formatPercent(variant.conversion_rate || 0)}</span>
       <span>${formatNumber(impression.count || 0)} / ${formatNumber(impression.unique_profiles || 0)} profiles</span>
       <span>${lastSeen ? formatTime(lastSeen) : "-"}</span>
     </div>
@@ -662,7 +670,8 @@ function clientEventStatusItems(items) {
   const counts = Object.fromEntries(items.map((item) => [item.event_type, item.count]));
   return [
     statusItem("Exposures", formatNumber(counts.exposure || 0)),
-    statusItem("Impressions", formatNumber(counts.impression || 0))
+    statusItem("Impressions", formatNumber(counts.impression || 0)),
+    statusItem("Conversions", formatNumber(counts.conversion || 0))
   ];
 }
 
@@ -2267,6 +2276,15 @@ function formatTime(value) {
 
 function formatNumber(value) {
   return new Intl.NumberFormat().format(Number(value || 0));
+}
+
+function formatPercent(value) {
+  return `${Math.round(Number(value || 0) * 1000) / 10}%`;
+}
+
+function rate(numerator, denominator) {
+  const base = Number(denominator || 0);
+  return base > 0 ? Number(numerator || 0) / base : 0;
 }
 
 function readEditorPayload() {

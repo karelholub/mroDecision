@@ -313,7 +313,8 @@ export class Store {
       variant_key: input.variant_key || "",
       message_id: input.message_id || "",
       surface: input.surface || "",
-      context: input.context || {}
+      context: input.context || {},
+      event: isPlainObject(input.event) ? input.event : {}
     };
     this.db
       .prepare(
@@ -580,11 +581,13 @@ export class Store {
           .all(rule.decision_key);
         const variantMetrics = variants.map((variant) => {
           const rows = eventRows.filter((row) => (row.variant_key || "") === (variant.key || ""));
+          const events = eventCounts(rows);
           return {
             key: variant.key,
             weight: Number(variant.weight || 0),
             outputs: isPlainObject(variant.outputs) ? variant.outputs : {},
-            events: eventCounts(rows)
+            events,
+            conversion_rate: conversionRate(events)
           };
         });
         const unconfiguredVariantRows = eventRows
@@ -596,8 +599,10 @@ export class Store {
             return groups;
           }, new Map());
         for (const [key, rows] of unconfiguredVariantRows.entries()) {
-          variantMetrics.push({ key, weight: 0, outputs: {}, events: eventCounts(rows), configured: false });
+          const events = eventCounts(rows);
+          variantMetrics.push({ key, weight: 0, outputs: {}, events, conversion_rate: conversionRate(events), configured: false });
         }
+        const events = eventCounts(eventTotals);
         return {
           name: rule.name,
           decision_key: rule.decision_key,
@@ -612,7 +617,8 @@ export class Store {
           variant_count: variants.length,
           allocation_total: variants.reduce((sum, variant) => sum + Number(variant.weight || 0), 0),
           variants: variantMetrics,
-          events: eventCounts(eventTotals)
+          events,
+          conversion_rate: conversionRate(events)
         };
       });
     return {
@@ -624,7 +630,8 @@ export class Store {
         draft: experiments.filter((item) => item.status !== "archived" && item.experiment_status === "draft").length,
         archived: experiments.filter((item) => item.status === "archived").length,
         exposures: experiments.reduce((sum, item) => sum + Number(item.events.exposure?.count || 0), 0),
-        impressions: experiments.reduce((sum, item) => sum + Number(item.events.impression?.count || 0), 0)
+        impressions: experiments.reduce((sum, item) => sum + Number(item.events.impression?.count || 0), 0),
+        conversions: experiments.reduce((sum, item) => sum + Number(item.events.conversion?.count || 0), 0)
       },
       experiments
     };
@@ -1294,7 +1301,7 @@ function migrate(db) {
 
     CREATE TABLE IF NOT EXISTS client_events (
       event_id TEXT PRIMARY KEY,
-      event_type TEXT NOT NULL CHECK (event_type IN ('impression', 'exposure')),
+      event_type TEXT NOT NULL CHECK (event_type IN ('impression', 'exposure', 'conversion')),
       occurred_at TEXT NOT NULL,
       decision_key TEXT NOT NULL,
       profile_key TEXT NOT NULL,
@@ -1366,6 +1373,7 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_condition_blocks_name ON condition_blocks(name, id);
     CREATE INDEX IF NOT EXISTS idx_meiro_deliveries_time ON meiro_deliveries(attempted_at);
   `);
+  migrateClientEventsForConversions(db);
   ensureColumn(db, "rule_sets", "type", "TEXT NOT NULL DEFAULT 'decision'");
   ensureColumn(db, "rule_sets", "priority", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "rule_sets", "surface", "TEXT NOT NULL DEFAULT ''");
@@ -1908,8 +1916,44 @@ function eventCounts(rows = []) {
   return counts;
 }
 
+function conversionRate(events = {}) {
+  const exposures = Number(events.exposure?.count || 0);
+  if (!exposures) return 0;
+  return Number(events.conversion?.count || 0) / exposures;
+}
+
 function isPlainObject(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function migrateClientEventsForConversions(db) {
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'client_events'").get();
+  if (!row?.sql || row.sql.includes("'conversion'")) return;
+  db.exec(`
+    ALTER TABLE client_events RENAME TO client_events_old;
+    CREATE TABLE client_events (
+      event_id TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL CHECK (event_type IN ('impression', 'exposure', 'conversion')),
+      occurred_at TEXT NOT NULL,
+      decision_key TEXT NOT NULL,
+      profile_key TEXT NOT NULL,
+      rule_version INTEGER,
+      variant_key TEXT NOT NULL DEFAULT '',
+      message_id TEXT NOT NULL DEFAULT '',
+      surface TEXT NOT NULL DEFAULT '',
+      context_json TEXT NOT NULL DEFAULT '{}',
+      event_json TEXT NOT NULL
+    );
+    INSERT INTO client_events (
+      event_id, event_type, occurred_at, decision_key, profile_key, rule_version,
+      variant_key, message_id, surface, context_json, event_json
+    )
+    SELECT
+      event_id, event_type, occurred_at, decision_key, profile_key, rule_version,
+      variant_key, message_id, surface, context_json, event_json
+    FROM client_events_old;
+    DROP TABLE client_events_old;
+  `);
 }
 
 function ensureColumn(db, table, column, definition) {

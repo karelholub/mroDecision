@@ -10,7 +10,7 @@ This initial implementation is dependency-light and runs on Node.js built-ins on
 - Rule-set search, filtering, duplicate, and archive actions
 - Single and batch evaluation APIs
 - Client evaluation API for app-facing decisions and experiments
-- Client impression and exposure feedback APIs
+- Client impression, exposure, and conversion feedback APIs
 - In-app message library with reusable default content
 - Safe expression evaluation without `eval`
 - Basic rule-builder style branches and advanced graph nodes
@@ -69,6 +69,7 @@ DEE_DB_PATH=/path/to/dee.sqlite npm start
 - `POST /v1/client/surface`
 - `POST /v1/client/impression`
 - `POST /v1/client/exposure`
+- `POST /v1/client/conversion`
 - `GET /v1/messages`
 - `PUT /v1/messages/:id`
 - `GET /v1/rule-sets`
@@ -130,6 +131,7 @@ Open `http://localhost:8091`, enter a published experiment `decision_key`, and c
 - `POST /v1/client/evaluate`
 - `POST /v1/client/exposure`
 - `POST /v1/client/impression`
+- `POST /v1/client/conversion`
 
 For real external websites, allow their browser origin with `DEE_CORS_ORIGINS`, for example:
 

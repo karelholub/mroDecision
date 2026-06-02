@@ -128,11 +128,12 @@ Goal: support feedback loops and operational reporting for client surfaces.
 - Add frequency cap node backed by impression events.
 - Add `POST /v1/client/impression`.
 - Add `POST /v1/client/exposure`.
-- Store impression and exposure events in audit-compatible tables.
-- Add exposure and impression reports by rule set, variant, message, surface, and profile.
+- Add `POST /v1/client/conversion`.
+- Store impression, exposure, and conversion events in audit-compatible tables.
+- Add exposure, impression, conversion, and conversion-rate reports by rule set, variant, message, surface, and profile.
 - Add optional export format for downstream analytics or Meiro ingestion.
 
-Status: first-pass feedback ingestion is implemented with client-scoped impression and exposure endpoints, service metrics, event reports by rule, variant, message, surface, and profile, a `frequency_cap` graph node backed by impression events, a reusable message library, surface-level priority evaluation, flexible message templates, message lifecycle/TTL metadata, and an experiment operations dashboard with variant feedback rollups.
+Status: first-pass feedback ingestion is implemented with client-scoped impression, exposure, and conversion endpoints, service metrics, event reports by rule, variant, message, surface, and profile, a `frequency_cap` graph node backed by impression events, a reusable message library, surface-level priority evaluation, flexible message templates, message lifecycle/TTL metadata, and an experiment operations dashboard with variant feedback and conversion-rate rollups.
 
 Open decision: defer mutual exclusion groups until basic experiment evaluation and exposure feedback are proven.
 
