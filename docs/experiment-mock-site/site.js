@@ -20,6 +20,7 @@ const elements = {
   sendExposure: document.querySelector("#send-exposure"),
   sendImpression: document.querySelector("#send-impression"),
   sendConversion: document.querySelector("#send-conversion"),
+  secondaryCta: document.querySelector("#secondary-cta"),
   status: document.querySelector("#status-pill"),
   summary: document.querySelector("#summary"),
   output: document.querySelector("#output"),
@@ -43,6 +44,7 @@ elements.newProfile.addEventListener("click", () => {
 elements.sendExposure.addEventListener("click", () => sendClientEvent("exposure"));
 elements.sendImpression.addEventListener("click", () => sendClientEvent("impression"));
 elements.sendConversion.addEventListener("click", () => sendClientEvent("conversion"));
+elements.secondaryCta.addEventListener("click", () => sendClientEvent("exposure"));
 
 function initializeVisitor(force = false) {
   if (force || !elements.profileKey.value) elements.profileKey.value = `visitor-${randomId()}`;
