@@ -46,6 +46,20 @@ Use:
 
 The production Compose template uses `/v1/ready` as the container health check.
 
+## Traffic Guardrails
+
+DEE is designed to sit behind a CDN, load balancer, or reverse proxy for public website traffic. Keep coarse abuse controls at the edge, then use DEE process controls as the application-level backstop.
+
+Runtime knobs:
+
+- `DEE_CLIENT_RATE_LIMIT_WINDOW_MS` and `DEE_CLIENT_RATE_LIMIT_MAX` rate-limit `/v1/client/*` calls per token, origin, action, and source IP.
+- `DEE_REQUEST_BODY_LIMIT_BYTES` caps normal JSON requests.
+- `DEE_BATCH_REQUEST_BODY_LIMIT_BYTES` caps batch/import/schema payloads.
+- `DEE_REQUEST_TIMEOUT_MS` limits full request processing time at the Node HTTP layer.
+- `DEE_HEADERS_TIMEOUT_MS`, `DEE_KEEP_ALIVE_TIMEOUT_MS`, and `DEE_MAX_REQUESTS_PER_SOCKET` tune socket reuse for reverse-proxy traffic.
+
+Rate-limited responses return `429`, `retry-after`, and `x-ratelimit-*` headers. Watch `/v1/metrics` for `client_rate_limit.block_rate`, `client_cache.hit_rate`, `profile_cache.hit_rate`, and request latency before increasing limits. For browser integrations, keep request payloads small and prefer profile/context keys over large profile snapshots.
+
 ## SQLite Operations
 
 Mount `DEE_DATA_DIR` on persistent storage. With the default settings, the important files are:
@@ -81,5 +95,4 @@ Until that adapter exists, run one service replica per SQLite database volume. M
 
 Every response includes `x-request-id`. Pass your own `x-request-id` from upstream systems when available. The service writes one JSON log line per request, including status, method, path, duration, and request ID.
 
-Use `/v1/metrics` and `/v1/metrics/client-events` from an admin or viewer token for rule usage and client-event reporting.
-
+Use `/v1/metrics` and `/v1/metrics/client-events` from an admin or viewer token for rule usage, client-event reporting, client cache performance, profile cache performance, and client rate-limit pressure.

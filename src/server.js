@@ -7,6 +7,7 @@ import { createClientResultCache } from "./clientCache.js";
 import { evaluateDecision } from "./evaluator.js";
 import { notFound, readJson, sendError, sendJson, sendText, serveStatic } from "./http.js";
 import { createProfileCache, profileCacheKey } from "./profileCache.js";
+import { createRateLimiter } from "./rateLimiter.js";
 import { Store } from "./store.js";
 import {
   validateBundle,
@@ -21,6 +22,10 @@ import {
 const store = await Store.load();
 const clientResultCache = createClientResultCache();
 const meiroProfileCache = createProfileCache();
+const clientRateLimiter = createRateLimiter({
+  windowMs: config.clientRateLimitWindowMs,
+  max: config.clientRateLimitMax
+});
 setAuthStore(store);
 let schemaSyncTimer = null;
 let schemaSyncNextRunAt = "";
@@ -47,6 +52,10 @@ const server = http.createServer(async (req, res) => {
     logRequest(req, res, startedAt, error);
   }
 });
+server.requestTimeout = config.requestTimeoutMs;
+server.headersTimeout = config.headersTimeoutMs;
+server.keepAliveTimeout = config.keepAliveTimeoutMs;
+server.maxRequestsPerSocket = config.maxRequestsPerSocket;
 
 server.listen(config.port, () => {
   console.log(`DEE listening on http://localhost:${config.port}`);
@@ -83,7 +92,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "POST" && pathname === "/v1/evaluate") {
     requireScope(req, "evaluate");
-    const body = await readJson(req);
+    const body = await readJson(req, config.requestBodyLimitBytes);
     validateEvaluateRequest(body);
     const result = evaluateRequest(body);
     await store.save();
@@ -93,7 +102,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "POST" && pathname === "/v1/evaluate/batch") {
     requireScope(req, "evaluate");
-    const body = await readJson(req, 8 * 1024 * 1024);
+    const body = await readJson(req, config.batchRequestBodyLimitBytes);
     const profiles = body.profiles || body.requests || [];
     if (!Array.isArray(profiles)) badRequest("profiles must be an array");
     if (profiles.length > 500) badRequest("Batch limit is 500 profiles");
@@ -113,7 +122,8 @@ async function routeApi(req, res, url) {
 
   if (req.method === "POST" && pathname === "/v1/client/evaluate") {
     requireScope(req, "client");
-    const body = await readJson(req);
+    enforceClientRateLimit(req, res, "evaluate");
+    const body = await readJson(req, config.requestBodyLimitBytes);
     validateClientEvaluateRequest(body);
     enforceAllowedDecision(req, body.decision_key);
     const result = await evaluateClientRequest(body);
@@ -124,7 +134,8 @@ async function routeApi(req, res, url) {
 
   if (req.method === "POST" && pathname === "/v1/client/surface") {
     requireScope(req, "client");
-    const body = await readJson(req);
+    enforceClientRateLimit(req, res, "surface");
+    const body = await readJson(req, config.requestBodyLimitBytes);
     validateClientSurfaceRequest(body);
     const result = await evaluateClientSurface(body, req.auth);
     await store.save();
@@ -135,7 +146,8 @@ async function routeApi(req, res, url) {
   const clientEventMatch = pathname.match(/^\/v1\/client\/(impression|exposure|conversion)$/);
   if (clientEventMatch && req.method === "POST") {
     requireScope(req, "client");
-    const body = await readJson(req);
+    enforceClientRateLimit(req, res, clientEventMatch[1]);
+    const body = await readJson(req, config.requestBodyLimitBytes);
     validateClientEventRequest(body);
     enforceAllowedDecision(req, body.decision_key);
     const event = store.addClientEvent(clientEventFromRequest(clientEventMatch[1], body));
@@ -157,7 +169,8 @@ async function routeApi(req, res, url) {
       metrics: {
         ...store.getMetrics(),
         client_cache: clientResultCache.metrics(),
-        profile_cache: meiroProfileCache.metrics()
+        profile_cache: meiroProfileCache.metrics(),
+        client_rate_limit: clientRateLimiter.metrics()
       }
     });
     return;
@@ -189,7 +202,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "POST" && pathname === "/v1/rule-sets") {
     requireScope(req, "editor");
-    const body = await readJson(req);
+    const body = await readJson(req, config.requestBodyLimitBytes);
     validateRuleSetPayload(body);
     validateRuleDefinition(body.draft || body.definition || {}, body.input_schema || {});
     const ruleSet = store.createRuleSet(body, req.auth.name);
@@ -207,7 +220,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "POST" && pathname === "/v1/import") {
     requireScope(req, "editor");
-    const body = await readJson(req, 8 * 1024 * 1024);
+    const body = await readJson(req, config.batchRequestBodyLimitBytes);
     validateBundle(body);
     const imported = store.importBundle(body, req.auth.name);
     await store.save();
@@ -224,7 +237,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "POST" && pathname === "/v1/tokens") {
     requireScope(req, "admin");
-    const body = await readJson(req);
+    const body = await readJson(req, config.requestBodyLimitBytes);
     const token = store.createApiToken(body, req.auth.name);
     await store.save();
     sendJson(res, 201, { token });
@@ -248,6 +261,7 @@ async function routeApi(req, res, url) {
         direct_url: `http://localhost:${config.port}`,
         docker_url: "http://localhost:8090",
         db_path: config.dbPath,
+        client_rate_limit: clientRateLimiter.metrics(),
         schema_sync: schemaSyncRuntime(),
         profile_cache: meiroProfileCache.metrics(),
         meiro_deliveries: store.listMeiroDeliveries({ limit: 10 })
@@ -258,7 +272,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "PUT" && pathname === "/v1/settings") {
     requireScope(req, "admin");
-    const settings = store.updateSettings(await readJson(req), req.auth.name);
+    const settings = store.updateSettings(await readJson(req, config.requestBodyLimitBytes), req.auth.name);
     await store.save();
     scheduleSchemaSync();
     sendJson(res, 200, { settings: publicSettings(settings), runtime: { schema_sync: schemaSyncRuntime() } });
@@ -267,7 +281,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "POST" && pathname === "/v1/settings/test-connection") {
     requireScope(req, "admin");
-    const result = await testSettingsConnection(await readJson(req));
+    const result = await testSettingsConnection(await readJson(req, config.requestBodyLimitBytes));
     await store.save();
     sendJson(res, 200, result);
     return;
@@ -317,7 +331,7 @@ async function routeApi(req, res, url) {
   const evaluationProfileMatch = pathname.match(/^\/v1\/evaluation-profiles\/([^/]+)$/);
   if (evaluationProfileMatch && req.method === "PUT") {
     requireScope(req, "editor");
-    const body = await readJson(req);
+    const body = await readJson(req, config.requestBodyLimitBytes);
     validateEvaluateRequest(body.request || {});
     const profile = store.upsertEvaluationProfile(decodeURIComponent(evaluationProfileMatch[1]), body, req.auth.name);
     await store.save();
@@ -336,7 +350,7 @@ async function routeApi(req, res, url) {
   const conditionBlockMatch = pathname.match(/^\/v1\/condition-blocks\/([^/]+)$/);
   if (conditionBlockMatch && req.method === "PUT") {
     requireScope(req, "editor");
-    const block = store.upsertConditionBlock(decodeURIComponent(conditionBlockMatch[1]), await readJson(req), req.auth.name);
+    const block = store.upsertConditionBlock(decodeURIComponent(conditionBlockMatch[1]), await readJson(req, config.requestBodyLimitBytes), req.auth.name);
     await store.save();
     sendJson(res, 200, { condition_block: block });
     return;
@@ -353,7 +367,7 @@ async function routeApi(req, res, url) {
   const messageMatch = pathname.match(/^\/v1\/messages\/([^/]+)$/);
   if (messageMatch && req.method === "PUT") {
     requireScope(req, "editor");
-    const message = store.upsertMessage(decodeURIComponent(messageMatch[1]), await readJson(req), req.auth.name);
+    const message = store.upsertMessage(decodeURIComponent(messageMatch[1]), await readJson(req, config.requestBodyLimitBytes), req.auth.name);
     await store.save();
     clientResultCache.clear();
     sendJson(res, 200, { message });
@@ -388,7 +402,7 @@ async function routeApi(req, res, url) {
   const lookupMatch = pathname.match(/^\/v1\/lookup-tables\/([^/]+)$/);
   if (lookupMatch && req.method === "PUT") {
     requireScope(req, "editor");
-    const table = store.replaceLookupTable(decodeURIComponent(lookupMatch[1]), await readJson(req), req.auth.name);
+    const table = store.replaceLookupTable(decodeURIComponent(lookupMatch[1]), await readJson(req, config.requestBodyLimitBytes), req.auth.name);
     await store.save();
     clientResultCache.clear();
     sendJson(res, 200, { lookup_table: table });
@@ -409,7 +423,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "POST" && pathname === "/v1/schema/import") {
     requireScope(req, "admin");
-    const body = await readJson(req);
+    const body = await readJson(req, config.batchRequestBodyLimitBytes);
     const diagnosed = diagnoseSchemaImport(body);
     const imported = {
       attributes: diagnosed.replace.attributes ? store.replaceSchemaItems("attribute", diagnosed.valid.attributes, req.auth.name) : [],
@@ -423,7 +437,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "POST" && pathname === "/v1/schema/sync") {
     requireScope(req, "admin");
-    const body = await readJson(req);
+    const body = await readJson(req, config.requestBodyLimitBytes);
     try {
       const synced = await syncSchemaFromMeiroProfile(body, req.auth.name);
       recordSchemaSyncSuccess(synced, req.auth.name);
@@ -439,7 +453,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "POST" && pathname === "/v1/meiro/metadata/sync") {
     requireScope(req, "admin");
-    const body = await readJson(req);
+    const body = await readJson(req, config.requestBodyLimitBytes);
     try {
       const synced = await syncMeiroMetadata(body, req.auth.name);
       recordSchemaSyncSuccess(synced, req.auth.name);
@@ -1044,6 +1058,36 @@ function logRequest(req, res, startedAt, error) {
   console.log(JSON.stringify(record));
 }
 
+function enforceClientRateLimit(req, res, action) {
+  const result = clientRateLimiter.check(clientRateLimitKey(req, action));
+  if (result.limit) {
+    res.setHeader("x-ratelimit-limit", String(result.limit));
+    res.setHeader("x-ratelimit-remaining", String(result.remaining));
+    res.setHeader("x-ratelimit-reset", result.reset_at);
+  }
+  if (result.allowed) return;
+
+  res.setHeader("retry-after", String(result.retry_after_seconds));
+  const error = new Error("Client rate limit exceeded");
+  error.statusCode = 429;
+  error.code = "rate_limited";
+  throw error;
+}
+
+function clientRateLimitKey(req, action) {
+  const tokenName = req.auth?.name || "anonymous";
+  const origin = req.headers.origin || "server";
+  const ip = forwardedIp(req) || req.socket?.remoteAddress || "unknown";
+  return [tokenName, action || "client", origin, ip].join(":");
+}
+
+function forwardedIp(req) {
+  return String(req.headers["x-forwarded-for"] || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)[0] || "";
+}
+
 function inferSchemaFromProfile(profile) {
   const attributes = readProfileObject(profile, ["attributes", "profile.attributes", "data.attributes", "payload.attributes"]);
   const segments = readProfileObject(profile, ["segments", "audiences", "profile.segments", "profile.audiences", "data.segments", "data.audiences"]);
@@ -1175,7 +1219,7 @@ async function routeRuleSet(req, res, key, suffix) {
 
   if (req.method === "PUT" && suffix === "draft") {
     requireScope(req, "editor");
-    const body = await readJson(req);
+    const body = await readJson(req, config.requestBodyLimitBytes);
     validateRuleSetPayload(body, { partial: true });
     const existing = store.getRuleSet(key);
     if (!existing) notFoundError(`Rule set not found: ${key}`);
@@ -1210,7 +1254,7 @@ async function routeRuleSet(req, res, key, suffix) {
 
   if (req.method === "POST" && suffix === "duplicate") {
     requireScope(req, "editor");
-    const body = await readJson(req);
+    const body = await readJson(req, config.requestBodyLimitBytes);
     validateRuleSetPayload(
       {
         name: body.name || `${key} Copy`,
@@ -1231,7 +1275,7 @@ async function routeRuleSet(req, res, key, suffix) {
     if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
     validateRuleDefinition(ruleSet.draft, ruleSet.input_schema || {});
     const body = {
-      ...(await readJson(req)),
+      ...(await readJson(req, config.requestBodyLimitBytes)),
       decision_key: key
     };
     validateEvaluateRequest(body);
@@ -1252,7 +1296,7 @@ async function routeRuleSet(req, res, key, suffix) {
     const ruleSet = store.getRuleSet(key);
     if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
     const body = {
-      ...(await readJson(req)),
+      ...(await readJson(req, config.requestBodyLimitBytes)),
       decision_key: key
     };
     validateEvaluateRequest(body);

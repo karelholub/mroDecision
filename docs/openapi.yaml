@@ -2262,6 +2262,8 @@ components:
               type: integer
             hit_rate:
               type: number
+        client_rate_limit:
+          $ref: "#/components/schemas/RateLimitMetrics"
         client_events:
           type: object
           properties:
@@ -2439,6 +2441,23 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ExperimentOperation"
+    RateLimitMetrics:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        window_ms:
+          type: integer
+        limit:
+          type: integer
+        active_buckets:
+          type: integer
+        allowed:
+          type: integer
+        blocked:
+          type: integer
+        block_rate:
+          type: number
     ExperimentOperation:
       type: object
       properties:

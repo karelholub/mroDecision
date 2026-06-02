@@ -160,6 +160,14 @@ The visual flow canvas described in the product spec is intentionally not part o
 
 Use `GET /v1/health` for a lightweight process check and `GET /v1/ready` for readiness checks that verify SQLite access. Every API response includes `x-request-id`; callers can pass their own `x-request-id` header to correlate upstream logs. The service writes one JSON log line per request.
 
+For high-traffic websites, tune process guardrails with environment variables:
+
+- `DEE_CLIENT_RATE_LIMIT_WINDOW_MS` and `DEE_CLIENT_RATE_LIMIT_MAX` protect `/v1/client/*` endpoints per token, origin, action, and source IP. Responses include `x-ratelimit-*` headers and return `429` with `retry-after` when exhausted.
+- `DEE_REQUEST_BODY_LIMIT_BYTES` and `DEE_BATCH_REQUEST_BODY_LIMIT_BYTES` cap JSON payload size.
+- `DEE_REQUEST_TIMEOUT_MS`, `DEE_HEADERS_TIMEOUT_MS`, `DEE_KEEP_ALIVE_TIMEOUT_MS`, and `DEE_MAX_REQUESTS_PER_SOCKET` control Node HTTP socket behavior.
+
+Monitor `/v1/metrics` for `client_rate_limit`, `client_cache`, and `profile_cache` before raising limits.
+
 Retention is configurable in Settings:
 
 - `audit_retention_days` controls evaluation audit retention.
