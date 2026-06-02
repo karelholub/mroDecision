@@ -149,10 +149,27 @@ test("validates import bundles", () => {
           versions: []
         }
       ],
-      lookup_tables: []
+      lookup_tables: [],
+      condition_blocks: [
+        {
+          id: "high_intent",
+          name: "High intent",
+          conditions: [{ source: "attribute", key: "lead_score", operator: "greater_than", value: "70" }]
+        }
+      ],
+      settings: { environment_label: "staging" }
     })
   );
   assert.throws(() => validateBundle({ kind: "other", rule_sets: [] }), /Unsupported bundle/);
+  assert.throws(
+    () =>
+      validateBundle({
+        kind: "meiro-dee-config-bundle",
+        rule_sets: [],
+        condition_blocks: [{ id: "broken", name: "Broken", conditions: [] }]
+      }),
+    /conditions must be a non-empty array/
+  );
 });
 
 test("validates experiment variant allocation", () => {

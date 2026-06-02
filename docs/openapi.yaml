@@ -2066,6 +2066,47 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Message"
+        condition_blocks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConditionBlock"
+        settings:
+          $ref: "#/components/schemas/PortableSettings"
+        settings_secrets_redacted:
+          type: array
+          description: Settings intentionally omitted from exports because they contain credentials.
+          items:
+            type: string
+    PortableSettings:
+      type: object
+      description: Non-secret settings that can be moved between environments. API keys and tokens are never exported.
+      properties:
+        environment_label:
+          type: string
+        audit_retention_days:
+          type: integer
+        client_event_retention_days:
+          type: integer
+        meiro_url:
+          type: string
+        meiro_source_slug:
+          type: string
+        meiro_api_url:
+          type: string
+        meiro_feedback_url:
+          type: string
+        meiro_skill_url:
+          type: string
+        meiro_cli_url:
+          type: string
+        meiro_profile_cache_ttl_seconds:
+          type: integer
+        schema_sync_interval_minutes:
+          type: integer
+        schema_sync_identifier_type:
+          type: string
+        schema_sync_identifier_value:
+          type: string
     ApiToken:
       type: object
       required: [id, name, scopes, decision_keys, created_at]

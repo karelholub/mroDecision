@@ -8,6 +8,22 @@ import { createdAtNow } from "./http.js";
 const databaseFile = () => config.dbPath;
 const runtimeFile = () => path.join(config.dataDir, "store.runtime.json");
 const seedFile = () => path.join(config.dataDir, "seed.json");
+const portableSettingKeys = [
+  "environment_label",
+  "audit_retention_days",
+  "client_event_retention_days",
+  "meiro_url",
+  "meiro_source_slug",
+  "meiro_api_url",
+  "meiro_feedback_url",
+  "meiro_skill_url",
+  "meiro_cli_url",
+  "meiro_profile_cache_ttl_seconds",
+  "schema_sync_interval_minutes",
+  "schema_sync_identifier_type",
+  "schema_sync_identifier_value"
+];
+const redactedBundleSettingKeys = ["meiro_api_token", "meiro_cli_token"];
 
 export class Store {
   constructor(db) {
@@ -1017,7 +1033,10 @@ export class Store {
         versions: this.getVersionsForRuleSet(row.decision_key)
       })),
       lookup_tables: this.listLookupTables(),
-      messages: this.listMessages()
+      messages: this.listMessages(),
+      condition_blocks: this.listConditionBlocks(),
+      settings: portableSettings(this.getSettings()),
+      settings_secrets_redacted: redactedBundleSettingKeys
     };
     if (includeAudit) {
       bundle.audit = this.db
@@ -1029,7 +1048,7 @@ export class Store {
   }
 
   importBundle(bundle, author) {
-    const imported = { rule_sets: 0, lookup_tables: 0, messages: 0 };
+    const imported = { rule_sets: 0, lookup_tables: 0, messages: 0, condition_blocks: 0, settings: 0 };
     this.transaction(() => {
       for (const ruleSet of bundle.rule_sets) {
         this.upsertRuleSet(ruleSet, author);
@@ -1042,6 +1061,15 @@ export class Store {
       for (const message of bundle.messages || []) {
         this.upsertMessage(message.id, message, author);
         imported.messages += 1;
+      }
+      for (const block of bundle.condition_blocks || []) {
+        this.upsertConditionBlock(block.id, block, author);
+        imported.condition_blocks += 1;
+      }
+      const settings = portableSettings(bundle.settings || {});
+      if (Object.keys(settings).length > 0) {
+        this.updateSettings(settings, author);
+        imported.settings = Object.keys(settings).length;
       }
     });
     return imported;
@@ -1650,6 +1678,15 @@ function rowToConditionBlock(row) {
     updated_at: row.updated_at,
     author: row.author
   };
+}
+
+function portableSettings(settings) {
+  if (!isPlainObject(settings)) return {};
+  return Object.fromEntries(
+    portableSettingKeys
+      .filter((key) => settings[key] !== undefined)
+      .map((key) => [key, settings[key]])
+  );
 }
 
 function rowToMeiroDelivery(row) {

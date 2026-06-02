@@ -146,11 +146,11 @@ Goal: make the service deployable beyond local demo.
 - Add backup/restore guidance for SQLite or migration path to a managed database.
 - Add data-retention controls for audit, impression, and exposure events.
 
-Status: readiness, request IDs, request logs, guarded bootstrap-token disablement, CI checks, production Compose/nginx examples, backup guidance, managed database migration guidance, a simple p50/p95/p99 benchmark harness, and SQLite retention controls for audits and client events are implemented. A managed database adapter remains.
+Status: readiness, request IDs, request logs, guarded bootstrap-token disablement, CI checks, production Compose/nginx examples, backup guidance, managed database migration guidance, a simple p50/p95/p99 benchmark harness, SQLite retention controls for audits and client events, and portable config bundles with reusable condition blocks plus non-secret settings are implemented. A managed database adapter remains.
 
 ## Recommended Next Sprint
 
 1. Provide a Meiro personal API token (`mpat_...`) for full shared API metadata sync when catalog/audience metadata is needed beyond Profile API samples.
 2. Add managed database adapter implementation if production scale requires multiple replicas.
 3. Add optional graph-canvas minimap/snap guides if rule graphs become large in real customer use.
-4. Add server-persisted reusable condition blocks if teams want shared block governance instead of UI-provided starter blocks.
+4. Add promotion/message governance workflows such as approval queues if multiple teams need controlled publishing.

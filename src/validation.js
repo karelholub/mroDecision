@@ -140,6 +140,11 @@ export function validateBundle(bundle) {
   if (bundle.kind !== "meiro-dee-config-bundle") badRequest("Unsupported bundle kind");
   if (!Array.isArray(bundle.rule_sets)) badRequest("Bundle rule_sets must be an array");
   if (bundle.lookup_tables != null && !Array.isArray(bundle.lookup_tables)) badRequest("Bundle lookup_tables must be an array");
+  if (bundle.messages != null && !Array.isArray(bundle.messages)) badRequest("Bundle messages must be an array");
+  if (bundle.condition_blocks != null && !Array.isArray(bundle.condition_blocks)) {
+    badRequest("Bundle condition_blocks must be an array");
+  }
+  if (bundle.settings != null && !isPlainObject(bundle.settings)) badRequest("Bundle settings must be an object");
 
   for (const ruleSet of bundle.rule_sets) {
     validateRuleSetPayload(ruleSet);
@@ -149,6 +154,15 @@ export function validateBundle(bundle) {
       if (!Number.isInteger(Number(version.version))) badRequest(`Rule set ${ruleSet.decision_key} has an invalid version`);
       validateRuleDefinition(version.definition);
     }
+  }
+  for (const block of bundle.condition_blocks || []) {
+    if (!isPlainObject(block)) badRequest("Every condition block must be an object");
+    requiredString(block, "id", "Condition block id is required");
+    requiredString(block, "name", `Condition block ${block.id} name is required`);
+    if (!Array.isArray(block.conditions) || block.conditions.length === 0) {
+      badRequest(`Condition block ${block.id} conditions must be a non-empty array`);
+    }
+    block.conditions.forEach((condition) => validateConditionGroup(condition, `Condition block ${block.id}`));
   }
 }
 

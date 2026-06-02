@@ -181,6 +181,7 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   const settings = store.updateSettings({ environment_label: "staging", audit_retention_days: 30, client_event_retention_days: 45 }, "tester");
   assert.equal(settings.environment_label, "staging");
   const integrationSettings = store.updateSettings({
+    meiro_api_token: "mppak_secret",
     meiro_feedback_url: "https://example.test/collect/feedback",
     meiro_skill_url: "https://example.test/skill",
     meiro_cli_url: "https://example.test",
@@ -245,6 +246,33 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(bundle.rule_sets.find((item) => item.decision_key === "campaign_suppression").type, "inapp_message");
   assert.equal(bundle.lookup_tables.length, 1);
   assert.equal(bundle.messages.length, 1);
+  assert.ok(bundle.condition_blocks.some((block) => block.id === "high_intent"));
+  assert.equal(bundle.settings.environment_label, "staging");
+  assert.equal(bundle.settings.meiro_feedback_url, "https://example.test/collect/feedback");
+  assert.equal(bundle.settings.meiro_api_token, undefined);
+  assert.equal(bundle.settings.meiro_cli_token, undefined);
+  assert.deepEqual(bundle.settings_secrets_redacted, ["meiro_api_token", "meiro_cli_token"]);
+
+  const imported = store.importBundle(
+    {
+      ...bundle,
+      condition_blocks: [
+        ...bundle.condition_blocks,
+        {
+          id: "imported_guard",
+          name: "Imported guard",
+          conditions: [{ source: "attribute", key: "lead_score", operator: "greater_than", value: "10" }]
+        }
+      ],
+      settings: { ...bundle.settings, environment_label: "production", meiro_cli_token: "must_not_import" }
+    },
+    "tester"
+  );
+  assert.equal(imported.condition_blocks, bundle.condition_blocks.length + 1);
+  assert.equal(imported.settings, Object.keys(bundle.settings).length);
+  assert.equal(store.getConditionBlock("imported_guard").conditions[0].key, "lead_score");
+  assert.equal(store.getSettings().environment_label, "production");
+  assert.equal(store.getSettings().meiro_cli_token, "mpat_test");
 
   store.close();
   const reopened = await Store.load();
