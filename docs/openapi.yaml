@@ -184,7 +184,7 @@ paths:
   /v1/client/surface:
     post:
       summary: Evaluate all published in-app messages for a surface and return the highest-priority eligible result
-      description: Requires a token with the `client` scope. Tokens with a decision-key allow-list only evaluate allowed rules.
+      description: Requires a token with the `client` scope. Tokens with a decision-key allow-list only evaluate allowed rules. Message responses enforce library status, surface, starts/expires windows, and message frequency TTL before selecting a result.
       security:
         - bearerAuth: []
       requestBody:
@@ -1384,6 +1384,7 @@ components:
           example: eligible
         outputs:
           type: object
+          description: Decision outputs. When a message is attached, outputs.message includes content plus availability metadata; unavailable messages return a suppression_reason.
           additionalProperties: true
         matched_rules:
           type: array
@@ -1562,6 +1563,12 @@ components:
                 type: array
                 items:
                   type: string
+              cache:
+                type: object
+                additionalProperties: true
+              profile_cache:
+                type: object
+                additionalProperties: true
     ClientEventRequest:
       type: object
       required: [decision_key, profile_key]

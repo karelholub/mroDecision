@@ -1363,14 +1363,21 @@ async function evaluateClientRequest(body) {
     clientEventCounter: (params) => store.countClientEvents(params)
   });
   const assigned = assignExperimentVariant(ruleSet, request, evaluated);
-  const finalOutputs = enrichMessageOutputs(
+  const messageResolved = resolveMessageOutputs(
     assigned ? { ...evaluated.outputs, ...(assigned.outputs || {}) } : evaluated.outputs,
-    ruleSet
+    ruleSet,
+    request,
+    evaluated.evaluated_at
   );
+  const finalOutputs = messageResolved.outputs;
+  const finalResult = messageResolved.available === false && evaluated.result === "eligible" ? "suppressed" : evaluated.result;
+  const finalErrors = [...evaluated.errors, ...messageResolved.errors];
   const ttlSeconds = Number(ruleSet.cache_policy?.client_ttl || 0);
   store.addAudit({
     ...evaluated,
+    result: finalResult,
     outputs: finalOutputs,
+    errors: finalErrors,
     experiment: assigned ? { key: assigned.key, bucket: assigned.bucket } : undefined,
     inputs: {
       identifiers_count: Array.isArray(request.identifiers) ? request.identifiers.length : 0,
@@ -1384,7 +1391,7 @@ async function evaluateClientRequest(body) {
   const response = {
     decision_key: evaluated.decision_key,
     profile_key: evaluated.profile_key,
-    result: evaluated.result,
+    result: finalResult,
     outputs: finalOutputs,
     rule_version: evaluated.rule_version,
     ttl_seconds: Number.isFinite(ttlSeconds) && ttlSeconds > 0 ? ttlSeconds : 0,
@@ -1397,7 +1404,7 @@ async function evaluateClientRequest(body) {
     profile_cache: hydrated.cache,
     experiment: assigned ? { variant_key: assigned.key, bucket: assigned.bucket } : null,
     matched_rules: evaluated.matched_rules,
-    errors: evaluated.errors
+    errors: finalErrors
   };
   response.cache.expires_at = response.errors.length ? null : clientResultCache.set(cached.cache_key, response, ruleSet);
   return response;
@@ -1585,12 +1592,25 @@ function mergeIdentifiers(...sets) {
   });
 }
 
-function enrichMessageOutputs(outputs, ruleSet) {
+function resolveMessageOutputs(outputs, ruleSet, request, evaluatedAt) {
   const messageId = outputs.message_id || outputs.messageId || outputs.message?.id;
-  if (!messageId) return outputs;
+  if (!messageId) return { outputs, available: null, errors: [] };
   const message = store.getMessage(String(messageId));
-  if (!message || message.status === "archived") return outputs;
-  if (message.surface && ruleSet.surface && message.surface !== ruleSet.surface) return outputs;
+  if (!message) {
+    return unavailableMessage(outputs, "message_not_found", `Message not found: ${messageId}`);
+  }
+  const availability = messageAvailability(message, ruleSet, request, evaluatedAt);
+  if (!availability.available) {
+    return unavailableMessage(outputs, availability.reason, availability.message, message);
+  }
+  return {
+    outputs: attachMessage(outputs, message, availability),
+    available: true,
+    errors: []
+  };
+}
+
+function attachMessage(outputs, message, availability) {
   return {
     ...outputs,
     message: {
@@ -1601,8 +1621,82 @@ function enrichMessageOutputs(outputs, ruleSet) {
         ...message.default_content,
         ...(outputs.message_content && typeof outputs.message_content === "object" ? outputs.message_content : {})
       },
-      metadata: message.metadata
+      metadata: message.metadata,
+      availability
     }
+  };
+}
+
+function unavailableMessage(outputs, reason, message, messageRecord = null) {
+  return {
+    outputs: {
+      ...outputs,
+      suppression_reason: outputs.suppression_reason || reason,
+      message: messageRecord ? {
+        id: messageRecord.id,
+        name: messageRecord.name,
+        surface: messageRecord.surface,
+        availability: { available: false, reason, message }
+      } : undefined
+    },
+    available: false,
+    errors: [message]
+  };
+}
+
+function messageAvailability(message, ruleSet, request, evaluatedAt) {
+  const lifecycle = message.metadata?.lifecycle || message.metadata?.delivery || {};
+  const nowMs = Date.parse(evaluatedAt || createdAtIso());
+  if (message.status !== "active") {
+    return { available: false, reason: "message_inactive", message: `Message ${message.id} is ${message.status}` };
+  }
+  if (message.surface && ruleSet.surface && message.surface !== ruleSet.surface) {
+    return { available: false, reason: "surface_mismatch", message: `Message ${message.id} is for surface ${message.surface}` };
+  }
+  const startsAt = lifecycle.starts_at || message.metadata?.starts_at;
+  const expiresAt = lifecycle.expires_at || message.metadata?.expires_at;
+  const startsAtMs = startsAt ? Date.parse(startsAt) : null;
+  const expiresAtMs = expiresAt ? Date.parse(expiresAt) : null;
+  if (startsAt && Number.isNaN(startsAtMs)) {
+    return { available: false, reason: "message_invalid_lifecycle", message: `Message ${message.id} has an invalid starts_at value` };
+  }
+  if (expiresAt && Number.isNaN(expiresAtMs)) {
+    return { available: false, reason: "message_invalid_lifecycle", message: `Message ${message.id} has an invalid expires_at value` };
+  }
+  if (startsAt && startsAtMs > nowMs) {
+    return { available: false, reason: "message_not_started", message: `Message ${message.id} starts at ${startsAt}` };
+  }
+  if (expiresAt && expiresAtMs <= nowMs) {
+    return { available: false, reason: "message_expired", message: `Message ${message.id} expired at ${expiresAt}` };
+  }
+  const ttlSeconds = Number(lifecycle.ttl_seconds || message.metadata?.ttl_seconds || 0);
+  if (Number.isFinite(ttlSeconds) && ttlSeconds > 0) {
+    const since = new Date(nowMs - ttlSeconds * 1000).toISOString();
+    const impressions = store.countClientEvents({
+      event_type: "impression",
+      decision_key: ruleSet.decision_key,
+      profile_key: request.profile_key,
+      message_id: message.id,
+      surface: message.surface || ruleSet.surface || "",
+      since
+    });
+    if (impressions > 0) {
+      return {
+        available: false,
+        reason: "message_frequency_cap",
+        message: `Message ${message.id} is cooling down for this profile`,
+        ttl_seconds: ttlSeconds,
+        impressions
+      };
+    }
+  }
+  return {
+    available: true,
+    reason: "available",
+    starts_at: startsAt || "",
+    expires_at: expiresAt || "",
+    ttl_seconds: Number.isFinite(ttlSeconds) && ttlSeconds > 0 ? ttlSeconds : 0,
+    priority: Number(message.metadata?.priority ?? lifecycle.priority ?? 0) || 0
   };
 }
 
