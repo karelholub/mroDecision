@@ -559,7 +559,47 @@ function renderAssistantPlan(plan) {
     ...(guardrails.errors || []).map((item) => statusItem("Error", item)),
     ...(guardrails.warnings || []).slice(0, 4).map((item) => statusItem("Warning", item))
   ].join("");
+  renderAssistantPreview(plan);
   document.querySelector("#assistant-apply").disabled = Boolean(guardrails.errors?.length);
+}
+
+function renderAssistantPreview(plan) {
+  const target = document.querySelector("#assistant-preview");
+  if (!target) return;
+  const evaluation = plan.preview?.draft_evaluation || {};
+  const schema = plan.schema || {};
+  const sample = plan.preview?.sample_request || {};
+  target.innerHTML = [
+    assistantPreviewCard("Draft Preview", [
+      ["Result", evaluation.result || "n/a"],
+      ["Matched", (evaluation.matched_rules || []).join(", ") || "none"],
+      ["Errors", evaluation.errors?.length || 0]
+    ]),
+    assistantPreviewCard("Schema Check", [
+      ["Available", schema.available || 0],
+      ["Matched fields", schema.matched_fields?.length || 0],
+      ["Missing fields", schema.missing_fields?.length || 0]
+    ]),
+    assistantPreviewCard("Sample Request", [
+      ["Profile", sample.profile_key || "n/a"],
+      ["Attributes", Object.keys(sample.attributes || {}).join(", ") || "none"],
+      ["Context", Object.keys(sample.context || {}).join(", ") || "none"]
+    ])
+  ].join("");
+}
+
+function assistantPreviewCard(title, rows) {
+  return `
+    <div class="assistant-preview-card">
+      <h4>${escapeHtml(title)}</h4>
+      ${rows.map(([label, value]) => `
+        <div class="assistant-preview-row">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
 }
 
 function renderExperiments(body) {

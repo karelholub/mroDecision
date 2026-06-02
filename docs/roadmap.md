@@ -168,11 +168,11 @@ Goal: let business users ask DEE to create rules, messages, and experiments whil
 - Keep publish as a separate explicit user action.
 - Add optional LLM provider integration behind the deterministic planner contract.
 
-Status: first-pass deterministic assistant planner, draft-only apply endpoint, Assistant UI, message/rule/experiment draft generation, allocation checks, and shared rule validation are implemented. LLM-backed planning, richer schema-aware prompts, test-preview generation, and publish-review handoff remain.
+Status: first-pass deterministic assistant planner, draft-only apply endpoint, Assistant UI, message/rule/experiment draft generation, allocation checks, shared rule validation, schema-aware field matching, schema diagnostics, and generated draft evaluation previews are implemented. LLM-backed planning, richer prompt disambiguation, and publish-review handoff remain.
 
 ## Recommended Next Sprint
 
-1. Extend assistant planning with schema-aware field suggestions and generated draft evaluation previews.
+1. Add assistant publish-review handoff with diff, validation summary, and preview affected rules.
 2. Provide a Meiro personal API token (`mpat_...`) for full shared API metadata sync when catalog/audience metadata is needed beyond Profile API samples.
 3. Add managed database adapter implementation if production scale requires multiple replicas.
 4. Add optional graph-canvas minimap/snap guides if rule graphs become large in real customer use.

@@ -176,7 +176,10 @@ async function routeApi(req, res, url) {
     requireScope(req, "editor");
     const body = await readJson(req, config.requestBodyLimitBytes);
     const plan = createAssistantPlan(body, {
-      ruleExists: (key) => Boolean(store.getRuleSet(key))
+      ruleExists: (key) => Boolean(store.getRuleSet(key)),
+      schemaItems: store.listSchemaItems(),
+      lookupTables: store.listLookupTables(),
+      clientEventCounter: (params) => store.countClientEvents(params)
     });
     validateAssistantPlan(plan);
     sendJson(res, 200, { plan });

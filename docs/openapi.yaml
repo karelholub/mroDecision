@@ -1454,6 +1454,33 @@ components:
           type: string
         summary:
           type: string
+        schema:
+          type: object
+          properties:
+            available:
+              type: integer
+            matched_fields:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            missing_fields:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            suggestions:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+        preview:
+          type: object
+          properties:
+            sample_request:
+              $ref: "#/components/schemas/EvaluateRequest"
+            draft_evaluation:
+              $ref: "#/components/schemas/EvaluateResponse"
         guardrails:
           type: object
           properties:

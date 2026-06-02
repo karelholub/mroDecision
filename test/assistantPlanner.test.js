@@ -16,6 +16,29 @@ test("assistant planner creates guarded experiment draft plan", () => {
   assert.equal(ruleAction.object.metadata.experiment.variants[0].weight, 80);
   assert.equal(ruleAction.object.metadata.experiment.variants[1].weight, 20);
   assert.equal(ruleAction.object.draft.branches[0].when.key, "sustainability_score");
+  assert.equal(plan.preview.draft_evaluation.result, "eligible");
+});
+
+test("assistant planner uses cached schema for condition fields", () => {
+  const plan = createAssistantPlan(
+    {
+      prompt: "Create premium offer for high value customers",
+      type: "decision",
+      decision_key: "premium_offer"
+    },
+    {
+      schemaItems: [
+        { kind: "attribute", name: "monetary_rfm", type: "number" },
+        { kind: "attribute", name: "lead_score", type: "number" }
+      ]
+    }
+  );
+
+  const ruleAction = plan.actions.find((item) => item.action === "create_rule_draft");
+  assert.equal(ruleAction.object.draft.branches[0].when.key, "monetary_rfm");
+  assert.equal(plan.schema.matched_fields[0].key, "monetary_rfm");
+  assert.equal(plan.schema.missing_fields.length, 0);
+  assert.equal(plan.preview.sample_request.attributes.monetary_rfm, 5000);
 });
 
 test("assistant apply only uses draft-safe store methods", () => {

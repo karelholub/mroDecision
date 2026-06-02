@@ -453,6 +453,42 @@ aside input {
   overflow: auto;
 }
 
+.assistant-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+  min-width: 0;
+}
+
+.assistant-preview-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 0;
+  background: var(--panel-soft);
+}
+
+.assistant-preview-card h4 {
+  margin: 0 0 10px;
+  font-size: 0.86rem;
+}
+
+.assistant-preview-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  font-size: 0.78rem;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.assistant-preview-row strong {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
 .experiment-kpi-strip {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
@@ -3612,6 +3648,7 @@ pre {
   .overview-workbench,
   .overview-primary-pane,
   .assistant-workbench,
+  .assistant-preview-grid,
   .experiment-ops-grid,
   .overview-service-footer {
     grid-template-columns: 1fr;
@@ -3657,6 +3694,7 @@ pre {
     .overview-workbench,
     .overview-primary-pane,
     .assistant-workbench,
+    .assistant-preview-grid,
     .experiment-ops-grid,
     .overview-service-footer,
     .client-event-subsections,
