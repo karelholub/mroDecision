@@ -347,6 +347,61 @@ aside input {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.compact-section-head {
+  margin-bottom: 12px;
+}
+
+.condition-block-workspace {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.condition-block-list {
+  display: grid;
+  gap: 8px;
+  max-height: 520px;
+  overflow: auto;
+}
+
+.condition-block-card {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+  color: var(--ink);
+}
+
+.condition-block-card:hover,
+.condition-block-card.active {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px rgba(14, 154, 142, 0.12);
+}
+
+.condition-block-card strong,
+.condition-block-card span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.condition-block-card span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.condition-block-editor {
+  min-width: 0;
+}
+
+.condition-block-editor textarea {
+  min-height: 170px;
+}
+
 .integration-workspace,
 .token-workspace {
   grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
@@ -399,6 +454,12 @@ aside input {
 
   .settings-health-summary {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1100px) {
+  .condition-block-workspace {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

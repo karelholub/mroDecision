@@ -291,6 +291,12 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  if (req.method === "GET" && pathname === "/v1/condition-blocks") {
+    requireScope(req, "viewer");
+    sendJson(res, 200, { condition_blocks: store.listConditionBlocks() });
+    return;
+  }
+
   const evaluationProfileMatch = pathname.match(/^\/v1\/evaluation-profiles\/([^/]+)$/);
   if (evaluationProfileMatch && req.method === "PUT") {
     requireScope(req, "editor");
@@ -305,6 +311,23 @@ async function routeApi(req, res, url) {
   if (evaluationProfileMatch && req.method === "DELETE") {
     requireScope(req, "editor");
     store.deleteEvaluationProfile(decodeURIComponent(evaluationProfileMatch[1]));
+    await store.save();
+    sendJson(res, 200, { deleted: true });
+    return;
+  }
+
+  const conditionBlockMatch = pathname.match(/^\/v1\/condition-blocks\/([^/]+)$/);
+  if (conditionBlockMatch && req.method === "PUT") {
+    requireScope(req, "editor");
+    const block = store.upsertConditionBlock(decodeURIComponent(conditionBlockMatch[1]), await readJson(req), req.auth.name);
+    await store.save();
+    sendJson(res, 200, { condition_block: block });
+    return;
+  }
+
+  if (conditionBlockMatch && req.method === "DELETE") {
+    requireScope(req, "editor");
+    store.deleteConditionBlock(decodeURIComponent(conditionBlockMatch[1]));
     await store.save();
     sendJson(res, 200, { deleted: true });
     return;

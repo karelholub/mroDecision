@@ -784,6 +784,66 @@ export class Store {
     if (!result.changes) notFound(`Evaluation profile not found: ${id}`);
   }
 
+  listConditionBlocks() {
+    return this.db
+      .prepare("SELECT * FROM condition_blocks ORDER BY name ASC, id ASC")
+      .all()
+      .map(rowToConditionBlock);
+  }
+
+  getConditionBlock(id) {
+    const row = this.db.prepare("SELECT * FROM condition_blocks WHERE id = ?").get(id);
+    return row ? rowToConditionBlock(row) : undefined;
+  }
+
+  upsertConditionBlock(id, input, author) {
+    const blockId = normalizeKey(id || input.id || input.name);
+    if (!blockId) badRequest("Condition block id is required");
+    const existing = this.getConditionBlock(blockId);
+    const conditions = normalizeConditionBlockConditions(input.conditions ?? existing?.conditions);
+    const now = createdAtNow();
+    const block = {
+      id: blockId,
+      name: input.name || existing?.name || blockId,
+      description: input.description ?? existing?.description ?? "",
+      conditions,
+      tags: Array.isArray(input.tags) ? input.tags : existing?.tags || [],
+      metadata: isPlainObject(input.metadata) ? input.metadata : existing?.metadata || {},
+      updated_at: now,
+      author
+    };
+    this.db
+      .prepare(
+        `INSERT INTO condition_blocks (
+          id, name, description, conditions_json, tags_json, metadata_json, updated_at, author
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          description = excluded.description,
+          conditions_json = excluded.conditions_json,
+          tags_json = excluded.tags_json,
+          metadata_json = excluded.metadata_json,
+          updated_at = excluded.updated_at,
+          author = excluded.author`
+      )
+      .run(
+        block.id,
+        block.name,
+        block.description,
+        stringify(block.conditions),
+        stringify(block.tags),
+        stringify(block.metadata),
+        block.updated_at,
+        block.author
+      );
+    return block;
+  }
+
+  deleteConditionBlock(id) {
+    const result = this.db.prepare("DELETE FROM condition_blocks WHERE id = ?").run(id);
+    if (!result.changes) notFound(`Condition block not found: ${id}`);
+  }
+
   listApiTokens() {
     return this.db
       .prepare("SELECT id, name, scopes_json, decision_keys_json, created_at, last_used_at, revoked_at FROM api_tokens ORDER BY created_at DESC")
@@ -1084,6 +1144,17 @@ function migrate(db) {
       author TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS condition_blocks (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      conditions_json TEXT NOT NULL DEFAULT '[]',
+      tags_json TEXT NOT NULL DEFAULT '[]',
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL,
+      author TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       evaluated_at TEXT NOT NULL,
@@ -1168,6 +1239,7 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_lookup_table_versions ON lookup_table_versions(id, version);
     CREATE INDEX IF NOT EXISTS idx_messages_surface_status ON messages(surface, status);
     CREATE INDEX IF NOT EXISTS idx_evaluation_profiles_rule ON evaluation_profiles(decision_key, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_condition_blocks_name ON condition_blocks(name, id);
     CREATE INDEX IF NOT EXISTS idx_meiro_deliveries_time ON meiro_deliveries(attempted_at);
   `);
   ensureColumn(db, "rule_sets", "type", "TEXT NOT NULL DEFAULT 'decision'");
@@ -1178,6 +1250,7 @@ function migrate(db) {
   ensureColumn(db, "api_tokens", "decision_keys_json", "TEXT NOT NULL DEFAULT '[]'");
   seedLookupHistory(db);
   seedSettings(db);
+  seedConditionBlocks(db);
 }
 
 function seedSettings(db) {
@@ -1211,6 +1284,80 @@ function seedSettings(db) {
   for (const [key, value] of Object.entries(defaults)) {
     insert.run(key, stringify(value), now, "system");
   }
+}
+
+function seedConditionBlocks(db) {
+  const count = db.prepare("SELECT COUNT(*) AS count FROM condition_blocks").get().count;
+  if (count > 0) return;
+  const now = createdAtNow();
+  const insert = db.prepare(
+    `INSERT INTO condition_blocks (id, name, description, conditions_json, tags_json, metadata_json, updated_at, author)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  for (const block of defaultConditionBlocks()) {
+    insert.run(
+      block.id,
+      block.name,
+      block.description || "",
+      stringify(block.conditions),
+      stringify(block.tags || []),
+      stringify(block.metadata || { seeded: true }),
+      now,
+      "system"
+    );
+  }
+}
+
+function defaultConditionBlocks() {
+  return [
+    {
+      id: "high_intent",
+      name: "High intent",
+      description: "Lead and web engagement scores indicate a strong buying signal.",
+      tags: ["intent"],
+      conditions: [
+        { source: "attribute", key: "lead_score", operator: "greater_than_or_equal", value: "70" },
+        { source: "attribute", key: "web_engagement_score", operator: "greater_than_or_equal", value: "60" }
+      ]
+    },
+    {
+      id: "credit_safe",
+      name: "Credit safe",
+      description: "Suppress customers with high balance or recent late payment risk.",
+      tags: ["risk"],
+      conditions: [
+        { source: "attribute", key: "outstanding_balance_tier", operator: "not_in", value: "high, critical" },
+        { source: "attribute", key: "late_payments_count_12m", operator: "less_than_or_equal", value: "1" }
+      ]
+    },
+    {
+      id: "retention_risk",
+      name: "Retention risk",
+      description: "Churn risk score is high enough for retention-oriented treatments.",
+      tags: ["retention"],
+      conditions: [
+        { source: "attribute", key: "churn_risk_score", operator: "greater_than_or_equal", value: "65" }
+      ]
+    },
+    {
+      id: "surface_match",
+      name: "Surface matches rule",
+      description: "Context surface equals the rule surface.",
+      tags: ["context"],
+      conditions: [
+        { source: "context", key: "surface", operator: "equals", value: "" }
+      ]
+    },
+    {
+      id: "known_profile",
+      name: "Known profile",
+      description: "Customer lifetime value exists on the profile.",
+      tags: ["quality"],
+      conditions: [
+        { source: "attribute", key: "customer_lifetime_value", operator: "is_not_blank", value: "" }
+      ]
+    }
+  ];
 }
 
 async function seedIfEmpty(db) {
@@ -1486,6 +1633,19 @@ function rowToEvaluationProfile(row) {
   };
 }
 
+function rowToConditionBlock(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || "",
+    conditions: parse(row.conditions_json || "[]"),
+    tags: parse(row.tags_json || "[]"),
+    metadata: parse(row.metadata_json || "{}"),
+    updated_at: row.updated_at,
+    author: row.author
+  };
+}
+
 function rowToMeiroDelivery(row) {
   return {
     id: row.id,
@@ -1534,6 +1694,45 @@ function normalizeScopes(scopes) {
 
 function normalizeDecisionKeys(keys) {
   return [...new Set((Array.isArray(keys) ? keys : []).map((key) => String(key).trim()).filter(Boolean))];
+}
+
+function normalizeConditionBlockConditions(value) {
+  if (!Array.isArray(value) || !value.length) badRequest("Condition block conditions must be a non-empty array");
+  const allowedSources = new Set(["attribute", "segment", "context", "score"]);
+  const allowedOperators = new Set([
+    "equals",
+    "not_equals",
+    "greater_than",
+    "greater_than_or_equal",
+    "less_than",
+    "less_than_or_equal",
+    "in",
+    "not_in",
+    "contains",
+    "not_contains",
+    "is_blank",
+    "is_not_blank",
+    "matches_regex",
+    "within_last_days",
+    "before_date",
+    "after_date"
+  ]);
+  return value.map((condition, index) => {
+    if (!isPlainObject(condition)) badRequest(`Condition ${index + 1} must be an object`);
+    const source = String(condition.source || "attribute").trim();
+    const key = String(condition.key || "").trim();
+    const operator = String(condition.operator || "equals").trim();
+    if (!allowedSources.has(source)) badRequest(`Condition ${index + 1} has unsupported source`);
+    if (!key) badRequest(`Condition ${index + 1} key is required`);
+    if (!allowedOperators.has(operator)) badRequest(`Condition ${index + 1} has unsupported operator`);
+    return {
+      source,
+      key,
+      operator,
+      value: condition.value ?? "",
+      ...(condition.value_source && isPlainObject(condition.value_source) ? { value_source: condition.value_source } : {})
+    };
+  });
 }
 
 function normalizeState(state) {

@@ -41,6 +41,8 @@ const integrationResponse = document.querySelector("#integration-response");
 const meiroTestOutput = document.querySelector("#meiro-test-output");
 const meiroDeliveryStatus = document.querySelector("#meiro-delivery-status");
 const schemaImportDiagnostics = document.querySelector("#schema-import-diagnostics");
+const conditionBlockList = document.querySelector("#condition-block-list");
+const conditionBlockOutput = document.querySelector("#condition-block-output");
 const metricCards = document.querySelector("#metric-cards");
 const ruleDetailPanel = document.querySelector("#metrics-rule-detail");
 const clientEventsPanel = document.querySelector("#metrics-client-events");
@@ -80,8 +82,11 @@ let cachedMessages = [];
 let cachedSettings = {};
 let cachedSchema = [];
 let cachedEvaluationProfiles = [];
+let cachedConditionBlocks = [];
+let conditionBlocksLoaded = false;
+let selectedConditionBlockId = null;
 const savedProfileStorageKey = "meiro-dee-evaluate-profiles";
-const conditionBlockTemplates = [
+const defaultConditionBlockTemplates = [
   {
     id: "high_intent",
     name: "High intent",
@@ -189,6 +194,9 @@ document.querySelector("#import-schema").addEventListener("click", importSchema)
 document.querySelector("#refresh-schema").addEventListener("click", loadSchema);
 document.querySelector("#sync-schema").addEventListener("click", syncSchemaFromMeiro);
 document.querySelector("#sync-meiro-metadata").addEventListener("click", syncMeiroMetadata);
+document.querySelector("#new-condition-block").addEventListener("click", newConditionBlock);
+document.querySelector("#save-condition-block").addEventListener("click", saveConditionBlock);
+document.querySelector("#delete-condition-block").addEventListener("click", deleteConditionBlock);
 document.querySelector("#run-eval").addEventListener("click", runEvaluate);
 document.querySelector("#run-eval-secondary").addEventListener("click", runEvaluate);
 document.querySelector("#load-preset").addEventListener("click", loadEvaluatePreset);
@@ -327,6 +335,7 @@ loadLookups();
 loadMessages();
 loadSettings();
 loadSchema({ silent: true });
+loadConditionBlocks({ silent: true });
 loadEvaluatePreset();
 loadEvaluationProfiles();
 renderEvaluationSummary(null, document.querySelector("#eval-mode").value);
@@ -2016,15 +2025,16 @@ function branchSummaryWarnings(branch, outputs) {
 
 function bindConditionBlockHelper(node) {
   const select = node.querySelector("[data-field='condition-block']");
+  const blocks = availableConditionBlocks();
   select.innerHTML = [
     `<option value="">Choose a reusable block</option>`,
-    ...conditionBlockTemplates.map((template) => `<option value="${escapeHtml(template.id)}">${escapeHtml(template.name)}</option>`)
+    ...blocks.map((template) => `<option value="${escapeHtml(template.id)}">${escapeHtml(template.name)}</option>`)
   ].join("");
 }
 
 function applyConditionBlock(node, branchIndex) {
   const select = node.querySelector("[data-field='condition-block']");
-  const template = conditionBlockTemplates.find((item) => item.id === select.value);
+  const template = availableConditionBlocks().find((item) => item.id === select.value);
   if (!template) return;
   const surface = document.querySelector("#rule-surface").value.trim();
   const nextConditions = template.conditions.map((condition) => ({
@@ -2039,6 +2049,10 @@ function applyConditionBlock(node, branchIndex) {
   builderBranches[branchIndex].conditions.push(...nextConditions);
   renderBranchEditor();
   syncJsonFromBuilder();
+}
+
+function availableConditionBlocks() {
+  return conditionBlocksLoaded ? cachedConditionBlocks : defaultConditionBlockTemplates;
 }
 
 function bindOutputFieldEditor(node, branchIndex) {
@@ -2990,6 +3004,14 @@ function parseJsonSafe(raw, fallback = {}) {
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : fallback;
   } catch {
     return fallback;
+  }
+}
+
+function parseJsonStrict(raw, label = "JSON") {
+  try {
+    return JSON.parse(raw || "null");
+  } catch (error) {
+    throw new Error(`${label} is not valid JSON: ${error.message}`);
   }
 }
 
@@ -4317,6 +4339,99 @@ async function loadSchema({ silent = false } = {}) {
     if (!silent) schemaOutput.textContent = JSON.stringify(body, null, 2);
   } catch (error) {
     if (!silent) schemaOutput.textContent = error.message;
+  }
+}
+
+async function loadConditionBlocks({ silent = false } = {}) {
+  try {
+    const body = await api("/v1/condition-blocks");
+    cachedConditionBlocks = body.condition_blocks || [];
+    conditionBlocksLoaded = true;
+    renderConditionBlockManager();
+    renderBranchEditor();
+    if (!selectedConditionBlockId && cachedConditionBlocks[0]) editConditionBlock(cachedConditionBlocks[0].id);
+  } catch (error) {
+    cachedConditionBlocks = [];
+    conditionBlocksLoaded = false;
+    renderConditionBlockManager();
+    if (!silent && conditionBlockOutput) conditionBlockOutput.textContent = error.message;
+  }
+}
+
+function renderConditionBlockManager() {
+  if (!conditionBlockList) return;
+  const blocks = availableConditionBlocks();
+  conditionBlockList.innerHTML = blocks.length
+    ? blocks.map((block) => `
+      <button type="button" class="condition-block-card ${block.id === selectedConditionBlockId ? "active" : ""}" data-condition-block-id="${escapeHtml(block.id)}">
+        <strong>${escapeHtml(block.name || block.id)}</strong>
+        <span>${escapeHtml(`${block.conditions?.length || 0} conditions · ${block.description || block.id}`)}</span>
+      </button>
+    `).join("")
+    : `<div class="status-line">No reusable blocks yet.</div>`;
+  conditionBlockList.querySelectorAll("[data-condition-block-id]").forEach((button) => {
+    button.addEventListener("click", () => editConditionBlock(button.dataset.conditionBlockId));
+  });
+}
+
+function editConditionBlock(id) {
+  const block = availableConditionBlocks().find((item) => item.id === id);
+  if (!block) return;
+  selectedConditionBlockId = block.id;
+  document.querySelector("#condition-block-id").value = block.id || "";
+  document.querySelector("#condition-block-name").value = block.name || "";
+  document.querySelector("#condition-block-description").value = block.description || "";
+  document.querySelector("#condition-block-conditions").value = JSON.stringify(block.conditions || [], null, 2);
+  renderConditionBlockManager();
+  if (conditionBlockOutput) conditionBlockOutput.textContent = "";
+}
+
+function newConditionBlock() {
+  selectedConditionBlockId = null;
+  document.querySelector("#condition-block-id").value = "";
+  document.querySelector("#condition-block-name").value = "";
+  document.querySelector("#condition-block-description").value = "";
+  document.querySelector("#condition-block-conditions").value = JSON.stringify([
+    { source: "attribute", key: "", operator: "equals", value: "" }
+  ], null, 2);
+  renderConditionBlockManager();
+  if (conditionBlockOutput) conditionBlockOutput.textContent = "Create a reusable block, then save it.";
+}
+
+async function saveConditionBlock() {
+  try {
+    const id = slug(document.querySelector("#condition-block-id").value || document.querySelector("#condition-block-name").value);
+    if (!id) throw new Error("Block ID or name is required");
+    const conditions = parseJsonStrict(document.querySelector("#condition-block-conditions").value || "[]", "Conditions JSON");
+    const payload = {
+      id,
+      name: document.querySelector("#condition-block-name").value.trim() || id,
+      description: document.querySelector("#condition-block-description").value.trim(),
+      conditions
+    };
+    const body = await api(`/v1/condition-blocks/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+    selectedConditionBlockId = body.condition_block?.id || id;
+    await loadConditionBlocks({ silent: true });
+    if (conditionBlockOutput) conditionBlockOutput.textContent = JSON.stringify(body, null, 2);
+  } catch (error) {
+    if (conditionBlockOutput) conditionBlockOutput.textContent = error.message;
+  }
+}
+
+async function deleteConditionBlock() {
+  try {
+    const id = selectedConditionBlockId || document.querySelector("#condition-block-id").value.trim();
+    if (!id) throw new Error("Select a condition block first");
+    await api(`/v1/condition-blocks/${encodeURIComponent(id)}`, { method: "DELETE" });
+    selectedConditionBlockId = null;
+    await loadConditionBlocks({ silent: true });
+    newConditionBlock();
+    if (conditionBlockOutput) conditionBlockOutput.textContent = "Condition block deleted.";
+  } catch (error) {
+    if (conditionBlockOutput) conditionBlockOutput.textContent = error.message;
   }
 }
 

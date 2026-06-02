@@ -186,6 +186,24 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(integrationSettings.meiro_skill_url, "https://example.test/skill");
   assert.equal(integrationSettings.meiro_cli_url, "https://example.test");
   assert.equal(integrationSettings.meiro_cli_token, "mpat_test");
+
+  assert.ok(store.listConditionBlocks().some((block) => block.id === "high_intent"));
+  const conditionBlock = store.upsertConditionBlock(
+    "utility_safe_profile",
+    {
+      name: "Utility safe profile",
+      description: "Reusable eligibility guard",
+      conditions: [
+        { source: "attribute", key: "late_payments_count_12m", operator: "less_than_or_equal", value: "1" }
+      ]
+    },
+    "tester"
+  );
+  assert.equal(conditionBlock.id, "utility_safe_profile");
+  assert.equal(store.getConditionBlock("utility_safe_profile").conditions[0].key, "late_payments_count_12m");
+  store.deleteConditionBlock("utility_safe_profile");
+  assert.equal(store.getConditionBlock("utility_safe_profile"), undefined);
+
   const delivery = store.recordMeiroDelivery({
     target: "feedback",
     endpoint: "https://example.test/collect/feedback",

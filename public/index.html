@@ -1122,6 +1122,43 @@
                   <div id="schema-import-diagnostics" class="schema-diagnostics"></div>
                   <pre id="schema-output"></pre>
                 </div>
+                <div class="settings-card wide">
+                  <div class="settings-section-head compact-section-head">
+                    <div>
+                      <div class="editor-title compact-title">Reusable Condition Blocks</div>
+                      <p>Shared condition templates for rule branches.</p>
+                    </div>
+                    <button type="button" id="new-condition-block">New Block</button>
+                  </div>
+                  <div class="condition-block-workspace">
+                    <div id="condition-block-list" class="condition-block-list"></div>
+                    <div class="condition-block-editor">
+                      <div class="grid-two">
+                        <label>
+                          Block ID
+                          <input id="condition-block-id" placeholder="high_intent" />
+                        </label>
+                        <label>
+                          Name
+                          <input id="condition-block-name" placeholder="High intent" />
+                        </label>
+                      </div>
+                      <label>
+                        Description
+                        <input id="condition-block-description" placeholder="Reusable profile or context condition set" />
+                      </label>
+                      <label>
+                        Conditions JSON
+                        <textarea id="condition-block-conditions" spellcheck="false" placeholder='[{"source":"attribute","key":"lead_score","operator":"greater_than_or_equal","value":"70"}]'></textarea>
+                      </label>
+                      <div class="actions left">
+                        <button type="button" id="save-condition-block">Save Block</button>
+                        <button type="button" id="delete-condition-block">Delete</button>
+                      </div>
+                      <pre id="condition-block-output"></pre>
+                    </div>
+                  </div>
+                </div>
               </div>
             </section>
             </form>

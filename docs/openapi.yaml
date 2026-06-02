@@ -867,6 +867,64 @@ paths:
                 properties:
                   deleted:
                     type: boolean
+  /v1/condition-blocks:
+    get:
+      summary: List reusable rule condition blocks
+      responses:
+        "200":
+          description: Reusable condition blocks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  condition_blocks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ConditionBlock"
+  /v1/condition-blocks/{id}:
+    put:
+      summary: Create or update a reusable condition block
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConditionBlockWrite"
+      responses:
+        "200":
+          description: Saved condition block
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  condition_block:
+                    $ref: "#/components/schemas/ConditionBlock"
+    delete:
+      summary: Delete a reusable condition block
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted marker
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
   /v1/schema:
     get:
       summary: List cached Meiro schema items
@@ -1813,6 +1871,68 @@ components:
           $ref: "#/components/schemas/EvaluateRequest"
         notes:
           type: string
+    ConditionBlock:
+      type: object
+      required: [id, name, conditions]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        conditions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConditionBlockCondition"
+        tags:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        updated_at:
+          type: string
+          format: date-time
+        author:
+          type: string
+    ConditionBlockWrite:
+      type: object
+      required: [name, conditions]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        conditions:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/ConditionBlockCondition"
+        tags:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          additionalProperties: true
+    ConditionBlockCondition:
+      type: object
+      required: [source, key, operator]
+      properties:
+        source:
+          type: string
+          enum: [attribute, segment, context, score]
+        key:
+          type: string
+        operator:
+          type: string
+        value:
+          nullable: true
+        value_source:
+          type: object
+          additionalProperties: true
     SchemaItem:
       type: object
       required: [kind, name, type]
