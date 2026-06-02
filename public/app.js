@@ -395,13 +395,15 @@ function renderMetrics(metrics) {
   const rules = metrics.rules || {};
   const schema = metrics.schema || {};
   const cache = metrics.client_cache || {};
+  const profileCache = metrics.profile_cache || {};
   const events = metrics.client_events || {};
   metricCards.innerHTML = [
     metricCard("Requests 24h", formatNumber(requests.last_24h), `${formatNumber(requests.total)} total`, "RQ", "teal"),
     metricCard("Unique Profiles", formatNumber(requests.unique_profiles), "Seen in audit log", "UP", "blue"),
     metricCard("Published Rules", formatNumber(rules.published), `${formatNumber(rules.draft)} drafts`, "PR", "purple"),
     metricCard("Schema Items", formatNumber(schema.total), `${schema.last_sync_status || "never"} sync`, "SC", "teal"),
-    metricCard("Client Cache", `${Math.round((cache.hit_rate || 0) * 100)}%`, `${formatNumber(cache.entries || 0)} active entries`, "CC", "blue"),
+    metricCard("Client Cache", `${Math.round((cache.hit_rate || 0) * 100)}%`, `${formatNumber(cache.entries || 0)} decision entries`, "CC", "blue"),
+    metricCard("Profile Cache", `${Math.round((profileCache.hit_rate || 0) * 100)}%`, `${formatNumber(profileCache.entries || 0)} Meiro profiles`, "PC", "teal"),
     metricCard("Client Events", formatNumber(events.last_24h || 0), `${formatNumber(events.total || 0)} total`, "CE", "blue")
   ].join("");
 
@@ -418,8 +420,10 @@ function renderMetrics(metrics) {
     statusItem("Last sync", schema.last_synced_at ? formatTime(schema.last_synced_at) : "never"),
     statusItem("Imported last sync", formatNumber(schema.last_sync_count || 0)),
     statusItem("Reference tables", formatNumber(metrics.lookups?.total || 0)),
-    statusItem("Cache hits", formatNumber(cache.hits || 0)),
-    statusItem("Cache misses", formatNumber(cache.misses || 0)),
+    statusItem("Decision cache hits", formatNumber(cache.hits || 0)),
+    statusItem("Decision cache misses", formatNumber(cache.misses || 0)),
+    statusItem("Profile cache hits", formatNumber(profileCache.hits || 0)),
+    statusItem("Profile cache errors", formatNumber(profileCache.errors || 0)),
     ...clientEventStatusItems(events.by_type || [])
   ].join("");
   if (ruleDetailPanel && !ruleDetailPanel.textContent.trim()) {
@@ -3996,6 +4000,7 @@ async function loadSettings() {
     document.querySelector("#setting-meiro-api-url").value = settings.meiro_api_url || "";
     document.querySelector("#setting-meiro-api-token").value = "";
     document.querySelector("#setting-meiro-api-token").placeholder = settings.meiro_api_token_configured ? "Configured" : "";
+    document.querySelector("#setting-meiro-profile-cache-ttl").value = settings.meiro_profile_cache_ttl_seconds ?? 300;
     document.querySelector("#setting-meiro-feedback-url").value = settings.meiro_feedback_url || "";
     document.querySelector("#setting-meiro-skill-url").value = settings.meiro_skill_url || "";
     document.querySelector("#setting-meiro-cli-url").value = settings.meiro_cli_url || settings.meiro_url || "";
@@ -4025,6 +4030,7 @@ async function testMeiroConnection(target) {
       meiro_source_slug: document.querySelector("#setting-meiro-source-slug").value.trim(),
       meiro_api_url: document.querySelector("#setting-meiro-api-url").value.trim(),
       meiro_api_token: document.querySelector("#setting-meiro-api-token").value.trim(),
+      meiro_profile_cache_ttl_seconds: Number(document.querySelector("#setting-meiro-profile-cache-ttl").value || 0),
       meiro_feedback_url: document.querySelector("#setting-meiro-feedback-url").value.trim(),
       meiro_skill_url: document.querySelector("#setting-meiro-skill-url").value.trim(),
       meiro_cli_url: document.querySelector("#setting-meiro-cli-url").value.trim(),
@@ -4057,6 +4063,7 @@ async function saveSettings(event) {
       meiro_feedback_url: document.querySelector("#setting-meiro-feedback-url").value.trim(),
       meiro_skill_url: document.querySelector("#setting-meiro-skill-url").value.trim(),
       meiro_cli_url: document.querySelector("#setting-meiro-cli-url").value.trim(),
+      meiro_profile_cache_ttl_seconds: Number(document.querySelector("#setting-meiro-profile-cache-ttl").value || 0),
       schema_sync_interval_minutes: Number(document.querySelector("#setting-schema-sync-interval").value || 15),
       schema_sync_identifier_type: document.querySelector("#schema-sync-identifier-type").value.trim(),
       schema_sync_identifier_value: document.querySelector("#schema-sync-identifier-value").value.trim()
@@ -4100,6 +4107,7 @@ async function syncSchemaFromMeiro() {
     schemaOutput.textContent = JSON.stringify(body, null, 2);
     renderSchemaDiagnostics(body.diagnostics);
   } catch (error) {
+    await loadSettings();
     schemaOutput.textContent = error.message;
   }
 }
@@ -4129,6 +4137,7 @@ async function syncMeiroMetadata() {
     schemaOutput.textContent = JSON.stringify(body, null, 2);
     renderSchemaDiagnostics(body.diagnostics?.profile_api?.diagnostics || body.diagnostics);
   } catch (error) {
+    await loadSettings();
     schemaOutput.textContent = error.message;
   }
 }
@@ -4209,6 +4218,7 @@ function renderSettingsSummary(settings, runtime, error = null) {
     return;
   }
   const schemaRuntime = runtime?.schema_sync || {};
+  const profileCache = runtime?.profile_cache || {};
   const collectorConfigured = Boolean(settings?.meiro_url && settings?.meiro_source_slug);
   const feedbackConfigured = Boolean(settings?.meiro_feedback_url);
   const apiConfigured = Boolean(settings?.meiro_api_url && settings?.meiro_api_token_configured);
@@ -4241,8 +4251,14 @@ function renderSettingsSummary(settings, runtime, error = null) {
     {
       label: "Profile API",
       value: apiConfigured ? "Configured" : "Incomplete",
-      detail: apiConfigured ? settings.meiro_api_url : "Set API URL and token for schema import",
+      detail: apiConfigured ? `${settings.meiro_api_url} · ${Number(settings.meiro_profile_cache_ttl_seconds || 0)}s profile TTL` : "Set Profile API URL and token for schema import and client enrichment",
       ok: apiConfigured
+    },
+    {
+      label: "Profile Cache",
+      value: `${Math.round((profileCache.hit_rate || 0) * 100)}% hit rate`,
+      detail: `${formatNumber(profileCache.entries || 0)} entries · ${formatNumber(profileCache.errors || 0)} lookup errors`,
+      ok: Number(profileCache.errors || 0) === 0
     },
     {
       label: "Meiro Metadata",

@@ -6,6 +6,7 @@ import { config } from "./config.js";
 import { createClientResultCache } from "./clientCache.js";
 import { evaluateDecision } from "./evaluator.js";
 import { notFound, readJson, sendError, sendJson, sendText, serveStatic } from "./http.js";
+import { createProfileCache, profileCacheKey } from "./profileCache.js";
 import { Store } from "./store.js";
 import {
   validateBundle,
@@ -19,6 +20,7 @@ import {
 
 const store = await Store.load();
 const clientResultCache = createClientResultCache();
+const meiroProfileCache = createProfileCache();
 setAuthStore(store);
 let schemaSyncTimer = null;
 let schemaSyncNextRunAt = "";
@@ -108,7 +110,7 @@ async function routeApi(req, res, url) {
     const body = await readJson(req);
     validateClientEvaluateRequest(body);
     enforceAllowedDecision(req, body.decision_key);
-    const result = evaluateClientRequest(body);
+    const result = await evaluateClientRequest(body);
     await store.save();
     sendJson(res, 200, result);
     return;
@@ -118,7 +120,7 @@ async function routeApi(req, res, url) {
     requireScope(req, "client");
     const body = await readJson(req);
     validateClientSurfaceRequest(body);
-    const result = evaluateClientSurface(body, req.auth);
+    const result = await evaluateClientSurface(body, req.auth);
     await store.save();
     sendJson(res, 200, result);
     return;
@@ -145,7 +147,13 @@ async function routeApi(req, res, url) {
 
   if (req.method === "GET" && pathname === "/v1/metrics") {
     requireScope(req, "viewer");
-    sendJson(res, 200, { metrics: { ...store.getMetrics(), client_cache: clientResultCache.metrics() } });
+    sendJson(res, 200, {
+      metrics: {
+        ...store.getMetrics(),
+        client_cache: clientResultCache.metrics(),
+        profile_cache: meiroProfileCache.metrics()
+      }
+    });
     return;
   }
 
@@ -224,6 +232,7 @@ async function routeApi(req, res, url) {
         docker_url: "http://localhost:8090",
         db_path: config.dbPath,
         schema_sync: schemaSyncRuntime(),
+        profile_cache: meiroProfileCache.metrics(),
         meiro_deliveries: store.listMeiroDeliveries({ limit: 10 })
       }
     });
@@ -375,20 +384,32 @@ async function routeApi(req, res, url) {
   if (req.method === "POST" && pathname === "/v1/schema/sync") {
     requireScope(req, "admin");
     const body = await readJson(req);
-    const synced = await syncSchemaFromMeiroProfile(body, req.auth.name);
-    recordSchemaSyncSuccess(synced, req.auth.name);
-    await store.save();
-    sendJson(res, 200, synced);
+    try {
+      const synced = await syncSchemaFromMeiroProfile(body, req.auth.name);
+      recordSchemaSyncSuccess(synced, req.auth.name);
+      await store.save();
+      sendJson(res, 200, synced);
+    } catch (error) {
+      recordSchemaSyncError(error, req.auth.name);
+      await store.save();
+      throw error;
+    }
     return;
   }
 
   if (req.method === "POST" && pathname === "/v1/meiro/metadata/sync") {
     requireScope(req, "admin");
     const body = await readJson(req);
-    const synced = await syncMeiroMetadata(body, req.auth.name);
-    recordSchemaSyncSuccess(synced, req.auth.name);
-    await store.save();
-    sendJson(res, 200, synced);
+    try {
+      const synced = await syncMeiroMetadata(body, req.auth.name);
+      recordSchemaSyncSuccess(synced, req.auth.name);
+      await store.save();
+      sendJson(res, 200, synced);
+    } catch (error) {
+      recordSchemaSyncError(error, req.auth.name);
+      await store.save();
+      throw error;
+    }
     return;
   }
 
@@ -405,29 +426,7 @@ async function syncSchemaFromMeiroProfile(input, author) {
   if (!token) badRequest("meiro_api_token is required");
   if (!identifierType || !identifierValue) badRequest("identifier_type and identifier_value are required");
 
-  const url = new URL(endpoint);
-  url.searchParams.set("identifier_type", identifierType);
-  url.searchParams.set("identifier_value", identifierValue);
-  const response = await fetch(url, {
-    headers: {
-      "x-api-token": token,
-      authorization: `Bearer ${token}`,
-      accept: "application/json"
-    }
-  });
-  const rawText = await response.text();
-  let profile;
-  try {
-    profile = rawText ? JSON.parse(rawText) : {};
-  } catch {
-    badRequest("Meiro Profile API returned non-JSON response");
-  }
-  if (!response.ok) {
-    const error = new Error(profile.message || profile.error || `Meiro Profile API returned ${response.status}`);
-    error.statusCode = response.status;
-    error.code = "meiro_profile_api_error";
-    throw error;
-  }
+  const profile = await fetchMeiroProfile(endpoint, token, { type: identifierType, value: identifierValue });
 
   const inferred = inferSchemaFromProfile(profile);
   const diagnosed = diagnoseSchemaImport({
@@ -436,7 +435,7 @@ async function syncSchemaFromMeiroProfile(input, author) {
     context: inferred.context
   });
   return {
-    source: url.origin + url.pathname,
+    source: profileEndpointBase(endpoint),
     imported: {
       attributes: store.replaceSchemaItems("attribute", diagnosed.valid.attributes, author),
       segments: store.replaceSchemaItems("segment", diagnosed.valid.segments, author),
@@ -501,7 +500,11 @@ async function syncMeiroMetadata(input = {}, author) {
       };
       mergeSchemaDiagnostics(diagnostics.summary, profileSynced.diagnostics.summary);
     } catch (error) {
-      diagnostics.profile_api = { ok: false, message: error.message };
+      diagnostics.profile_api = {
+        ok: false,
+        token_type: "Profile API token",
+        message: profileApiDiagnosticMessage(error)
+      };
       diagnostics.summary.failed += 1;
     }
   }
@@ -559,8 +562,9 @@ async function fetchMeiroSharedMetadata(base, token) {
       path: item.path,
       ok: item.ok,
       status: item.status,
+      token_type: "Meiro CLI/shared API token",
       count: Array.isArray(extractMeiroList(item.body)) ? extractMeiroList(item.body).length : 0,
-      message: item.message
+      message: sharedApiDiagnosticMessage(item)
     })),
     schema: {
       attributes,
@@ -581,6 +585,14 @@ async function fetchMeiroSharedMetadata(base, token) {
     catalogs,
     event_types: eventTypes
   };
+}
+
+function sharedApiDiagnosticMessage(result = {}) {
+  if (result.ok) return result.message || "ok";
+  if (result.status === 401 || result.status === 403) {
+    return "Shared API rejected the Meiro CLI/shared API token. Paste the separate mpat token, not the Profile API token.";
+  }
+  return result.message || `returned ${result.status || 0}`;
 }
 
 async function fetchMeiroApi(base, token, path) {
@@ -684,12 +696,10 @@ async function testMeiroProfileConnection(input = {}) {
   if (!token) badRequest("meiro_api_token is required");
   if (!identifierType || !identifierValue) badRequest("identifier_type and identifier_value are required");
 
-  const url = new URL(endpoint);
-  url.searchParams.set("identifier_type", identifierType);
-  url.searchParams.set("identifier_value", identifierValue);
   const startedAt = Date.now();
   let text = "";
   try {
+    const url = meiroProfileUrl(endpoint, { type: identifierType, value: identifierValue });
     const response = await fetchWithTimeout(url, {
       headers: {
         "x-api-token": token,
@@ -708,9 +718,10 @@ async function testMeiroProfileConnection(input = {}) {
       target: "profile",
       ok: response.ok,
       status: response.status,
-      endpoint: url.origin + url.pathname,
+      endpoint: profileEndpointBase(endpoint),
+      token_type: "Profile API token",
       profile_keys: Object.keys(parsed || {}).slice(0, 20),
-      message: response.ok ? "Profile API reached" : parsed.message || parsed.error || "Profile API returned an error"
+      message: response.ok ? "Profile API reached" : profileApiDiagnosticMessage({ message: parsed.message || parsed.error, statusCode: response.status })
     };
     store.recordMeiroDelivery({
       ...result,
@@ -724,9 +735,10 @@ async function testMeiroProfileConnection(input = {}) {
       target: "profile",
       ok: false,
       status: 0,
-      endpoint: url.origin + url.pathname,
+      endpoint: profileEndpointBase(endpoint),
+      token_type: "Profile API token",
       profile_keys: [],
-      message: error.message
+      message: profileApiDiagnosticMessage(error)
     };
     store.recordMeiroDelivery({ ...result, duration_ms: Date.now() - startedAt, error: error.message });
     return result;
@@ -847,14 +859,7 @@ async function runScheduledSchemaSync() {
     recordSchemaSyncSuccess(synced, "schema-scheduler");
     await store.save();
   } catch (error) {
-    store.updateSettings(
-      {
-        schema_last_synced_at: createdAtIso(),
-        schema_last_sync_status: "error",
-        schema_last_sync_error: error.message || "Schema sync failed"
-      },
-      "schema-scheduler"
-    );
+    recordSchemaSyncError(error, "schema-scheduler");
     await store.save();
     console.warn(`Scheduled schema sync failed: ${error.message}`);
   }
@@ -868,6 +873,17 @@ function recordSchemaSyncSuccess(synced, author) {
       schema_last_sync_status: "ok",
       schema_last_sync_error: "",
       schema_last_sync_count: importedCount
+    },
+    author
+  );
+}
+
+function recordSchemaSyncError(error, author) {
+  store.updateSettings(
+    {
+      schema_last_synced_at: createdAtIso(),
+      schema_last_sync_status: "error",
+      schema_last_sync_error: error.message || "Schema sync failed"
     },
     author
   );
@@ -1291,17 +1307,19 @@ function evaluateRequest(body) {
   return result;
 }
 
-function evaluateClientRequest(body) {
+async function evaluateClientRequest(body) {
   const ruleSet = store.getRuleSet(body.decision_key);
   if (!ruleSet) notFoundError(`Rule set not found: ${body.decision_key}`);
   const version = store.getVersion(body.decision_key, body.rule_version);
-  const request = {
+  const baseRequest = {
     identifiers: [],
     attributes: {},
     segments: {},
     context: {},
     ...body
   };
+  const hydrated = await hydrateClientProfile(baseRequest);
+  const request = hydrated.request;
   const cached = clientResultCache.get(request, ruleSet, version);
   if (cached.hit) {
     return {
@@ -1311,7 +1329,8 @@ function evaluateClientRequest(body) {
         hit: true,
         scope: ruleSet.cache_policy?.scope || "profile",
         expires_at: cached.expires_at
-      }
+      },
+      profile_cache: hydrated.cache
     };
   }
   const evaluated = evaluateDecision({
@@ -1335,7 +1354,8 @@ function evaluateClientRequest(body) {
       attribute_keys: Object.keys(request.attributes || {}),
       segment_keys: Object.keys(request.segments || {}),
       context_keys: Object.keys(request.context || {}),
-      request_source: "client"
+      request_source: "client",
+      profile_enrichment: hydrated.cache?.status || "not_used"
     }
   });
   const response = {
@@ -1351,12 +1371,195 @@ function evaluateClientRequest(body) {
       scope: ruleSet.cache_policy?.scope || null,
       expires_at: null
     },
+    profile_cache: hydrated.cache,
     experiment: assigned ? { variant_key: assigned.key, bucket: assigned.bucket } : null,
     matched_rules: evaluated.matched_rules,
     errors: evaluated.errors
   };
   response.cache.expires_at = response.errors.length ? null : clientResultCache.set(cached.cache_key, response, ruleSet);
   return response;
+}
+
+async function hydrateClientProfile(request) {
+  const settings = store.getSettings();
+  const mode = request.context?.profile_enrichment ?? request.context?.enrich_profile;
+  const hasLocalPayload = hasProfilePayload(request);
+  if (mode === false || mode === "off") {
+    return { request, cache: { status: "disabled", hit: false } };
+  }
+  if (hasLocalPayload && mode !== true && mode !== "always") {
+    return { request, cache: { status: "local_payload", hit: false } };
+  }
+  const endpoint = String(settings.meiro_api_url || "").trim();
+  const token = String(settings.meiro_api_token || "").trim();
+  const identifier = selectProfileIdentifier(request, settings);
+  if (!endpoint || !token || !identifier) {
+    return {
+      request,
+      cache: {
+        status: "not_configured",
+        hit: false,
+        reason: !endpoint || !token ? "Profile API URL/token not configured" : "No identifier available for Profile API lookup"
+      }
+    };
+  }
+
+  const ttlSeconds = Number(settings.meiro_profile_cache_ttl_seconds || 0);
+  const cacheKey = profileCacheKey({
+    profile_key: request.profile_key,
+    identifiers: [{ typeId: identifier.type, value: identifier.value }]
+  });
+  const cached = meiroProfileCache.get(cacheKey, ttlSeconds);
+  if (cached.hit) {
+    return {
+      request: mergeProfileIntoRequest(request, cached.value),
+      cache: {
+        status: "hit",
+        hit: true,
+        ttl_seconds: cached.ttl_seconds,
+        expires_at: cached.expires_at,
+        identifier_type: identifier.type
+      }
+    };
+  }
+
+  try {
+    const profile = await fetchMeiroProfile(endpoint, token, identifier);
+    const normalized = normalizeProfileForEvaluation(profile);
+    const expiresAt = meiroProfileCache.set(cacheKey, normalized, ttlSeconds);
+    return {
+      request: mergeProfileIntoRequest(request, normalized),
+      cache: {
+        status: "miss",
+        hit: false,
+        ttl_seconds: Math.max(0, Math.floor(ttlSeconds)),
+        expires_at: expiresAt,
+        identifier_type: identifier.type,
+        profile_shape: Object.keys(profile || {}).slice(0, 20)
+      }
+    };
+  } catch (error) {
+    meiroProfileCache.recordError();
+    return {
+      request,
+      cache: {
+        status: "error",
+        hit: false,
+        identifier_type: identifier.type,
+        error: error.message
+      }
+    };
+  }
+}
+
+function hasProfilePayload(request) {
+  return Boolean(
+    Object.keys(request.attributes || {}).length ||
+    Object.keys(request.segments || {}).length ||
+    Object.keys(request.context || {}).filter((key) => !["surface", "session_id", "sessionId", "profile_enrichment", "enrich_profile", "force_variant", "forced_variants"].includes(key)).length
+  );
+}
+
+function selectProfileIdentifier(request, settings = {}) {
+  const contextType = request.context?.identifier_type || request.context?.identifierType;
+  const contextValue = request.context?.identifier_value || request.context?.identifierValue;
+  if (contextType && contextValue) return { type: String(contextType), value: String(contextValue) };
+  for (const identifier of request.identifiers || []) {
+    const type = identifier.typeId || identifier.type || identifier.identifierTypeId || identifier.id;
+    const value = identifier.value || identifier.identifierValue;
+    if (type && value) return { type: String(type), value: String(value) };
+  }
+  if (settings.schema_sync_identifier_type && request.profile_key) {
+    return { type: String(settings.schema_sync_identifier_type), value: String(request.profile_key) };
+  }
+  return null;
+}
+
+async function fetchMeiroProfile(endpoint, token, identifier) {
+  const url = meiroProfileUrl(endpoint, identifier);
+  const response = await fetchWithTimeout(url, {
+    headers: {
+      "x-api-token": token,
+      authorization: `Bearer ${token}`,
+      accept: "application/json"
+    }
+  });
+  const rawText = await response.text();
+  let profile = {};
+  try {
+    profile = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    badRequest("Meiro Profile API returned non-JSON response");
+  }
+  if (!response.ok) {
+    const error = new Error(profile.message || profile.error || `Meiro Profile API returned ${response.status}`);
+    error.statusCode = response.status;
+    error.code = "meiro_profile_api_error";
+    throw error;
+  }
+  return profile;
+}
+
+function meiroProfileUrl(endpoint, identifier) {
+  const url = new URL(endpoint);
+  url.searchParams.set("identifier_type", identifier.type);
+  url.searchParams.set("identifier_value", identifier.value);
+  return url;
+}
+
+function profileEndpointBase(endpoint) {
+  const url = new URL(endpoint);
+  return url.origin + url.pathname;
+}
+
+function profileApiDiagnosticMessage(error = {}) {
+  const status = Number(error.statusCode || error.status || 0);
+  if (status === 401 || status === 403) return "Profile API rejected the Profile API token. Paste the mppak token in Meiro endpoints; the CLI/shared API token is separate.";
+  return error.message || "Profile API returned an error";
+}
+
+function normalizeProfileForEvaluation(profile = {}) {
+  return {
+    profile_key: profile.profile_key || profile.profileKey || profile.id || profile.profile?.profileKey || profile.data?.profileKey || "",
+    identifiers: normalizeProfileIdentifiers(profile),
+    attributes: readProfileObject(profile, ["attributes", "profile.attributes", "data.attributes", "payload.attributes"]),
+    segments: readProfileObject(profile, ["segments", "audiences", "profile.segments", "profile.audiences", "data.segments", "data.audiences"]),
+    context: readProfileObject(profile, ["context", "profile.context", "data.context"])
+  };
+}
+
+function normalizeProfileIdentifiers(profile = {}) {
+  const identifiers = profile.identifiers || profile.profile?.identifiers || profile.data?.identifiers || [];
+  if (!Array.isArray(identifiers)) return [];
+  return identifiers
+    .map((identifier) => ({
+      typeId: identifier.typeId || identifier.type || identifier.identifierTypeId || identifier.id || "",
+      value: identifier.value || identifier.identifierValue || ""
+    }))
+    .filter((identifier) => identifier.typeId && identifier.value);
+}
+
+function mergeProfileIntoRequest(request, profile) {
+  return {
+    ...request,
+    profile_key: request.profile_key || profile.profile_key || "",
+    identifiers: mergeIdentifiers(profile.identifiers, request.identifiers),
+    attributes: { ...(profile.attributes || {}), ...(request.attributes || {}) },
+    segments: { ...(profile.segments || {}), ...(request.segments || {}) },
+    context: { ...(profile.context || {}), ...(request.context || {}) }
+  };
+}
+
+function mergeIdentifiers(...sets) {
+  const seen = new Set();
+  return sets.flatMap((items) => Array.isArray(items) ? items : []).filter((identifier) => {
+    const type = identifier.typeId || identifier.type || identifier.identifierTypeId || identifier.id || "";
+    const value = identifier.value || identifier.identifierValue || "";
+    const key = `${type}:${value}`;
+    if (!type || !value || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function enrichMessageOutputs(outputs, ruleSet) {
@@ -1380,7 +1583,7 @@ function enrichMessageOutputs(outputs, ruleSet) {
   };
 }
 
-function evaluateClientSurface(body, auth) {
+async function evaluateClientSurface(body, auth) {
   const ruleSets = store
     .listRuleSets()
     .filter((ruleSet) =>
@@ -1395,7 +1598,7 @@ function evaluateClientSurface(body, auth) {
   const candidates = [];
   let selected = null;
   for (const ruleSetSummary of ruleSets) {
-    const result = evaluateClientRequest({
+    const result = await evaluateClientRequest({
       ...body,
       decision_key: ruleSetSummary.decision_key,
       context: {
@@ -1409,7 +1612,8 @@ function evaluateClientSurface(body, auth) {
       result: result.result,
       message_id: result.outputs?.message_id || result.outputs?.message?.id || "",
       matched_rules: result.matched_rules,
-      cache: result.cache
+      cache: result.cache,
+      profile_cache: result.profile_cache
     };
     candidates.push(candidate);
     if (!selected && result.result === "eligible") {

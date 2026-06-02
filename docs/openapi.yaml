@@ -145,7 +145,7 @@ paths:
   /v1/client/evaluate:
     post:
       summary: Evaluate an app-facing decision, in-app message, or experiment
-      description: Requires a token with the `client` scope. Tokens can optionally restrict the allowed `decision_key` values.
+      description: Requires a token with the `client` scope. Tokens can optionally restrict the allowed `decision_key` values. When the request does not include profile attributes, the engine can hydrate the profile from the configured Meiro Profile API using the supplied identifier and profile cache TTL.
       security:
         - bearerAuth: []
       requestBody:
@@ -1399,6 +1399,25 @@ components:
               type: string
               format: date-time
               nullable: true
+        profile_cache:
+          type: object
+          description: Meiro Profile API enrichment/cache status for sparse client requests.
+          properties:
+            status:
+              type: string
+              enum: [disabled, local_payload, not_configured, hit, miss, error]
+            hit:
+              type: boolean
+            ttl_seconds:
+              type: integer
+            expires_at:
+              type: string
+              format: date-time
+              nullable: true
+            reason:
+              type: string
+            error:
+              type: string
         experiment:
           type: object
           nullable: true
@@ -2009,6 +2028,25 @@ components:
               type: integer
             hit_rate:
               type: number
+        profile_cache:
+          type: object
+          properties:
+            entries:
+              type: integer
+            hits:
+              type: integer
+            misses:
+              type: integer
+            skipped:
+              type: integer
+            writes:
+              type: integer
+            evictions:
+              type: integer
+            errors:
+              type: integer
+            hit_rate:
+              type: number
         client_events:
           type: object
           properties:
@@ -2189,6 +2227,9 @@ components:
           description: Separate Meiro CLI/shared API token for mpcli-compatible /api metadata endpoints.
         meiro_cli_token_configured:
           type: boolean
+        meiro_profile_cache_ttl_seconds:
+          type: integer
+          description: TTL for server-side Meiro profile enrichment cache used by client evaluate and surface endpoints.
         schema_sync_interval_minutes:
           type: integer
         schema_sync_identifier_type:

@@ -1025,7 +1025,7 @@
                   </div>
                 </div>
                 <div class="settings-card wide">
-                  <div class="grid-two">
+                  <div class="grid-three">
                     <label>
                       Meiro API URL
                       <input id="setting-meiro-api-url" placeholder="https://..." />
@@ -1034,6 +1034,11 @@
                       Profile API token
                       <input id="setting-meiro-api-token" type="password" />
                       <small>Used only by Profile API tests and schema sync.</small>
+                    </label>
+                    <label>
+                      Profile cache TTL seconds
+                      <input id="setting-meiro-profile-cache-ttl" type="number" min="0" />
+                      <small>Used by client evaluate and surface lookups.</small>
                     </label>
                   </div>
                 </div>
