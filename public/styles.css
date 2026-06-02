@@ -343,6 +343,13 @@ aside input {
   min-width: 0;
 }
 
+.settings-note {
+  margin: 6px 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .schema-workspace {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -426,6 +433,26 @@ aside input {
 .token-workspace {
   grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
   align-items: start;
+}
+
+.portability-workspace {
+  display: grid;
+  gap: 12px;
+}
+
+.portability-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.portability-summary:empty {
+  display: none;
+}
+
+.portability-summary .status-item.wide {
+  grid-column: span 2;
 }
 
 .integration-workspace .settings-card:last-child,

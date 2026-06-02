@@ -33,6 +33,11 @@ const auditInsights = document.querySelector("#audit-insights");
 const versionList = document.querySelector("#version-list");
 const lookupVersionList = document.querySelector("#lookup-version-list");
 const settingsOutput = document.querySelector("#settings-output");
+const configExportOutput = document.querySelector("#config-export-output");
+const configExportSummary = document.querySelector("#config-export-summary");
+const configImportInput = document.querySelector("#config-import-input");
+const configImportOutput = document.querySelector("#config-import-output");
+const configImportSummary = document.querySelector("#config-import-summary");
 const tokenOutput = document.querySelector("#token-output");
 const schemaOutput = document.querySelector("#schema-output");
 const settingsHealthSummary = document.querySelector("#settings-health-summary");
@@ -86,6 +91,7 @@ let cachedSettings = {};
 let cachedSchema = [];
 let cachedEvaluationProfiles = [];
 let cachedConditionBlocks = [];
+let cachedConfigBundle = null;
 let conditionBlocksLoaded = false;
 let selectedConditionBlockId = null;
 const savedProfileStorageKey = "meiro-dee-evaluate-profiles";
@@ -229,7 +235,10 @@ document.querySelector("#close-lookup-detail").addEventListener("click", closeLo
 document.querySelector("#close-message-detail").addEventListener("click", closeMessageDetail);
 document.querySelector("#cancel-message-detail").addEventListener("click", closeMessageDetail);
 document.querySelector("#close-overview-rule-detail")?.addEventListener("click", closeOverviewRuleDetail);
-document.querySelector("#export-config").addEventListener("click", exportConfig);
+document.querySelector("#export-config")?.addEventListener("click", exportConfig);
+document.querySelector("#download-config")?.addEventListener("click", downloadConfig);
+document.querySelector("#preview-config-import")?.addEventListener("click", previewConfigImport);
+document.querySelector("#import-config")?.addEventListener("click", importConfig);
 document.querySelector("#sync-json").addEventListener("click", syncJsonFromBuilder);
 document.querySelector("#sync-json-modal").addEventListener("click", syncJsonFromBuilder);
 document.querySelector("#open-rule-builder").addEventListener("click", openRuleBuilder);
@@ -1309,10 +1318,137 @@ function formatVersionDiff(body) {
 async function exportConfig() {
   try {
     const body = await api("/v1/export");
-    editorOutput.textContent = JSON.stringify(body, null, 2);
+    cachedConfigBundle = body;
+    if (configExportOutput) configExportOutput.textContent = JSON.stringify(body, null, 2);
+    if (configExportSummary) configExportSummary.innerHTML = renderBundleSummary(body);
+    if (configImportInput && !configImportInput.value.trim()) {
+      configImportInput.value = JSON.stringify(body, null, 2);
+      previewConfigImport();
+    }
   } catch (error) {
-    editorOutput.textContent = error.message;
+    if (configExportOutput) configExportOutput.textContent = error.message;
+    else editorOutput.textContent = error.message;
   }
+}
+
+function downloadConfig() {
+  if (!cachedConfigBundle) {
+    if (configExportOutput) configExportOutput.textContent = "Export a bundle before downloading.";
+    return;
+  }
+  const blob = new Blob([JSON.stringify(cachedConfigBundle, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  link.href = url;
+  link.download = `meiro-dee-config-${stamp}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function previewConfigImport() {
+  try {
+    const bundle = readConfigImportBundle();
+    if (configImportSummary) configImportSummary.innerHTML = renderBundleSummary(bundle);
+    if (configImportOutput) {
+      configImportOutput.textContent = JSON.stringify(
+        {
+          ready: true,
+          kind: bundle.kind,
+          counts: bundleCounts(bundle),
+          settings_secrets_redacted: bundle.settings_secrets_redacted || []
+        },
+        null,
+        2
+      );
+    }
+  } catch (error) {
+    if (configImportSummary) configImportSummary.innerHTML = "";
+    if (configImportOutput) configImportOutput.textContent = error.message;
+  }
+}
+
+async function importConfig() {
+  try {
+    const bundle = readConfigImportBundle();
+    if (!confirm(`Import this configuration bundle?\n\n${bundleSummaryText(bundle)}\n\nExisting objects with matching IDs will be updated.`)) return;
+    const body = await api("/v1/import", {
+      method: "POST",
+      body: JSON.stringify(bundle)
+    });
+    if (configImportOutput) configImportOutput.textContent = JSON.stringify(body, null, 2);
+    if (configImportSummary) {
+      configImportSummary.innerHTML = renderImportResult(body.imported || {}, bundle.settings_secrets_redacted || []);
+    }
+    await Promise.all([
+      loadRules(),
+      loadLookups(),
+      loadMessages(),
+      loadSettings(),
+      loadConditionBlocks({ silent: true }),
+      loadSchema({ silent: true })
+    ]);
+  } catch (error) {
+    if (configImportOutput) configImportOutput.textContent = error.message;
+  }
+}
+
+function readConfigImportBundle() {
+  const raw = configImportInput?.value.trim();
+  if (!raw) throw new Error("Paste a config bundle JSON before previewing or importing.");
+  const bundle = JSON.parse(raw);
+  if (!bundle || typeof bundle !== "object" || Array.isArray(bundle)) throw new Error("Config bundle must be a JSON object.");
+  if (bundle.kind !== "meiro-dee-config-bundle") throw new Error("Unsupported config bundle kind.");
+  return bundle;
+}
+
+function bundleCounts(bundle) {
+  const settings = bundle.settings && typeof bundle.settings === "object" && !Array.isArray(bundle.settings)
+    ? Object.keys(bundle.settings).length
+    : 0;
+  return {
+    rule_sets: (bundle.rule_sets || []).length,
+    lookup_tables: (bundle.lookup_tables || []).length,
+    messages: (bundle.messages || []).length,
+    condition_blocks: (bundle.condition_blocks || []).length,
+    settings
+  };
+}
+
+function renderBundleSummary(bundle) {
+  const counts = bundleCounts(bundle);
+  const redacted = (bundle.settings_secrets_redacted || []).join(", ") || "none";
+  return `
+    <div class="status-item"><span>Rule sets</span><strong>${formatNumber(counts.rule_sets)}</strong></div>
+    <div class="status-item"><span>Reference tables</span><strong>${formatNumber(counts.lookup_tables)}</strong></div>
+    <div class="status-item"><span>Messages</span><strong>${formatNumber(counts.messages)}</strong></div>
+    <div class="status-item"><span>Condition blocks</span><strong>${formatNumber(counts.condition_blocks)}</strong></div>
+    <div class="status-item"><span>Portable settings</span><strong>${formatNumber(counts.settings)}</strong></div>
+    <div class="status-item wide"><span>Secrets redacted</span><strong>${escapeHtml(redacted)}</strong></div>
+  `;
+}
+
+function renderImportResult(imported, redactedSecrets) {
+  const redacted = redactedSecrets.join(", ") || "none";
+  return `
+    <div class="status-item"><span>Imported rules</span><strong>${formatNumber(imported.rule_sets || 0)}</strong></div>
+    <div class="status-item"><span>Imported tables</span><strong>${formatNumber(imported.lookup_tables || 0)}</strong></div>
+    <div class="status-item"><span>Imported messages</span><strong>${formatNumber(imported.messages || 0)}</strong></div>
+    <div class="status-item"><span>Imported blocks</span><strong>${formatNumber(imported.condition_blocks || 0)}</strong></div>
+    <div class="status-item"><span>Applied settings</span><strong>${formatNumber(imported.settings || 0)}</strong></div>
+    <div class="status-item wide"><span>Secrets unchanged</span><strong>${escapeHtml(redacted)}</strong></div>
+  `;
+}
+
+function bundleSummaryText(bundle) {
+  const counts = bundleCounts(bundle);
+  return [
+    `${counts.rule_sets} rule sets`,
+    `${counts.lookup_tables} reference tables`,
+    `${counts.messages} messages`,
+    `${counts.condition_blocks} condition blocks`,
+    `${counts.settings} portable settings`
+  ].join("\n");
 }
 
 async function loadAudit() {

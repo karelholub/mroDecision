@@ -113,7 +113,6 @@
           </div>
           <div class="actions">
             <button id="new-rule">New</button>
-            <button id="export-config">Export</button>
             <button id="refresh-rules">Refresh</button>
           </div>
         </header>
@@ -982,6 +981,10 @@
               <span>Integration</span>
               <small>Pipes request and response template</small>
             </button>
+            <button type="button" class="settings-tab" data-settings-tab="portability">
+              <span>Portability</span>
+              <small>Export and import configuration</small>
+            </button>
             <button type="button" class="settings-tab" data-settings-tab="tokens">
               <span>API Tokens</span>
               <small>Scoped service credentials</small>
@@ -1196,6 +1199,36 @@
               </div>
             </section>
             </form>
+            <section class="settings-tab-panel" data-settings-panel="portability">
+              <div class="settings-section-head">
+                <div>
+                  <div class="editor-title">Configuration Portability</div>
+                  <p>Move rules, reference data, messages, reusable condition blocks, and non-secret environment settings between deployments.</p>
+                </div>
+              </div>
+              <div class="portability-workspace">
+                <div class="settings-card wide">
+                  <div class="editor-title compact-title">Export Bundle</div>
+                  <p class="settings-note">Exports include portable settings only. Profile API and CLI tokens are redacted and must be configured separately in each environment.</p>
+                  <div class="actions left">
+                    <button type="button" id="export-config">Export Bundle</button>
+                    <button type="button" id="download-config">Download JSON</button>
+                  </div>
+                  <div id="config-export-summary" class="portability-summary"></div>
+                  <pre id="config-export-output"></pre>
+                </div>
+                <div class="settings-card wide">
+                  <div class="editor-title compact-title">Import Bundle</div>
+                  <textarea id="config-import-input" spellcheck="false" placeholder='{"kind":"meiro-dee-config-bundle","rule_sets":[],"lookup_tables":[]}'></textarea>
+                  <div class="actions left">
+                    <button type="button" id="preview-config-import">Preview Import</button>
+                    <button type="button" id="import-config">Import Bundle</button>
+                  </div>
+                  <div id="config-import-summary" class="portability-summary"></div>
+                  <pre id="config-import-output"></pre>
+                </div>
+              </div>
+            </section>
             <section class="settings-tab-panel" data-settings-panel="integration">
               <div class="settings-section-head">
                 <div>

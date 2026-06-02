@@ -38,6 +38,7 @@ Implemented:
 - Meiro skill/mpcli metadata sync with a separate CLI/shared API token, plus Profile API fallback for condition-builder suggestions.
 - Meiro webhook and feedback delivery status history.
 - Embedded UI for rule sets, draft testing, evaluation, audit, lookups, settings, tokens, and Meiro request templates.
+- Settings UI for portable config export/import across rules, reference data, messages, condition blocks, and non-secret environment settings.
 - OpenAPI and Meiro Pipes integration templates.
 - Readiness endpoint, request IDs, request logs, bootstrap-token disablement, CI checks, production Compose/nginx examples, and deployment/backup guidance.
 
@@ -146,7 +147,7 @@ Goal: make the service deployable beyond local demo.
 - Add backup/restore guidance for SQLite or migration path to a managed database.
 - Add data-retention controls for audit, impression, and exposure events.
 
-Status: readiness, request IDs, request logs, guarded bootstrap-token disablement, CI checks, production Compose/nginx examples, backup guidance, managed database migration guidance, a simple p50/p95/p99 benchmark harness, SQLite retention controls for audits and client events, and portable config bundles with reusable condition blocks plus non-secret settings are implemented. A managed database adapter remains.
+Status: readiness, request IDs, request logs, guarded bootstrap-token disablement, CI checks, production Compose/nginx examples, backup guidance, managed database migration guidance, a simple p50/p95/p99 benchmark harness, SQLite retention controls for audits and client events, portable config bundles with reusable condition blocks plus non-secret settings, and Settings UI export/import for those bundles are implemented. A managed database adapter remains.
 
 ## Recommended Next Sprint
 
