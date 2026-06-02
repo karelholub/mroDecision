@@ -28,6 +28,7 @@ let schemaSyncNextRunAt = "";
 const server = http.createServer(async (req, res) => {
   const startedAt = Date.now();
   res.requestId = req.headers["x-request-id"] || randomUUID();
+  res.corsOrigin = corsOriginFor(req.headers.origin);
   try {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
     if (url.pathname.startsWith("/v1/")) {
@@ -54,6 +55,11 @@ scheduleSchemaSync();
 
 async function routeApi(req, res, url) {
   const { pathname } = url;
+
+  if (req.method === "OPTIONS") {
+    sendText(res, 204, "");
+    return;
+  }
 
   if (req.method === "GET" && pathname === "/v1/health") {
     sendJson(res, 200, {
@@ -1846,4 +1852,10 @@ function notFoundError(message) {
   error.statusCode = 404;
   error.code = "not_found";
   throw error;
+}
+
+function corsOriginFor(origin) {
+  if (!origin) return "";
+  if (config.corsOrigins.includes("*")) return "*";
+  return config.corsOrigins.includes(origin) ? origin : "";
 }

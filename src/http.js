@@ -37,7 +37,7 @@ export function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
-    ...requestIdHeader(res)
+    ...responseHeaders(res)
   });
   res.end(body);
 }
@@ -46,7 +46,7 @@ export function sendText(res, statusCode, body, contentType = "text/plain; chars
   res.writeHead(statusCode, {
     "content-type": contentType,
     "cache-control": "no-store",
-    ...requestIdHeader(res)
+    ...responseHeaders(res)
   });
   res.end(body);
 }
@@ -68,7 +68,8 @@ export async function serveStatic(res, pathname) {
     const file = await readFile(filePath);
     const ext = path.extname(filePath);
     res.writeHead(200, {
-      "content-type": contentTypes[ext] || "application/octet-stream"
+      "content-type": contentTypes[ext] || "application/octet-stream",
+      ...responseHeaders(res)
     });
     res.end(file);
     return true;
@@ -85,6 +86,18 @@ export function createdAtNow() {
   return new Date().toISOString();
 }
 
-function requestIdHeader(res) {
-  return res.requestId ? { "x-request-id": res.requestId } : {};
+function responseHeaders(res) {
+  return {
+    ...(res.requestId ? { "x-request-id": res.requestId } : {}),
+    ...(res.corsOrigin
+      ? {
+          "access-control-allow-origin": res.corsOrigin,
+          "access-control-allow-credentials": "false",
+          "access-control-allow-headers": "authorization, content-type, x-request-id",
+          "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+          "access-control-max-age": "600",
+          vary: "Origin"
+        }
+      : {})
+  };
 }

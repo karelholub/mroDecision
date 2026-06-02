@@ -8,6 +8,7 @@ export const config = {
   auditRetentionDays: Number(process.env.DEE_AUDIT_RETENTION_DAYS || 90),
   clientEventRetentionDays: Number(process.env.DEE_CLIENT_EVENT_RETENTION_DAYS || 180),
   bootstrapTokensEnabled: process.env.DEE_BOOTSTRAP_TOKENS_ENABLED !== "false",
+  corsOrigins: parseCsv(process.env.DEE_CORS_ORIGINS || "http://localhost:8091,http://127.0.0.1:8091"),
   tokens: parseTokens(process.env.DEE_TOKENS)
 };
 
@@ -39,4 +40,11 @@ function parseTokens(raw) {
   } catch (error) {
     throw new Error(`Invalid DEE_TOKENS: ${error.message}`);
   }
+}
+
+function parseCsv(raw) {
+  return String(raw || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }

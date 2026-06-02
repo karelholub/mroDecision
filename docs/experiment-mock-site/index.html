@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DEE Experiment Mock Site</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <strong>Northwind Energy</strong>
+        <span>Experiment-enabled demo site</span>
+      </div>
+      <button id="new-profile" type="button">New visitor</button>
+    </header>
+
+    <main>
+      <section class="hero" id="hero">
+        <div class="hero-copy">
+          <span id="variant-badge">Waiting for DEE</span>
+          <h1 id="hero-title">Smarter home energy, tested in real time.</h1>
+          <p id="hero-body">Use this page to call DEE, render the assigned experiment variant, and send exposure/impression feedback.</p>
+          <div class="hero-actions">
+            <a id="primary-cta" href="#plans">Explore plans</a>
+            <button id="secondary-cta" type="button">Send exposure</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <form id="decision-form" class="panel controls">
+          <div>
+            <h2>Experiment request</h2>
+            <p>Configure the DEE endpoint and profile context used by this mock website.</p>
+          </div>
+
+          <label>
+            DEE base URL
+            <input id="dee-base-url" value="http://localhost:8090" />
+          </label>
+          <label>
+            Client token
+            <input id="dee-token" type="password" value="dev-admin-token" />
+          </label>
+          <div class="grid-two">
+            <label>
+              Decision key
+              <input id="decision-key" value="smoke_experiment" />
+            </label>
+            <label>
+              Surface
+              <input id="surface" value="homepage_hero" />
+            </label>
+          </div>
+          <div class="grid-two">
+            <label>
+              Profile key
+              <input id="profile-key" />
+            </label>
+            <label>
+              Force variant
+              <select id="force-variant">
+                <option value="">Use assignment</option>
+                <option value="control">control</option>
+                <option value="treatment">treatment</option>
+              </select>
+            </label>
+          </div>
+          <div class="grid-two">
+            <label>
+              Lead score
+              <input id="lead-score" type="number" value="82" />
+            </label>
+            <label>
+              Session id
+              <input id="session-id" />
+            </label>
+          </div>
+          <label class="checkbox">
+            <input id="auto-exposure" type="checkbox" checked />
+            Send exposure automatically after a successful assignment
+          </label>
+          <div class="button-row">
+            <button class="primary" type="submit">Evaluate variant</button>
+            <button id="send-exposure" type="button">Send exposure</button>
+            <button id="send-impression" type="button">Send impression</button>
+          </div>
+        </form>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>DEE response</h2>
+              <p>Rendered state, event status, and raw payloads.</p>
+            </div>
+            <span id="status-pill">Idle</span>
+          </div>
+          <div id="summary" class="summary-grid"></div>
+          <pre id="output"></pre>
+        </section>
+      </section>
+
+      <section id="plans" class="plans">
+        <article>
+          <span>Solar</span>
+          <strong>Lower daytime grid usage</strong>
+        </article>
+        <article>
+          <span>Smart tariff</span>
+          <strong>Shift usage to better hours</strong>
+        </article>
+        <article>
+          <span>Efficiency</span>
+          <strong>Personalized home audit</strong>
+        </article>
+      </section>
+    </main>
+
+    <script src="./site.js"></script>
+  </body>
+</html>

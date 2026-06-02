@@ -114,6 +114,29 @@ Meiro Pipes integration templates are available in [docs/meiro-pipes](docs/meiro
 - Profile Destination send function for scheduled/batch decisions
 - Example SQL for storing the latest `next_best_offer` result as a profile attribute
 
+## Experiment Mock Website
+
+A standalone mock website for testing external app experiment calls is available at [docs/experiment-mock-site](docs/experiment-mock-site).
+
+Run DEE through Docker Compose, then serve the mock site on port `8091`:
+
+```bash
+docker compose up -d --build
+python3 -m http.server 8091 --directory docs/experiment-mock-site
+```
+
+Open `http://localhost:8091`, enter a published experiment `decision_key`, and click **Evaluate variant**. The page calls:
+
+- `POST /v1/client/evaluate`
+- `POST /v1/client/exposure`
+- `POST /v1/client/impression`
+
+For real external websites, allow their browser origin with `DEE_CORS_ORIGINS`, for example:
+
+```bash
+DEE_CORS_ORIGINS="https://www.example.com,http://localhost:8091" npm start
+```
+
 ## Management UI
 
 The embedded UI supports the current MVP workflow:
