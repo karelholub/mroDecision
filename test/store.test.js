@@ -161,16 +161,50 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
     surface: "homepage",
     event: { name: "signup", value: 1 }
   });
+  store.addClientEvent({
+    event_id: "evt-experiment-3",
+    event_type: "exposure",
+    occurred_at: "2026-05-27T00:04:00.000Z",
+    decision_key: "hero_experiment",
+    profile_key: "p-2",
+    rule_version: 1,
+    variant_key: "control",
+    surface: "homepage"
+  });
+  store.addClientEvent({
+    event_id: "evt-experiment-4",
+    event_type: "exposure",
+    occurred_at: "2026-05-27T00:05:00.000Z",
+    decision_key: "hero_experiment",
+    profile_key: "p-3",
+    rule_version: 1,
+    variant_key: "control",
+    surface: "homepage"
+  });
+  store.addClientEvent({
+    event_id: "evt-experiment-5",
+    event_type: "conversion",
+    occurred_at: "2026-05-27T00:06:00.000Z",
+    decision_key: "hero_experiment",
+    profile_key: "p-2",
+    rule_version: 1,
+    variant_key: "control",
+    surface: "homepage",
+    event: { name: "signup", value: 1 }
+  });
   const experimentOps = store.getExperimentOperations();
   assert.equal(experimentOps.summary.total, 1);
   assert.equal(experimentOps.summary.running, 1);
   assert.equal(experimentOps.summary.archived, 0);
-  assert.equal(experimentOps.summary.exposures, 1);
-  assert.equal(experimentOps.summary.conversions, 1);
+  assert.equal(experimentOps.summary.exposures, 3);
+  assert.equal(experimentOps.summary.conversions, 2);
+  assert.equal(experimentOps.experiments[0].baseline_variant, "control");
+  assert.equal(experimentOps.experiments[0].winner_variant, "treatment");
   const treatmentVariant = experimentOps.experiments[0].variants.find((variant) => variant.key === "treatment");
   assert.equal(treatmentVariant.events.exposure.count, 1);
   assert.equal(treatmentVariant.events.conversion.count, 1);
   assert.equal(treatmentVariant.conversion_rate, 1);
+  assert.equal(treatmentVariant.lift_vs_baseline, 1);
 
   const table = store.replaceLookupTable("tiers", { key_column: "country", rows: [{ country: "CZ", tier: "A" }] }, "tester");
   assert.equal(table.version, 1);

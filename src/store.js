@@ -603,6 +603,14 @@ export class Store {
           variantMetrics.push({ key, weight: 0, outputs: {}, events, conversion_rate: conversionRate(events), configured: false });
         }
         const events = eventCounts(eventTotals);
+        const baseline = baselineVariant(variantMetrics);
+        for (const variant of variantMetrics) {
+          variant.baseline = baseline ? variant.key === baseline.key : false;
+          variant.lift_vs_baseline = baseline && baseline.conversion_rate > 0
+            ? (variant.conversion_rate - baseline.conversion_rate) / baseline.conversion_rate
+            : null;
+        }
+        const winner = winnerVariant(variantMetrics);
         return {
           name: rule.name,
           decision_key: rule.decision_key,
@@ -618,7 +626,10 @@ export class Store {
           allocation_total: variants.reduce((sum, variant) => sum + Number(variant.weight || 0), 0),
           variants: variantMetrics,
           events,
-          conversion_rate: conversionRate(events)
+          conversion_rate: conversionRate(events),
+          baseline_variant: baseline?.key || "",
+          winner_variant: winner?.key || "",
+          winner_lift_vs_baseline: winner?.lift_vs_baseline ?? null
         };
       });
     return {
@@ -1920,6 +1931,21 @@ function conversionRate(events = {}) {
   const exposures = Number(events.exposure?.count || 0);
   if (!exposures) return 0;
   return Number(events.conversion?.count || 0) / exposures;
+}
+
+function baselineVariant(variants = []) {
+  return variants.find((variant) => variant.key === "control") || variants[0] || null;
+}
+
+function winnerVariant(variants = []) {
+  return variants
+    .filter((variant) => Number(variant.events?.exposure?.count || 0) > 0)
+    .sort(
+      (left, right) =>
+        Number(right.conversion_rate || 0) - Number(left.conversion_rate || 0) ||
+        Number(right.events?.conversion?.count || 0) - Number(left.events?.conversion?.count || 0) ||
+        String(left.key || "").localeCompare(String(right.key || ""))
+    )[0] || null;
 }
 
 function isPlainObject(value) {

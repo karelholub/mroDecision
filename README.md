@@ -87,6 +87,8 @@ DEE_DB_PATH=/path/to/dee.sqlite npm start
 - `GET /v1/metrics`
 - `GET /v1/metrics/rule/:key`
 - `GET /v1/metrics/client-events`
+- `GET /v1/experiments`
+- `GET /v1/experiments?format=csv`
 - `GET /v1/audit`
 - `GET /v1/audit?format=csv`
 - `GET /v1/lookup-tables`
@@ -132,6 +134,8 @@ Open `http://localhost:8091`, enter a published experiment `decision_key`, and c
 - `POST /v1/client/exposure`
 - `POST /v1/client/impression`
 - `POST /v1/client/conversion`
+
+Experiment operations are available in the DEE UI and through `GET /v1/experiments`. The endpoint reports baseline variant, current winner, lift versus baseline, exposure/impression/conversion counts, and conversion rates. Add `?format=csv` to export the same analysis for downstream reporting.
 
 For real external websites, allow their browser origin with `DEE_CORS_ORIGINS`, for example:
 

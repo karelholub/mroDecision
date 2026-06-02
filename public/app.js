@@ -188,6 +188,7 @@ document.querySelectorAll("[data-lookup-drawer-tab]").forEach((button) => {
 
 document.querySelector("#refresh-metrics").addEventListener("click", loadMetrics);
 document.querySelector("#refresh-experiments")?.addEventListener("click", loadExperiments);
+document.querySelector("#export-experiments-csv")?.addEventListener("click", exportExperimentsCsv);
 document.querySelector("#refresh-rules").addEventListener("click", loadRules);
 document.querySelector("#rule-filter-search").addEventListener("input", renderRuleList);
 document.querySelector("#rule-filter-status").addEventListener("change", renderRuleList);
@@ -477,6 +478,19 @@ async function loadExperiments() {
   }
 }
 
+async function exportExperimentsCsv() {
+  try {
+    const response = await fetch("/v1/experiments?format=csv", {
+      headers: { authorization: `Bearer ${tokenInput.value}` }
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(text);
+    downloadTextFile(text, `meiro-dee-experiments-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`, "text/csv");
+  } catch (error) {
+    if (experimentDetail) experimentDetail.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
+  }
+}
+
 function renderExperiments(body) {
   const summary = body.summary || {};
   if (experimentKpis) {
@@ -525,6 +539,7 @@ function experimentOpsCard(experiment, index) {
       <div class="experiment-ops-events">
         ${statusItem("Exposures", formatNumber(exposureCount))}
         ${statusItem("Conversions", `${formatNumber(conversionCount)} · ${formatPercent(experiment.conversion_rate || 0)}`)}
+        ${statusItem("Winner", experiment.winner_variant || "-")}
         ${statusItem("Impressions", formatNumber(impressionCount))}
       </div>
     </button>
@@ -555,6 +570,8 @@ function renderExperimentDetail(experiment) {
       ${statusItem("Rule status", experiment.status || "-")}
       ${statusItem("Version", experiment.version || "-")}
       ${statusItem("Assignment", experiment.assignment_unit || "profile")}
+      ${statusItem("Baseline", experiment.baseline_variant || "-")}
+      ${statusItem("Winner", experiment.winner_variant ? `${experiment.winner_variant} ${formatLift(experiment.winner_lift_vs_baseline)}` : "-")}
       ${statusItem("Last published", experiment.last_published_at ? formatTime(experiment.last_published_at) : "-")}
     </div>
     ${warnings.length ? `<div class="experiment-warning-list">${warnings.map((item) => `<div>${escapeHtml(item)}</div>`).join("")}</div>` : ""}
@@ -565,6 +582,7 @@ function renderExperimentDetail(experiment) {
         <span>Exposures</span>
         <span>Conversions</span>
         <span>Conv. rate</span>
+        <span>Lift</span>
         <span>Impressions</span>
         <span>Last event</span>
       </div>
@@ -585,6 +603,7 @@ function experimentVariantRow(variant) {
       <span>${formatNumber(exposure.count || 0)} / ${formatNumber(exposure.unique_profiles || 0)} profiles</span>
       <span>${formatNumber(conversion.count || 0)} / ${formatNumber(conversion.unique_profiles || 0)} profiles</span>
       <span>${formatPercent(variant.conversion_rate || 0)}</span>
+      <span>${formatLift(variant.lift_vs_baseline)}</span>
       <span>${formatNumber(impression.count || 0)} / ${formatNumber(impression.unique_profiles || 0)} profiles</span>
       <span>${lastSeen ? formatTime(lastSeen) : "-"}</span>
     </div>
@@ -1480,12 +1499,16 @@ function downloadConfig() {
     if (configExportOutput) configExportOutput.textContent = "Export a bundle before downloading.";
     return;
   }
-  const blob = new Blob([JSON.stringify(cachedConfigBundle, null, 2)], { type: "application/json" });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  downloadTextFile(JSON.stringify(cachedConfigBundle, null, 2), `meiro-dee-config-${stamp}.json`, "application/json");
+}
+
+function downloadTextFile(text, filename, type = "text/plain") {
+  const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   link.href = url;
-  link.download = `meiro-dee-config-${stamp}.json`;
+  link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -2280,6 +2303,12 @@ function formatNumber(value) {
 
 function formatPercent(value) {
   return `${Math.round(Number(value || 0) * 1000) / 10}%`;
+}
+
+function formatLift(value) {
+  if (value == null || !Number.isFinite(Number(value))) return "-";
+  const rounded = Math.round(Number(value) * 1000) / 10;
+  return `${rounded > 0 ? "+" : ""}${rounded}%`;
 }
 
 function rate(numerator, denominator) {

@@ -48,7 +48,7 @@ Important gaps:
 - First client behavior exists for experiment evaluation; in-app message operations are still pending.
 - First client-facing endpoint exists: `POST /v1/client/evaluate`.
 - Deterministic experiment assignment exists for configured variants.
-- Experiment operations dashboard with status, allocation, and variant-level exposure/impression rollups.
+- Experiment operations dashboard with status, allocation, variant-level exposure/impression/conversion rollups, baseline/winner analysis, lift, and CSV export.
 - First impression/exposure feedback endpoints and event reports exist; in-app message library is still pending.
 - In-app message library stores reusable content for client decisions.
 - No role model beyond token scopes.
@@ -133,7 +133,7 @@ Goal: support feedback loops and operational reporting for client surfaces.
 - Add exposure, impression, conversion, and conversion-rate reports by rule set, variant, message, surface, and profile.
 - Add optional export format for downstream analytics or Meiro ingestion.
 
-Status: first-pass feedback ingestion is implemented with client-scoped impression, exposure, and conversion endpoints, service metrics, event reports by rule, variant, message, surface, and profile, a `frequency_cap` graph node backed by impression events, a reusable message library, surface-level priority evaluation, flexible message templates, message lifecycle/TTL metadata, and an experiment operations dashboard with variant feedback and conversion-rate rollups.
+Status: first-pass feedback ingestion is implemented with client-scoped impression, exposure, and conversion endpoints, service metrics, event reports by rule, variant, message, surface, and profile, a `frequency_cap` graph node backed by impression events, a reusable message library, surface-level priority evaluation, flexible message templates, message lifecycle/TTL metadata, and an experiment operations dashboard with variant feedback, conversion-rate rollups, baseline/winner analysis, lift, and CSV export.
 
 Open decision: defer mutual exclusion groups until basic experiment evaluation and exposure feedback are proven.
 

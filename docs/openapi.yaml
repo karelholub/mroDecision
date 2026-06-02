@@ -377,6 +377,12 @@ paths:
   /v1/experiments:
     get:
       summary: Get experiment operations status and variant feedback rollups
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, csv]
       responses:
         "200":
           description: Experiment operations dashboard data
@@ -384,6 +390,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ExperimentOperations"
+            text/csv:
+              schema:
+                type: string
   /v1/rule-sets/{key}:
     get:
       summary: Get a rule set with draft and latest published version
@@ -2467,6 +2476,13 @@ components:
           type: object
         conversion_rate:
           type: number
+        baseline_variant:
+          type: string
+        winner_variant:
+          type: string
+        winner_lift_vs_baseline:
+          type: number
+          nullable: true
     ExperimentVariantOperation:
       type: object
       properties:
@@ -2480,6 +2496,11 @@ components:
           type: object
         conversion_rate:
           type: number
+        baseline:
+          type: boolean
+        lift_vs_baseline:
+          type: number
+          nullable: true
         configured:
           type: boolean
     Settings:

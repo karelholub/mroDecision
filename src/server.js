@@ -178,7 +178,12 @@ async function routeApi(req, res, url) {
 
   if (req.method === "GET" && pathname === "/v1/experiments") {
     requireScope(req, "viewer");
-    sendJson(res, 200, store.getExperimentOperations());
+    const operations = store.getExperimentOperations();
+    if (url.searchParams.get("format") === "csv") {
+      sendText(res, 200, experimentOperationsToCsv(operations), "text/csv; charset=utf-8");
+      return;
+    }
+    sendJson(res, 200, operations);
     return;
   }
 
@@ -1299,6 +1304,62 @@ function lookupTableToCsv(table) {
     );
   }
   return `${lines.join("\n")}\n`;
+}
+
+function experimentOperationsToCsv(operations) {
+  const columns = [
+    "decision_key",
+    "name",
+    "rule_status",
+    "experiment_status",
+    "version",
+    "assignment_unit",
+    "baseline_variant",
+    "winner_variant",
+    "variant_key",
+    "variant_weight",
+    "is_baseline",
+    "exposures",
+    "conversions",
+    "conversion_rate",
+    "lift_vs_baseline",
+    "impressions",
+    "last_event_at"
+  ];
+  const lines = [columns.map(csvCell).join(",")];
+  for (const experiment of operations.experiments || []) {
+    for (const variant of experiment.variants || []) {
+      const exposure = variant.events?.exposure || {};
+      const conversion = variant.events?.conversion || {};
+      const impression = variant.events?.impression || {};
+      const lastEventAt = [exposure.last_seen_at, conversion.last_seen_at, impression.last_seen_at].filter(Boolean).sort().at(-1) || "";
+      const values = {
+        decision_key: experiment.decision_key,
+        name: experiment.name,
+        rule_status: experiment.status,
+        experiment_status: experiment.experiment_status,
+        version: experiment.version || "",
+        assignment_unit: experiment.assignment_unit,
+        baseline_variant: experiment.baseline_variant,
+        winner_variant: experiment.winner_variant,
+        variant_key: variant.key,
+        variant_weight: variant.weight,
+        is_baseline: variant.baseline ? "true" : "false",
+        exposures: exposure.count || 0,
+        conversions: conversion.count || 0,
+        conversion_rate: decimalPercent(variant.conversion_rate),
+        lift_vs_baseline: variant.lift_vs_baseline == null ? "" : decimalPercent(variant.lift_vs_baseline),
+        impressions: impression.count || 0,
+        last_event_at: lastEventAt
+      };
+      lines.push(columns.map((column) => csvCell(values[column])).join(","));
+    }
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function decimalPercent(value) {
+  return Number.isFinite(Number(value)) ? Number(value) : "";
 }
 
 function diffValues(left, right, path = "$") {
