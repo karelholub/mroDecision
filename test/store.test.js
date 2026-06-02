@@ -120,6 +120,43 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(eventReport.by_variant[0].key, "control");
   assert.equal(eventReport.recent_events[0].event_id, "evt-test-1");
 
+  store.createRuleSet(
+    {
+      name: "Hero Experiment",
+      decision_key: "hero_experiment",
+      type: "experiment",
+      metadata: {
+        experiment: {
+          status: "running",
+          unit: "profile",
+          variants: [
+            { key: "control", weight: 50, outputs: { headline: "A" } },
+            { key: "treatment", weight: 50, outputs: { headline: "B" } }
+          ]
+        }
+      },
+      draft: { fallback: { result: "eligible", outputs: {} }, branches: [] }
+    },
+    "tester"
+  );
+  store.publish("hero_experiment", "tester");
+  store.addClientEvent({
+    event_id: "evt-experiment-1",
+    event_type: "exposure",
+    occurred_at: "2026-05-27T00:02:00.000Z",
+    decision_key: "hero_experiment",
+    profile_key: "p-1",
+    rule_version: 1,
+    variant_key: "treatment",
+    surface: "homepage"
+  });
+  const experimentOps = store.getExperimentOperations();
+  assert.equal(experimentOps.summary.total, 1);
+  assert.equal(experimentOps.summary.running, 1);
+  assert.equal(experimentOps.summary.archived, 0);
+  assert.equal(experimentOps.summary.exposures, 1);
+  assert.equal(experimentOps.experiments[0].variants.find((variant) => variant.key === "treatment").events.exposure.count, 1);
+
   const table = store.replaceLookupTable("tiers", { key_column: "country", rows: [{ country: "CZ", tier: "A" }] }, "tester");
   assert.equal(table.version, 1);
   assert.equal(store.listLookupTables()[0].rows[0].tier, "A");
@@ -242,7 +279,7 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
 
   const bundle = store.exportBundle();
   assert.equal(bundle.kind, "meiro-dee-config-bundle");
-  assert.equal(bundle.rule_sets.length, 2);
+  assert.equal(bundle.rule_sets.length, 3);
   assert.equal(bundle.rule_sets.find((item) => item.decision_key === "campaign_suppression").type, "inapp_message");
   assert.equal(bundle.lookup_tables.length, 1);
   assert.equal(bundle.messages.length, 1);

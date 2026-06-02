@@ -54,6 +54,9 @@ const clientEventsPanel = document.querySelector("#metrics-client-events");
 const requestTrendPanel = document.querySelector("#metrics-request-trend");
 const overviewServiceFooter = document.querySelector("#overview-service-footer");
 const overviewRuleDetailModal = document.querySelector("#overview-rule-detail-modal");
+const experimentKpis = document.querySelector("#experiment-kpis");
+const experimentList = document.querySelector("#experiment-list");
+const experimentDetail = document.querySelector("#experiment-detail");
 const topbarTitle = document.querySelector("#topbar-title");
 const topbarSubtitle = document.querySelector("#topbar-subtitle");
 const topbarEnv = document.querySelector("#topbar-env");
@@ -87,6 +90,7 @@ let graphBuilder = { entry: "input", nodes: [] };
 let cachedRuleSets = [];
 let cachedLookupTables = [];
 let cachedMessages = [];
+let cachedExperiments = [];
 let cachedSettings = {};
 let cachedSchema = [];
 let cachedEvaluationProfiles = [];
@@ -144,6 +148,7 @@ document.querySelectorAll("nav button").forEach((button) => {
     view.classList.add("active");
     updateTopbarForView(view);
     if (button.dataset.view === "overview") loadMetrics();
+    if (button.dataset.view === "experiments") loadExperiments();
   });
 });
 
@@ -182,6 +187,7 @@ document.querySelectorAll("[data-lookup-drawer-tab]").forEach((button) => {
 });
 
 document.querySelector("#refresh-metrics").addEventListener("click", loadMetrics);
+document.querySelector("#refresh-experiments")?.addEventListener("click", loadExperiments);
 document.querySelector("#refresh-rules").addEventListener("click", loadRules);
 document.querySelector("#rule-filter-search").addEventListener("input", renderRuleList);
 document.querySelector("#rule-filter-status").addEventListener("change", renderRuleList);
@@ -345,6 +351,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 loadMetrics();
+loadExperiments();
 loadRules();
 newRule({ silent: true });
 newLookup({ silent: true });
@@ -456,6 +463,134 @@ function renderMetrics(metrics) {
   if (ruleDetailPanel && !ruleDetailPanel.textContent.trim()) {
     ruleDetailPanel.innerHTML = `<div class="status-line">Select a rule in Rule Usage to inspect recent decisions, fallback rate, and matched branch frequency.</div>`;
   }
+}
+
+async function loadExperiments() {
+  if (!experimentList) return;
+  try {
+    const body = await api("/v1/experiments");
+    cachedExperiments = body.experiments || [];
+    renderExperiments(body);
+  } catch (error) {
+    experimentList.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
+    if (experimentDetail) experimentDetail.innerHTML = `<div class="status-line">Experiment reporting is unavailable.</div>`;
+  }
+}
+
+function renderExperiments(body) {
+  const summary = body.summary || {};
+  if (experimentKpis) {
+    experimentKpis.innerHTML = [
+      metricCard("Experiments", formatNumber(summary.total || 0), `${formatNumber(summary.running || 0)} running`, "EX", "teal"),
+      metricCard("Paused", formatNumber(summary.paused || 0), `${formatNumber(summary.draft || 0)} draft · ${formatNumber(summary.archived || 0)} archived`, "PA", "blue"),
+      metricCard("Exposures", formatNumber(summary.exposures || 0), "Variant shown to users", "EV", "purple"),
+      metricCard("Impressions", formatNumber(summary.impressions || 0), "Message rendered events", "IM", "teal")
+    ].join("");
+  }
+  if (!cachedExperiments.length) {
+    experimentList.innerHTML = `<div class="status-line">No experiment rule sets yet. Create a rule set with type Experiment to begin.</div>`;
+    experimentDetail.innerHTML = `<div class="status-line">Select an experiment to inspect variants and feedback.</div>`;
+    return;
+  }
+  experimentList.innerHTML = cachedExperiments.map((experiment, index) => experimentOpsCard(experiment, index)).join("");
+  experimentList.querySelectorAll("[data-experiment-index]").forEach((button) => {
+    button.addEventListener("click", () => renderExperimentDetail(cachedExperiments[Number(button.dataset.experimentIndex)]));
+  });
+  renderExperimentDetail(cachedExperiments[0]);
+}
+
+function experimentOpsCard(experiment, index) {
+  const exposureCount = experiment.events?.exposure?.count || 0;
+  const impressionCount = experiment.events?.impression?.count || 0;
+  const allocationState = Math.round(Number(experiment.allocation_total || 0) * 1000) === 100000 ? "ok" : "warn";
+  return `
+    <button type="button" class="experiment-ops-card" data-experiment-index="${index}">
+      <div class="experiment-ops-head">
+        <div>
+          <strong>${escapeHtml(experiment.name)}</strong>
+          <span>${escapeHtml(experiment.decision_key)}</span>
+        </div>
+        <mark class="experiment-status ${escapeHtml(experiment.experiment_status)}">${escapeHtml(experiment.experiment_status)}</mark>
+      </div>
+      <div class="experiment-ops-meta">
+        <span>v${escapeHtml(experiment.version || "-")}</span>
+        <span>${escapeHtml(experiment.assignment_unit || "profile")} assignment</span>
+        <span class="${allocationState}">${formatNumber(experiment.allocation_total || 0)}% allocation</span>
+      </div>
+      <div class="experiment-ops-bars">
+        ${experiment.variants.map((variant) => variantAllocationBar(variant)).join("")}
+      </div>
+      <div class="experiment-ops-events">
+        ${statusItem("Exposures", formatNumber(exposureCount))}
+        ${statusItem("Impressions", formatNumber(impressionCount))}
+      </div>
+    </button>
+  `;
+}
+
+function variantAllocationBar(variant) {
+  const width = Math.max(0, Math.min(100, Number(variant.weight || 0)));
+  return `
+    <div class="variant-allocation-row">
+      <span>${escapeHtml(variant.key || "(empty)")}</span>
+      <div><em style="width: ${width}%"></em></div>
+      <strong>${formatNumber(width)}%</strong>
+    </div>
+  `;
+}
+
+function renderExperimentDetail(experiment) {
+  if (!experimentDetail) return;
+  if (!experiment) {
+    experimentDetail.innerHTML = `<div class="status-line">Select an experiment to inspect variants and feedback.</div>`;
+    return;
+  }
+  const warnings = experimentOpsWarnings(experiment);
+  experimentDetail.innerHTML = `
+    <div class="experiment-detail-summary">
+      ${statusItem("Status", experiment.experiment_status || "draft")}
+      ${statusItem("Rule status", experiment.status || "-")}
+      ${statusItem("Version", experiment.version || "-")}
+      ${statusItem("Assignment", experiment.assignment_unit || "profile")}
+      ${statusItem("Last published", experiment.last_published_at ? formatTime(experiment.last_published_at) : "-")}
+    </div>
+    ${warnings.length ? `<div class="experiment-warning-list">${warnings.map((item) => `<div>${escapeHtml(item)}</div>`).join("")}</div>` : ""}
+    <div class="experiment-variant-table">
+      <div class="experiment-variant-header">
+        <span>Variant</span>
+        <span>Weight</span>
+        <span>Exposures</span>
+        <span>Impressions</span>
+        <span>Last event</span>
+      </div>
+      ${experiment.variants.length ? experiment.variants.map((variant) => experimentVariantRow(variant)).join("") : `<div class="status-line">No variants configured.</div>`}
+    </div>
+  `;
+}
+
+function experimentVariantRow(variant) {
+  const exposure = variant.events?.exposure || {};
+  const impression = variant.events?.impression || {};
+  const lastSeen = [exposure.last_seen_at, impression.last_seen_at].filter(Boolean).sort().at(-1);
+  return `
+    <div class="experiment-variant-row">
+      <strong>${escapeHtml(variant.key || "(empty)")}${variant.configured === false ? " *" : ""}</strong>
+      <span>${formatNumber(variant.weight || 0)}%</span>
+      <span>${formatNumber(exposure.count || 0)} / ${formatNumber(exposure.unique_profiles || 0)} profiles</span>
+      <span>${formatNumber(impression.count || 0)} / ${formatNumber(impression.unique_profiles || 0)} profiles</span>
+      <span>${lastSeen ? formatTime(lastSeen) : "-"}</span>
+    </div>
+  `;
+}
+
+function experimentOpsWarnings(experiment) {
+  const warnings = [];
+  if (experiment.status !== "published") warnings.push("This rule is not published; client traffic will not use the current draft.");
+  if (experiment.experiment_status !== "running") warnings.push("Experiment assignment is not running.");
+  if (Math.round(Number(experiment.allocation_total || 0) * 1000) !== 100000) warnings.push("Variant allocation does not sum to 100%.");
+  if (!experiment.variants.length) warnings.push("No variants are configured.");
+  if (experiment.variants.some((variant) => variant.configured === false)) warnings.push("Some recorded variants are no longer in the active allocation.");
+  return warnings;
 }
 
 async function loadClientEventMetrics() {

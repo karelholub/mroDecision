@@ -429,6 +429,209 @@ aside input {
   resize: vertical;
 }
 
+.experiment-ops-workbench {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.experiment-kpi-strip {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.experiment-ops-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.58fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+
+.experiment-list,
+.experiment-detail {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.experiment-list {
+  max-height: calc(100vh - 330px);
+  overflow: auto;
+}
+
+.experiment-ops-card {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel-soft);
+  color: var(--ink);
+  text-align: left;
+}
+
+.experiment-ops-card:hover {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px rgba(14, 154, 142, 0.12);
+}
+
+.experiment-ops-head,
+.experiment-ops-meta,
+.experiment-ops-events,
+.variant-allocation-row,
+.experiment-variant-row,
+.experiment-variant-header {
+  min-width: 0;
+}
+
+.experiment-ops-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: start;
+}
+
+.experiment-ops-head strong,
+.experiment-ops-head span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.experiment-ops-head span,
+.experiment-ops-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.experiment-status {
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.experiment-status.paused {
+  background: var(--warning-soft);
+  color: #92400e;
+}
+
+.experiment-status.draft {
+  background: #eef2f7;
+  color: var(--muted);
+}
+
+.experiment-ops-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.experiment-ops-meta span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: #fff;
+}
+
+.experiment-ops-meta .warn {
+  border-color: rgba(180, 83, 9, 0.32);
+  background: var(--warning-soft);
+  color: #92400e;
+}
+
+.experiment-ops-bars {
+  display: grid;
+  gap: 6px;
+}
+
+.variant-allocation-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.8fr) minmax(120px, 1fr) minmax(42px, auto);
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.variant-allocation-row span {
+  overflow-wrap: anywhere;
+}
+
+.variant-allocation-row div {
+  height: 8px;
+  border-radius: 999px;
+  background: #e7edf5;
+  overflow: hidden;
+}
+
+.variant-allocation-row em {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--teal);
+}
+
+.experiment-ops-events,
+.experiment-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 8px;
+}
+
+.experiment-warning-list {
+  display: grid;
+  gap: 6px;
+}
+
+.experiment-warning-list div {
+  border: 1px solid rgba(180, 83, 9, 0.32);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--warning-soft);
+  color: #92400e;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.experiment-variant-table {
+  display: grid;
+  gap: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.experiment-variant-header,
+.experiment-variant-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(80px, 0.45fr) minmax(130px, 0.85fr) minmax(130px, 0.85fr) minmax(140px, 0.85fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 720px;
+  padding: 10px 12px;
+}
+
+.experiment-variant-header {
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.experiment-variant-row {
+  border-top: 1px solid var(--line);
+  background: #fff;
+}
+
+.experiment-variant-row strong,
+.experiment-variant-row span {
+  overflow-wrap: anywhere;
+}
+
 .integration-workspace,
 .token-workspace {
   grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
@@ -3382,6 +3585,7 @@ pre {
 
   .overview-workbench,
   .overview-primary-pane,
+  .experiment-ops-grid,
   .overview-service-footer {
     grid-template-columns: 1fr;
   }
@@ -3425,6 +3629,7 @@ pre {
     .metric-grid,
     .overview-workbench,
     .overview-primary-pane,
+    .experiment-ops-grid,
     .overview-service-footer,
     .client-event-subsections,
     .distribution-panel,

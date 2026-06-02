@@ -355,6 +355,16 @@ paths:
                 properties:
                   metrics:
                     $ref: "#/components/schemas/ClientEventMetrics"
+  /v1/experiments:
+    get:
+      summary: Get experiment operations status and variant feedback rollups
+      responses:
+        "200":
+          description: Experiment operations dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentOperations"
   /v1/rule-sets/{key}:
     get:
       summary: Get a rule set with draft and latest published version
@@ -2368,6 +2378,81 @@ components:
         last_seen_at:
           type: string
           nullable: true
+    ExperimentOperations:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        summary:
+          type: object
+          properties:
+            total:
+              type: integer
+            running:
+              type: integer
+            paused:
+              type: integer
+            draft:
+              type: integer
+            archived:
+              type: integer
+            exposures:
+              type: integer
+            impressions:
+              type: integer
+        experiments:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentOperation"
+    ExperimentOperation:
+      type: object
+      properties:
+        name:
+          type: string
+        decision_key:
+          type: string
+        status:
+          type: string
+        experiment_status:
+          type: string
+        draft_status:
+          type: string
+        published_status:
+          type: string
+        assignment_unit:
+          type: string
+        version:
+          type: integer
+          nullable: true
+        last_published_at:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+        variant_count:
+          type: integer
+        allocation_total:
+          type: number
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentVariantOperation"
+        events:
+          type: object
+    ExperimentVariantOperation:
+      type: object
+      properties:
+        key:
+          type: string
+        weight:
+          type: number
+        outputs:
+          type: object
+        events:
+          type: object
+        configured:
+          type: boolean
     Settings:
       type: object
       properties:

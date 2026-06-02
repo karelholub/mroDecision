@@ -537,6 +537,99 @@ export class Store {
     };
   }
 
+  getExperimentOperations() {
+    const experiments = this.listRuleSets()
+      .filter((rule) => rule.type === "experiment")
+      .map((rule) => {
+        let publishedVersion = null;
+        try {
+          publishedVersion = rule.version ? this.getVersion(rule.decision_key) : null;
+        } catch {
+          publishedVersion = null;
+        }
+        const draftExperiment = rule.metadata?.experiment || {};
+        const publishedExperiment = publishedVersion?.metadata?.experiment || {};
+        const activeExperiment = publishedVersion ? publishedExperiment : draftExperiment;
+        const variants = Array.isArray(activeExperiment.variants) ? activeExperiment.variants : [];
+        const eventRows = this.db
+          .prepare(
+            `SELECT
+              variant_key,
+              event_type,
+              COUNT(*) AS count,
+              COUNT(DISTINCT profile_key) AS unique_profiles,
+              MAX(occurred_at) AS last_seen_at
+             FROM client_events
+             WHERE decision_key = ?
+             GROUP BY variant_key, event_type
+             ORDER BY variant_key ASC, event_type ASC`
+          )
+          .all(rule.decision_key);
+        const eventTotals = this.db
+          .prepare(
+            `SELECT
+              event_type,
+              COUNT(*) AS count,
+              COUNT(DISTINCT profile_key) AS unique_profiles,
+              MAX(occurred_at) AS last_seen_at
+             FROM client_events
+             WHERE decision_key = ?
+             GROUP BY event_type
+             ORDER BY event_type ASC`
+          )
+          .all(rule.decision_key);
+        const variantMetrics = variants.map((variant) => {
+          const rows = eventRows.filter((row) => (row.variant_key || "") === (variant.key || ""));
+          return {
+            key: variant.key,
+            weight: Number(variant.weight || 0),
+            outputs: isPlainObject(variant.outputs) ? variant.outputs : {},
+            events: eventCounts(rows)
+          };
+        });
+        const unconfiguredVariantRows = eventRows
+          .filter((row) => row.variant_key && !variants.some((variant) => variant.key === row.variant_key))
+          .reduce((groups, row) => {
+            const existing = groups.get(row.variant_key) || [];
+            existing.push(row);
+            groups.set(row.variant_key, existing);
+            return groups;
+          }, new Map());
+        for (const [key, rows] of unconfiguredVariantRows.entries()) {
+          variantMetrics.push({ key, weight: 0, outputs: {}, events: eventCounts(rows), configured: false });
+        }
+        return {
+          name: rule.name,
+          decision_key: rule.decision_key,
+          status: rule.status,
+          experiment_status: activeExperiment.status || "draft",
+          draft_status: draftExperiment.status || "draft",
+          published_status: publishedExperiment.status || "",
+          assignment_unit: activeExperiment.unit || "profile",
+          version: rule.version || null,
+          last_published_at: rule.last_published_at || null,
+          updated_at: rule.updated_at,
+          variant_count: variants.length,
+          allocation_total: variants.reduce((sum, variant) => sum + Number(variant.weight || 0), 0),
+          variants: variantMetrics,
+          events: eventCounts(eventTotals)
+        };
+      });
+    return {
+      generated_at: createdAtNow(),
+      summary: {
+        total: experiments.length,
+        running: experiments.filter((item) => item.status === "published" && item.experiment_status === "running").length,
+        paused: experiments.filter((item) => item.status !== "archived" && item.experiment_status === "paused").length,
+        draft: experiments.filter((item) => item.status !== "archived" && item.experiment_status === "draft").length,
+        archived: experiments.filter((item) => item.status === "archived").length,
+        exposures: experiments.reduce((sum, item) => sum + Number(item.events.exposure?.count || 0), 0),
+        impressions: experiments.reduce((sum, item) => sum + Number(item.events.impression?.count || 0), 0)
+      },
+      experiments
+    };
+  }
+
   getRuleMetrics(decisionKey) {
     if (!this.getRuleSet(decisionKey)) notFound(`Rule set not found: ${decisionKey}`);
     const audit = this.queryAudit({ decision_key: decisionKey, limit: 1000 });
@@ -1799,6 +1892,18 @@ function countBy(items, fn) {
   for (const item of items) {
     const key = fn(item);
     counts[key] = (counts[key] || 0) + 1;
+  }
+  return counts;
+}
+
+function eventCounts(rows = []) {
+  const counts = {};
+  for (const row of rows) {
+    counts[row.event_type] = {
+      count: Number(row.count || 0),
+      unique_profiles: Number(row.unique_profiles || 0),
+      last_seen_at: row.last_seen_at || null
+    };
   }
   return counts;
 }

@@ -170,6 +170,12 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  if (req.method === "GET" && pathname === "/v1/experiments") {
+    requireScope(req, "viewer");
+    sendJson(res, 200, store.getExperimentOperations());
+    return;
+  }
+
   if (req.method === "POST" && pathname === "/v1/rule-sets") {
     requireScope(req, "editor");
     const body = await readJson(req);
