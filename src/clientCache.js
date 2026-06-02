@@ -91,7 +91,8 @@ export function keyFor(request, ruleSet, version) {
   const base = {
     decision_key: ruleSet.decision_key,
     rule_version: version.version,
-    scope
+    scope,
+    experiment_override: experimentOverrideFor(request, ruleSet.decision_key)
   };
   if (scope === "global") return digest(base);
   if (scope === "session") {
@@ -104,6 +105,15 @@ export function keyFor(request, ruleSet, version) {
     return digest({ ...base, request });
   }
   return digest({ ...base, profile_key: request.profile_key });
+}
+
+function experimentOverrideFor(request, decisionKey) {
+  const context = request.context || {};
+  const override = {
+    force_variant: context.force_variant || context.forced_variants?.[decisionKey] || null,
+    force_holdout: context.force_holdout ?? context.holdout ?? context.forced_holdouts?.[decisionKey] ?? null
+  };
+  return override.force_variant || override.force_holdout != null ? override : null;
 }
 
 function ttlSeconds(ruleSet) {

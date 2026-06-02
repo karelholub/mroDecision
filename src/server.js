@@ -1498,7 +1498,7 @@ async function evaluateClientRequest(body) {
   });
   const assigned = assignExperimentVariant(ruleSet, request, evaluated);
   const messageResolved = resolveMessageOutputs(
-    assigned ? { ...evaluated.outputs, ...(assigned.outputs || {}) } : evaluated.outputs,
+    assigned && !assigned.holdout ? { ...evaluated.outputs, ...(assigned.outputs || {}) } : evaluated.outputs,
     ruleSet,
     request,
     evaluated.evaluated_at
@@ -1512,7 +1512,7 @@ async function evaluateClientRequest(body) {
     result: finalResult,
     outputs: finalOutputs,
     errors: finalErrors,
-    experiment: assigned ? { key: assigned.key, bucket: assigned.bucket } : undefined,
+    experiment: assigned ? auditExperimentAssignment(assigned) : undefined,
     inputs: {
       identifiers_count: Array.isArray(request.identifiers) ? request.identifiers.length : 0,
       attribute_keys: Object.keys(request.attributes || {}),
@@ -1536,7 +1536,7 @@ async function evaluateClientRequest(body) {
       expires_at: null
     },
     profile_cache: hydrated.cache,
-    experiment: assigned ? { variant_key: assigned.key, bucket: assigned.bucket } : null,
+    experiment: assigned ? clientExperimentAssignment(assigned) : null,
     matched_rules: evaluated.matched_rules,
     errors: finalErrors
   };
@@ -1921,6 +1921,7 @@ function assignExperimentVariant(ruleSet, request, evaluated) {
   if (experiment.status && experiment.status !== "running") return null;
   const variants = Array.isArray(experiment.variants) ? experiment.variants : [];
   if (!variants.length) return null;
+  if (isForcedHoldout(request, ruleSet.decision_key)) return { holdout: true, bucket: null, reason: "forced_holdout" };
   const forced = request.context?.force_variant || request.context?.forced_variants?.[ruleSet.decision_key];
   if (forced) {
     const variant = variants.find((item) => item.key === forced);
@@ -1934,6 +1935,21 @@ function assignExperimentVariant(ruleSet, request, evaluated) {
     if (bucket < cursor) return { ...variant, bucket };
   }
   return { ...variants.at(-1), bucket };
+}
+
+function isForcedHoldout(request, decisionKey) {
+  const value = request.context?.force_holdout ?? request.context?.holdout ?? request.context?.forced_holdouts?.[decisionKey];
+  return value === true || value === "true" || value === 1 || value === "1";
+}
+
+function auditExperimentAssignment(assigned) {
+  if (assigned.holdout) return { holdout: true, reason: assigned.reason || "holdout" };
+  return { key: assigned.key, bucket: assigned.bucket };
+}
+
+function clientExperimentAssignment(assigned) {
+  if (assigned.holdout) return { variant_key: null, bucket: null, holdout: true, reason: assigned.reason || "holdout" };
+  return { variant_key: assigned.key, bucket: assigned.bucket, holdout: false };
 }
 
 function firstIdentifierValue(request) {

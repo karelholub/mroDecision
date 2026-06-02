@@ -3965,7 +3965,11 @@ function renderEvaluateRuleOptions() {
 
 function loadEvaluatePreset() {
   const preset = document.querySelector("#eval-preset")?.value || "nbo_green";
-  const request = preset === "rule_default" ? evaluatePresetForRule(selectedEvaluateRule()) : evaluatePreset(preset);
+  const request = preset === "rule_default"
+    ? evaluatePresetForRule(selectedEvaluateRule())
+    : preset === "experiment_holdout"
+      ? experimentEvaluatePreset(selectedEvaluateRule(), { holdout: true })
+      : evaluatePreset(preset);
   document.querySelector("#eval-rule-key").value = request.decision_key;
   document.querySelector("#eval-profile-key").value = request.profile_key;
   evalInput.value = JSON.stringify(request, null, 2);
@@ -4095,6 +4099,10 @@ function syncEvaluatePresetSelect(rule = {}) {
   if (!presetSelect) return;
   if (rule.decision_key === "next_best_offer") {
     if (!presetSelect.value.startsWith("nbo_")) presetSelect.value = "nbo_green";
+    return;
+  }
+  if (rule.type === "experiment" && presetSelect.value !== "experiment_holdout") {
+    presetSelect.value = "rule_default";
     return;
   }
   presetSelect.value = rule.decision_key === "loan_eligibility" ? "loan" : "rule_default";
@@ -4447,7 +4455,7 @@ function inAppEvaluatePreset(rule) {
   };
 }
 
-function experimentEvaluatePreset(rule) {
+function experimentEvaluatePreset(rule, options = {}) {
   return {
     decision_key: rule.decision_key,
     profile_key: `preset-${rule.decision_key}`,
@@ -4461,7 +4469,8 @@ function experimentEvaluatePreset(rule) {
     context: {
       channel: "web",
       request_source: "dee_ui",
-      surface: rule.surface || "default"
+      surface: rule.surface || "default",
+      ...(options.holdout ? { force_holdout: true } : {})
     }
   };
 }

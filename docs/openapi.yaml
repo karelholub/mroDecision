@@ -1434,6 +1434,7 @@ components:
             type: boolean
         context:
           type: object
+          description: Optional request context. Experiments support force_variant for QA and force_holdout or forced_holdouts[decision_key] for no-variant holdout overrides.
           additionalProperties: true
         event:
           type: object
@@ -1559,6 +1560,10 @@ components:
             bucket:
               type: number
               nullable: true
+            holdout:
+              type: boolean
+            reason:
+              type: string
         matched_rules:
           type: array
           items:

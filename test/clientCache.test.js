@@ -38,6 +38,19 @@ test("client result cache keys honor scope", () => {
   );
 });
 
+test("client result cache keys isolate experiment overrides", () => {
+  const version = { version: 1 };
+  const ruleSet = { decision_key: "hero_experiment", cache_policy: { scope: "profile" } };
+  const normal = { profile_key: "p1", context: {}, attributes: {} };
+  const forcedControl = { profile_key: "p1", context: { force_variant: "control" }, attributes: {} };
+  const forcedHoldout = { profile_key: "p1", context: { force_holdout: true }, attributes: {} };
+  const forcedHoldoutMap = { profile_key: "p1", context: { forced_holdouts: { hero_experiment: true } }, attributes: {} };
+
+  assert.notEqual(keyFor(normal, ruleSet, version), keyFor(forcedControl, ruleSet, version));
+  assert.notEqual(keyFor(normal, ruleSet, version), keyFor(forcedHoldout, ruleSet, version));
+  assert.equal(keyFor(forcedHoldout, ruleSet, version), keyFor(forcedHoldoutMap, ruleSet, version));
+});
+
 test("client result cache skips disabled TTL without lowering hit rate", () => {
   const cache = createClientResultCache();
   const result = cache.get(

@@ -127,6 +127,7 @@ async function sendClientEvent(type) {
 
 function buildEvaluateRequest() {
   const forceVariant = elements.forceVariant.value.trim();
+  const forceHoldout = forceVariant === "__holdout";
   return {
     decision_key: elements.decisionKey.value.trim(),
     profile_key: elements.profileKey.value.trim(),
@@ -145,7 +146,7 @@ function buildEvaluateRequest() {
       channel: "web",
       session_id: elements.sessionId.value.trim(),
       request_source: "experiment_mock_site",
-      ...(forceVariant ? { force_variant: forceVariant } : {})
+      ...(forceHoldout ? { force_holdout: true } : forceVariant ? { force_variant: forceVariant } : {})
     }
   };
 }
