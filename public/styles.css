@@ -489,6 +489,67 @@ aside input {
   overflow-wrap: anywhere;
 }
 
+.assistant-handoff {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  margin: 12px 0;
+  overflow: hidden;
+}
+
+.assistant-handoff-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.assistant-handoff-header div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.assistant-handoff-header span,
+.assistant-handoff-row span,
+.assistant-handoff-row small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.assistant-handoff-list {
+  display: grid;
+}
+
+.assistant-handoff-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  min-width: 0;
+}
+
+.assistant-handoff-row + .assistant-handoff-row {
+  border-top: 1px solid var(--line);
+}
+
+.assistant-handoff-row > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.assistant-handoff-row strong {
+  overflow-wrap: anywhere;
+}
+
+.assistant-handoff-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
 .experiment-kpi-strip {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
@@ -3652,6 +3713,14 @@ pre {
   .experiment-ops-grid,
   .overview-service-footer {
     grid-template-columns: 1fr;
+  }
+
+  .assistant-handoff-row {
+    grid-template-columns: 1fr;
+  }
+
+  .assistant-handoff-actions {
+    justify-content: flex-start;
   }
 
   .metric-grid {

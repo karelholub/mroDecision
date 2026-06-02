@@ -141,19 +141,23 @@ const defaultConditionBlockTemplates = [
 ];
 
 document.querySelectorAll("nav button").forEach((button) => {
-  button.addEventListener("click", () => {
-    document.querySelectorAll("nav button, .view").forEach((item) => item.classList.remove("active"));
-    button.classList.add("active");
-    document.body.dataset.currentView = button.dataset.view;
-    const view = document.querySelector(`#${button.dataset.view}`);
-    view.classList.add("active");
-    updateTopbarForView(view);
-    if (button.dataset.view === "overview") loadMetrics();
-    if (button.dataset.view === "experiments") loadExperiments();
-  });
+  button.addEventListener("click", () => switchView(button.dataset.view));
 });
 
 document.body.dataset.currentView = document.querySelector("nav button.active")?.dataset.view || "overview";
+
+function switchView(viewName) {
+  const button = document.querySelector(`nav button[data-view="${cssEscape(viewName)}"]`);
+  const view = document.querySelector(`#${cssEscape(viewName)}`);
+  if (!button || !view) return;
+  document.querySelectorAll("nav button, .view").forEach((item) => item.classList.remove("active"));
+  button.classList.add("active");
+  document.body.dataset.currentView = viewName;
+  view.classList.add("active");
+  updateTopbarForView(view);
+  if (viewName === "overview") loadMetrics();
+  if (viewName === "experiments") loadExperiments();
+}
 
 document.querySelectorAll("[data-settings-tab]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -192,6 +196,7 @@ document.querySelector("#refresh-experiments")?.addEventListener("click", loadEx
 document.querySelector("#export-experiments-csv")?.addEventListener("click", exportExperimentsCsv);
 document.querySelector("#assistant-plan")?.addEventListener("click", planAssistantRequest);
 document.querySelector("#assistant-apply")?.addEventListener("click", applyAssistantPlan);
+document.querySelector("#assistant-handoff")?.addEventListener("click", handleAssistantHandoffAction);
 document.querySelector("#refresh-rules").addEventListener("click", loadRules);
 document.querySelector("#rule-filter-search").addEventListener("input", renderRuleList);
 document.querySelector("#rule-filter-status").addEventListener("change", renderRuleList);
@@ -504,8 +509,13 @@ async function planAssistantRequest() {
   const output = document.querySelector("#assistant-plan-output");
   const guardrails = document.querySelector("#assistant-guardrails");
   const applyButton = document.querySelector("#assistant-apply");
+  const handoff = document.querySelector("#assistant-handoff");
   try {
     applyButton.disabled = true;
+    if (handoff) {
+      handoff.hidden = true;
+      handoff.innerHTML = "";
+    }
     const body = {
       prompt: document.querySelector("#assistant-prompt").value.trim(),
       type: document.querySelector("#assistant-type").value || undefined,
@@ -524,6 +534,7 @@ async function planAssistantRequest() {
     cachedAssistantPlan = null;
     if (guardrails) guardrails.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
     if (output) output.textContent = "{}";
+    if (handoff) handoff.hidden = true;
   }
 }
 
@@ -542,6 +553,7 @@ async function applyAssistantPlan() {
       statusItem("Publish", "Manual review required")
     ].join("");
     await Promise.all([loadRules(), loadMessages()]);
+    renderAssistantHandoff(cachedAssistantPlan, response.applied || [], { applied: true });
   } catch (error) {
     document.querySelector("#assistant-guardrails").innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
     applyButton.disabled = false;
@@ -560,6 +572,7 @@ function renderAssistantPlan(plan) {
     ...(guardrails.warnings || []).slice(0, 4).map((item) => statusItem("Warning", item))
   ].join("");
   renderAssistantPreview(plan);
+  renderAssistantHandoff(plan, [], { applied: false });
   document.querySelector("#assistant-apply").disabled = Boolean(guardrails.errors?.length);
 }
 
@@ -600,6 +613,72 @@ function assistantPreviewCard(title, rows) {
       `).join("")}
     </div>
   `;
+}
+
+function renderAssistantHandoff(plan, applied = [], options = {}) {
+  const target = document.querySelector("#assistant-handoff");
+  if (!target) return;
+  const ruleActions = (plan.actions || []).filter((item) => ["create_rule_draft", "update_rule_draft"].includes(item.action));
+  if (!ruleActions.length) {
+    target.hidden = true;
+    target.innerHTML = "";
+    return;
+  }
+  const appliedById = new Map(applied.map((item) => [item.id, item]));
+  target.hidden = false;
+  target.innerHTML = `
+    <div class="assistant-handoff-header">
+      <div>
+        <strong>${options.applied ? "Drafts ready for review" : "Affected drafts"}</strong>
+        <span>${options.applied ? "Assistant changes are saved as drafts. Publishing remains a separate review step." : "Review what will be created or updated before applying."}</span>
+      </div>
+    </div>
+    <div class="assistant-handoff-list">
+      ${ruleActions.map((item) => assistantHandoffRow(item, appliedById.get(item.id), options)).join("")}
+    </div>
+  `;
+}
+
+function assistantHandoffRow(action, applied, options = {}) {
+  const object = action.object || {};
+  const stats = draftPublishStats(object.draft || {});
+  const experiment = object.metadata?.experiment;
+  const validation = [
+    `${stats.branches} branch${stats.branches === 1 ? "" : "es"}`,
+    `${stats.outputs} output${stats.outputs === 1 ? "" : "s"}`,
+    object.cache_policy?.client_ttl ? `${object.cache_policy.client_ttl}s TTL` : "No response TTL",
+    experiment ? `${experiment.variants?.length || 0} variants` : null
+  ].filter(Boolean).join(" · ");
+  const actionLabel = action.action === "update_rule_draft" ? "Update draft" : "Create draft";
+  return `
+    <div class="assistant-handoff-row">
+      <div>
+        <strong>${escapeHtml(object.name || action.id)}</strong>
+        <span>${escapeHtml(actionLabel)} · ${escapeHtml(object.decision_key || action.id)} · ${escapeHtml(validation)}</span>
+        ${applied ? `<small>${escapeHtml(applied.status || "draft_saved")}</small>` : ""}
+      </div>
+      <div class="assistant-handoff-actions">
+        <button type="button" data-assistant-action="open-draft" data-rule-key="${escapeHtml(action.id)}" ${options.applied ? "" : "disabled"}>Review Draft</button>
+        <button type="button" data-assistant-action="publish-review" data-rule-key="${escapeHtml(action.id)}" ${options.applied ? "" : "disabled"}>Open Publish Review</button>
+      </div>
+    </div>
+  `;
+}
+
+async function handleAssistantHandoffAction(event) {
+  const button = event.target.closest("[data-assistant-action]");
+  if (!button || button.disabled) return;
+  const key = button.dataset.ruleKey;
+  if (!key) return;
+  try {
+    switchView("rules");
+    await loadRule(key);
+    if (button.dataset.assistantAction === "publish-review") {
+      await publishSelectedRule();
+    }
+  } catch (error) {
+    document.querySelector("#assistant-guardrails").innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
+  }
 }
 
 function renderExperiments(body) {
