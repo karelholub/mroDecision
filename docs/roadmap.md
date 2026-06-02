@@ -40,6 +40,7 @@ Implemented:
 - Embedded UI for rule sets, draft testing, evaluation, audit, lookups, settings, tokens, and Meiro request templates.
 - Settings UI for portable config export/import across rules, reference data, messages, condition blocks, and non-secret environment settings.
 - OpenAPI and Meiro Pipes integration templates.
+- Guardrailed assistant planner/apply endpoints for draft-only rule, message, and experiment configuration.
 - Readiness endpoint, request IDs, request logs, bootstrap-token disablement, CI checks, production Compose/nginx examples, and deployment/backup guidance.
 
 Important gaps:
@@ -154,9 +155,25 @@ Goal: make the service deployable beyond local demo.
 
 Status: readiness, request IDs, request logs, runtime request telemetry, guarded bootstrap-token disablement, CI checks, production Compose/nginx examples, backup guidance, managed database migration guidance, a p50/p95/p99 benchmark harness with throughput/error reporting and optional SLO gates, SQLite retention controls for audits and client events, portable config bundles with reusable condition blocks plus non-secret settings, Settings UI export/import for those bundles, configurable body/request/socket limits, client endpoint rate limiting with metrics, and idempotent client feedback ingestion are implemented. A managed database adapter remains.
 
+## Phase 7: Guardrailed Configuration Assistant
+
+Goal: let business users ask DEE to create rules, messages, and experiments while keeping all mutations inside draft, validation, diff, and publish guardrails.
+
+- Add Assistant UI for natural-language configuration requests.
+- Add `POST /v1/assistant/plan` to convert a request into a structured draft-only plan.
+- Add `POST /v1/assistant/apply` to create or update drafts only.
+- Reuse existing rule validation, schema warnings, publish review, and experiment allocation guardrails.
+- Create message dependencies as reusable content and reference them from draft rules.
+- Generate test payloads and draft evaluation previews.
+- Keep publish as a separate explicit user action.
+- Add optional LLM provider integration behind the deterministic planner contract.
+
+Status: first-pass deterministic assistant planner, draft-only apply endpoint, Assistant UI, message/rule/experiment draft generation, allocation checks, and shared rule validation are implemented. LLM-backed planning, richer schema-aware prompts, test-preview generation, and publish-review handoff remain.
+
 ## Recommended Next Sprint
 
-1. Provide a Meiro personal API token (`mpat_...`) for full shared API metadata sync when catalog/audience metadata is needed beyond Profile API samples.
-2. Add managed database adapter implementation if production scale requires multiple replicas.
-3. Add optional graph-canvas minimap/snap guides if rule graphs become large in real customer use.
-4. Add promotion/message governance workflows such as approval queues if multiple teams need controlled publishing.
+1. Extend assistant planning with schema-aware field suggestions and generated draft evaluation previews.
+2. Provide a Meiro personal API token (`mpat_...`) for full shared API metadata sync when catalog/audience metadata is needed beyond Profile API samples.
+3. Add managed database adapter implementation if production scale requires multiple replicas.
+4. Add optional graph-canvas minimap/snap guides if rule graphs become large in real customer use.
+5. Add promotion/message governance workflows such as approval queues if multiple teams need controlled publishing.

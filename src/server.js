@@ -2,6 +2,7 @@ import http from "node:http";
 import { URL } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
 import { requireScope, setAuthStore } from "./auth.js";
+import { applyAssistantPlan, createAssistantPlan } from "./assistantPlanner.js";
 import { config } from "./config.js";
 import { createClientResultCache } from "./clientCache.js";
 import { evaluateDecision } from "./evaluator.js";
@@ -168,6 +169,29 @@ async function routeApi(req, res, url) {
   if (req.method === "GET" && pathname === "/v1/rule-sets") {
     requireScope(req, "viewer");
     sendJson(res, 200, { rule_sets: store.listRuleSets() });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/v1/assistant/plan") {
+    requireScope(req, "editor");
+    const body = await readJson(req, config.requestBodyLimitBytes);
+    const plan = createAssistantPlan(body, {
+      ruleExists: (key) => Boolean(store.getRuleSet(key))
+    });
+    validateAssistantPlan(plan);
+    sendJson(res, 200, { plan });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/v1/assistant/apply") {
+    requireScope(req, "editor");
+    const body = await readJson(req, config.requestBodyLimitBytes);
+    validateAssistantPlan(body.plan);
+    if (body.plan.guardrails?.errors?.length) badRequest("Assistant plan has blocking guardrail errors");
+    const applied = applyAssistantPlan(body.plan, store, req.auth.name);
+    await store.save();
+    clientResultCache.clear();
+    sendJson(res, 200, applied);
     return;
   }
 
@@ -1950,6 +1974,20 @@ function auditExperimentAssignment(assigned) {
 function clientExperimentAssignment(assigned) {
   if (assigned.holdout) return { variant_key: null, bucket: null, holdout: true, reason: assigned.reason || "holdout" };
   return { variant_key: assigned.key, bucket: assigned.bucket, holdout: false };
+}
+
+function validateAssistantPlan(plan) {
+  if (!plan || !Array.isArray(plan.actions)) badRequest("Assistant plan must include actions");
+  if (plan.mode !== "draft_only") badRequest("Assistant plan mode must be draft_only");
+  for (const action of plan.actions) {
+    if (!["upsert_message", "create_rule_draft", "update_rule_draft"].includes(action.action)) {
+      badRequest(`Unsupported assistant action: ${action.action}`);
+    }
+    if (["create_rule_draft", "update_rule_draft"].includes(action.action)) {
+      validateRuleSetPayload(action.object || {}, { partial: action.action === "update_rule_draft" });
+      validateRuleDefinition(action.object?.draft || action.object?.definition || {}, action.object?.input_schema || {});
+    }
+  }
 }
 
 function firstIdentifierValue(request) {

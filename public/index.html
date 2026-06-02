@@ -18,6 +18,7 @@
         <button data-view="audit">Audit</button>
         <span class="nav-section">Decisioning</span>
         <button data-view="rules">Rule Sets</button>
+        <button data-view="assistant">Assistant</button>
         <button data-view="experiments">Experiments</button>
         <button data-view="test">Evaluate</button>
         <span class="nav-section">Content & Data</span>
@@ -525,6 +526,56 @@
               </div>
             </template>
           </form>
+        </div>
+      </section>
+
+      <section id="assistant" class="view">
+        <header>
+          <div>
+            <h2>Assistant</h2>
+            <p class="page-subtitle">Create guarded draft plans for rules, messages, and experiments.</p>
+          </div>
+          <div class="actions">
+            <button id="assistant-plan">Plan</button>
+            <button id="assistant-apply" disabled>Apply Draft</button>
+          </div>
+        </header>
+        <div class="assistant-workbench">
+          <div class="editor">
+            <div class="editor-title">Request</div>
+            <label>
+              What should DEE configure?
+              <textarea id="assistant-prompt" spellcheck="false" placeholder="Create an experiment for homepage solar banner with 80/20 split, control vs treatment, only for high sustainability score users."></textarea>
+            </label>
+            <div class="audit-filter-grid">
+              <label>
+                Type hint
+                <select id="assistant-type">
+                  <option value="">Auto detect</option>
+                  <option value="decision">Decision rule</option>
+                  <option value="inapp_message">In-app message</option>
+                  <option value="experiment">Experiment</option>
+                </select>
+              </label>
+              <label>
+                Decision key
+                <input id="assistant-decision-key" placeholder="Optional slug" />
+              </label>
+              <label>
+                Surface
+                <input id="assistant-surface" placeholder="homepage" />
+              </label>
+              <label>
+                TTL seconds
+                <input id="assistant-ttl" type="number" min="0" value="300" />
+              </label>
+            </div>
+          </div>
+          <div class="editor">
+            <div class="editor-title">Guarded Plan</div>
+            <div id="assistant-guardrails" class="status-panel compact-status-panel"></div>
+            <pre id="assistant-plan-output">{}</pre>
+          </div>
         </div>
       </section>
 

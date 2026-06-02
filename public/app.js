@@ -96,6 +96,7 @@ let cachedSchema = [];
 let cachedEvaluationProfiles = [];
 let cachedConditionBlocks = [];
 let cachedConfigBundle = null;
+let cachedAssistantPlan = null;
 let conditionBlocksLoaded = false;
 let selectedConditionBlockId = null;
 const savedProfileStorageKey = "meiro-dee-evaluate-profiles";
@@ -189,6 +190,8 @@ document.querySelectorAll("[data-lookup-drawer-tab]").forEach((button) => {
 document.querySelector("#refresh-metrics").addEventListener("click", loadMetrics);
 document.querySelector("#refresh-experiments")?.addEventListener("click", loadExperiments);
 document.querySelector("#export-experiments-csv")?.addEventListener("click", exportExperimentsCsv);
+document.querySelector("#assistant-plan")?.addEventListener("click", planAssistantRequest);
+document.querySelector("#assistant-apply")?.addEventListener("click", applyAssistantPlan);
 document.querySelector("#refresh-rules").addEventListener("click", loadRules);
 document.querySelector("#rule-filter-search").addEventListener("input", renderRuleList);
 document.querySelector("#rule-filter-status").addEventListener("change", renderRuleList);
@@ -495,6 +498,68 @@ async function exportExperimentsCsv() {
   } catch (error) {
     if (experimentDetail) experimentDetail.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
   }
+}
+
+async function planAssistantRequest() {
+  const output = document.querySelector("#assistant-plan-output");
+  const guardrails = document.querySelector("#assistant-guardrails");
+  const applyButton = document.querySelector("#assistant-apply");
+  try {
+    applyButton.disabled = true;
+    const body = {
+      prompt: document.querySelector("#assistant-prompt").value.trim(),
+      type: document.querySelector("#assistant-type").value || undefined,
+      decision_key: document.querySelector("#assistant-decision-key").value.trim() || undefined,
+      surface: document.querySelector("#assistant-surface").value.trim() || undefined,
+      ttl_seconds: Number(document.querySelector("#assistant-ttl").value || 0)
+    };
+    if (!body.prompt) throw new Error("Describe what the assistant should configure.");
+    const response = await api("/v1/assistant/plan", {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+    cachedAssistantPlan = response.plan;
+    renderAssistantPlan(cachedAssistantPlan);
+  } catch (error) {
+    cachedAssistantPlan = null;
+    if (guardrails) guardrails.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
+    if (output) output.textContent = "{}";
+  }
+}
+
+async function applyAssistantPlan() {
+  if (!cachedAssistantPlan) return;
+  const applyButton = document.querySelector("#assistant-apply");
+  try {
+    applyButton.disabled = true;
+    const response = await api("/v1/assistant/apply", {
+      method: "POST",
+      body: JSON.stringify({ plan: cachedAssistantPlan })
+    });
+    document.querySelector("#assistant-guardrails").innerHTML = [
+      statusItem("Applied", response.applied?.length || 0),
+      statusItem("Mode", "Draft only"),
+      statusItem("Publish", "Manual review required")
+    ].join("");
+    await Promise.all([loadRules(), loadMessages()]);
+  } catch (error) {
+    document.querySelector("#assistant-guardrails").innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
+    applyButton.disabled = false;
+  }
+}
+
+function renderAssistantPlan(plan) {
+  const guardrails = plan.guardrails || {};
+  document.querySelector("#assistant-plan-output").textContent = JSON.stringify(plan, null, 2);
+  document.querySelector("#assistant-guardrails").innerHTML = [
+    statusItem("Status", guardrails.status || "review"),
+    statusItem("Actions", plan.actions?.length || 0),
+    statusItem("Errors", guardrails.errors?.length || 0),
+    statusItem("Warnings", guardrails.warnings?.length || 0),
+    ...(guardrails.errors || []).map((item) => statusItem("Error", item)),
+    ...(guardrails.warnings || []).slice(0, 4).map((item) => statusItem("Warning", item))
+  ].join("");
+  document.querySelector("#assistant-apply").disabled = Boolean(guardrails.errors?.length);
 }
 
 function renderExperiments(body) {

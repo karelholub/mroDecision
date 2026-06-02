@@ -435,6 +435,24 @@ aside input {
   min-width: 0;
 }
 
+.assistant-workbench {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.75fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+
+.assistant-workbench textarea {
+  min-height: 190px;
+  resize: vertical;
+}
+
+#assistant-plan-output {
+  max-height: calc(100vh - 370px);
+  overflow: auto;
+}
+
 .experiment-kpi-strip {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
@@ -3593,6 +3611,7 @@ pre {
 
   .overview-workbench,
   .overview-primary-pane,
+  .assistant-workbench,
   .experiment-ops-grid,
   .overview-service-footer {
     grid-template-columns: 1fr;
@@ -3637,6 +3656,7 @@ pre {
     .metric-grid,
     .overview-workbench,
     .overview-primary-pane,
+    .assistant-workbench,
     .experiment-ops-grid,
     .overview-service-footer,
     .client-event-subsections,

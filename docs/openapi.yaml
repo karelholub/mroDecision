@@ -287,6 +287,57 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientEventResponse"
+  /v1/assistant/plan:
+    post:
+      summary: Create a guarded assistant draft plan
+      description: Converts a configuration request into a draft-only plan. Requires editor scope. Does not mutate state.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssistantPlanRequest"
+      responses:
+        "200":
+          description: Guarded assistant plan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plan:
+                    $ref: "#/components/schemas/AssistantPlan"
+  /v1/assistant/apply:
+    post:
+      summary: Apply a guarded assistant draft plan
+      description: Applies draft-only assistant actions. Publishing still requires the normal publish flow.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan]
+              properties:
+                plan:
+                  $ref: "#/components/schemas/AssistantPlan"
+      responses:
+        "200":
+          description: Applied draft actions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  applied:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
   /v1/rule-sets:
     get:
       summary: List rule sets
@@ -1367,6 +1418,70 @@ components:
           type: string
         message:
           type: string
+    AssistantPlanRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+        type:
+          type: string
+          enum: [decision, inapp_message, experiment]
+        decision_key:
+          type: string
+        surface:
+          type: string
+        ttl_seconds:
+          type: integer
+        variants:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        conditions:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    AssistantPlan:
+      type: object
+      required: [mode, summary, guardrails, actions]
+      properties:
+        mode:
+          type: string
+          enum: [draft_only]
+        prompt:
+          type: string
+        summary:
+          type: string
+        guardrails:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [ok, review, blocked]
+            errors:
+              type: array
+              items:
+                type: string
+            warnings:
+              type: array
+              items:
+                type: string
+        actions:
+          type: array
+          items:
+            type: object
+            required: [action, id, object]
+            properties:
+              action:
+                type: string
+                enum: [upsert_message, create_rule_draft, update_rule_draft]
+              id:
+                type: string
+              object:
+                type: object
+                additionalProperties: true
     Readiness:
       type: object
       properties:
