@@ -77,6 +77,7 @@ const inspectorFallback = document.querySelector("#inspector-fallback");
 const inspectorBranches = document.querySelector("#inspector-branches");
 const inspectorNodes = document.querySelector("#inspector-nodes");
 const inspectorMode = document.querySelector("#inspector-mode");
+const ruleGovernanceTimeline = document.querySelector("#rule-governance-timeline");
 const experimentPanel = document.querySelector("#experiment-panel");
 const experimentSummary = document.querySelector("#experiment-summary");
 const ruleDetailModal = document.querySelector("#rule-detail-modal");
@@ -93,6 +94,7 @@ let selectedLookupId = null;
 let selectedMessageId = null;
 let selectedPublishedDefinition = null;
 let selectedPublishedMetadata = null;
+let selectedRuleMetadata = {};
 let builderBranches = [];
 let graphBuilder = { entry: "input", nodes: [] };
 let cachedRuleSets = [];
@@ -225,6 +227,7 @@ document.querySelector("#rule-filter-search").addEventListener("input", renderRu
 document.querySelector("#rule-filter-status").addEventListener("change", renderRuleList);
 document.querySelector("#rule-filter-type").addEventListener("change", renderRuleList);
 document.querySelector("#rule-filter-tag").addEventListener("input", renderRuleList);
+document.querySelector("#rule-filter-campaign")?.addEventListener("input", renderRuleList);
 document.querySelector("#refresh-audit").addEventListener("click", loadAudit);
 document.querySelector("#clear-audit-filters").addEventListener("click", clearAuditFilters);
 document.querySelector("#audit-mode").addEventListener("change", () => {
@@ -240,6 +243,7 @@ document.querySelector("#message-filter-search")?.addEventListener("input", rend
 document.querySelector("#message-filter-status")?.addEventListener("change", renderMessageList);
 document.querySelector("#message-filter-template")?.addEventListener("change", renderMessageList);
 document.querySelector("#message-filter-surface")?.addEventListener("input", renderMessageList);
+document.querySelector("#message-filter-campaign")?.addEventListener("input", renderMessageList);
 document.querySelector("#export-lookup-csv").addEventListener("click", exportLookupCsv);
 document.querySelector("#refresh-settings").addEventListener("click", loadSettings);
 document.querySelector("#test-meiro-profile").addEventListener("click", () => testMeiroConnection("profile"));
@@ -1903,6 +1907,7 @@ function ruleListHeader() {
         ["status", "Status"],
         ["type", "Type"],
         ["priority", "Priority"],
+        ["campaign", "Campaign"],
         ["version", "Version"],
         ["updated_at", "Last Modified"]
       ].map(([key, label]) => `<div><button type="button" data-rule-sort="${key}">${escapeHtml(label)}${ruleSort.key === key ? ` ${ruleSort.direction === "asc" ? "ASC" : "DESC"}` : ""}</button></div>`).join("")}
@@ -1925,25 +1930,29 @@ function filteredRuleSets() {
   const status = document.querySelector("#rule-filter-status").value;
   const type = document.querySelector("#rule-filter-type").value;
   const tag = document.querySelector("#rule-filter-tag").value.trim().toLowerCase();
+  const campaign = document.querySelector("#rule-filter-campaign")?.value.trim().toLowerCase() || "";
   return cachedRuleSets.filter((item) => {
-    const haystack = `${item.name} ${item.decision_key} ${item.description || ""}`.toLowerCase();
+    const haystack = `${item.name} ${item.decision_key} ${item.description || ""} ${campaignSearchText(item.metadata || {})}`.toLowerCase();
     const tags = (item.tags || []).map((value) => String(value).toLowerCase());
     return (!search || haystack.includes(search))
       && (!status || item.status === status)
       && (!type || item.type === type)
-      && (!tag || tags.some((value) => value.includes(tag)));
+      && (!tag || tags.some((value) => value.includes(tag)))
+      && (!campaign || campaignSearchText(item.metadata || {}).includes(campaign));
   }).sort(compareRuleSetsForSort);
 }
 
 function compareRuleSetsForSort(left, right) {
   const direction = ruleSort.direction === "asc" ? 1 : -1;
   const key = ruleSort.key;
+  const leftRaw = key === "campaign" ? campaignSearchText(left.metadata || {}) : left[key];
+  const rightRaw = key === "campaign" ? campaignSearchText(right.metadata || {}) : right[key];
   const leftValue = key === "priority" || key === "version"
-    ? Number(left[key] || 0)
-    : String(left[key] || "").toLowerCase();
+    ? Number(leftRaw || 0)
+    : String(leftRaw || "").toLowerCase();
   const rightValue = key === "priority" || key === "version"
-    ? Number(right[key] || 0)
-    : String(right[key] || "").toLowerCase();
+    ? Number(rightRaw || 0)
+    : String(rightRaw || "").toLowerCase();
   if (leftValue < rightValue) return -1 * direction;
   if (leftValue > rightValue) return 1 * direction;
   return String(left.decision_key || "").localeCompare(String(right.decision_key || ""));
@@ -1963,11 +1972,12 @@ function ruleSetRow(item) {
       item.status,
       item.type || "decision",
       item.priority ?? 0,
+      campaignValue(item.metadata) || folderValue(item.metadata) || "-",
       item.version ?? "-",
       item.updated_at ? formatTime(item.updated_at) : "-",
       actions
     ],
-    { key: item.decision_key, rawColumns: [7] }
+    { key: item.decision_key, rawColumns: [8] }
   );
 }
 
@@ -2006,6 +2016,7 @@ async function loadRule(key) {
     selectedRuleKey = key;
     selectedPublishedDefinition = body.version?.definition || null;
     selectedPublishedMetadata = body.version?.metadata || null;
+    selectedRuleMetadata = body.rule_set.metadata || {};
     document.querySelector("#rule-name").value = body.rule_set.name;
     document.querySelector("#rule-key").value = body.rule_set.decision_key;
     updateRuleKeyLockState(true);
@@ -2014,6 +2025,8 @@ async function loadRule(key) {
     document.querySelector("#rule-surface").value = body.rule_set.surface || "";
     document.querySelector("#rule-client-ttl").value = body.rule_set.cache_policy?.client_ttl ?? "";
     document.querySelector("#rule-cache-scope").value = body.rule_set.cache_policy?.scope || (body.rule_set.cache_policy?.client_ttl ? "profile" : "none");
+    document.querySelector("#rule-campaign").value = campaignValue(body.rule_set.metadata);
+    document.querySelector("#rule-folder").value = folderValue(body.rule_set.metadata);
     document.querySelector("#rule-description").value = body.rule_set.description || "";
     setExperimentMetadata(body.rule_set.metadata?.experiment || body.version?.metadata?.experiment || {});
     document.querySelector("#rule-draft").value = JSON.stringify(
@@ -2035,6 +2048,7 @@ function newRule(options = {}) {
   selectedRuleKey = null;
   selectedPublishedDefinition = null;
   selectedPublishedMetadata = null;
+  selectedRuleMetadata = {};
   const type = options.type || "decision";
   const defaults = ruleCreationDefaults(type);
   document.querySelector("#rule-name").value = defaults.name;
@@ -2046,6 +2060,8 @@ function newRule(options = {}) {
   document.querySelector("#rule-surface").value = defaults.surface;
   document.querySelector("#rule-client-ttl").value = defaults.ttl;
   document.querySelector("#rule-cache-scope").value = defaults.scope;
+  document.querySelector("#rule-campaign").value = "";
+  document.querySelector("#rule-folder").value = "";
   document.querySelector("#rule-description").value = defaults.description;
   setExperimentMetadata(type === "experiment" ? {
     status: "draft",
@@ -2170,6 +2186,7 @@ async function saveDraft(event) {
       body: JSON.stringify(payload)
     });
     selectedRuleKey = body.rule_set.decision_key;
+    selectedRuleMetadata = body.rule_set.metadata || payload.metadata || {};
     updateRuleKeyLockState(true);
     editorOutput.textContent = `${JSON.stringify(body, null, 2)}${formatSchemaWarnings(warnings)}`;
     await loadRules();
@@ -2263,6 +2280,7 @@ async function confirmPublishSelectedRule() {
     editorOutput.textContent = JSON.stringify(body, null, 2);
     selectedPublishedDefinition = payload.draft;
     selectedPublishedMetadata = payload.metadata || {};
+    selectedRuleMetadata = payload.metadata || selectedRuleMetadata;
     closePublishConfirm();
     await loadRules();
     await loadVersions(selectedRuleKey);
@@ -2440,6 +2458,7 @@ async function loadVersions(key) {
   versionList.innerHTML = header(["Version", "Published", "Author", "Approval", "Actions"]);
   try {
     const body = await api(`/v1/rule-sets/${encodeURIComponent(key)}/versions`);
+    renderRuleGovernanceTimeline(body.versions || []);
     if (!body.versions.length) {
       versionList.innerHTML += row(["No published versions yet", "", "", "", ""]);
       return;
@@ -2467,8 +2486,45 @@ async function loadVersions(key) {
       button.addEventListener("click", () => runVersionAction(button.dataset.versionAction, Number(button.dataset.version)));
     });
   } catch (error) {
+    renderRuleGovernanceTimeline([]);
     versionList.innerHTML += row([error.message, "", "", "", ""]);
   }
+}
+
+function renderRuleGovernanceTimeline(versions = []) {
+  if (!ruleGovernanceTimeline) return;
+  const approvalHistory = selectedRuleMetadata?.approval?.history || [];
+  const events = [
+    ...approvalHistory.map((item) => ({
+      at: item.at,
+      title: approvalTimelineTitle(item.status),
+      detail: [item.by, item.assigned_to ? `to ${item.assigned_to}` : "", item.note].filter(Boolean).join(" · ")
+    })),
+    ...versions.map((version) => ({
+      at: version.published_at,
+      title: `Published v${version.version}`,
+      detail: [version.author, approvalLabel(version.metadata?.approval || {})].filter(Boolean).join(" · ")
+    }))
+  ].filter((item) => item.at || item.title)
+    .sort((left, right) => new Date(right.at || 0) - new Date(left.at || 0))
+    .slice(0, 8);
+  ruleGovernanceTimeline.innerHTML = events.length
+    ? events.map((item) => `
+      <div class="timeline-item">
+        <strong>${escapeHtml(item.title)}</strong>
+        <span>${escapeHtml(item.at ? formatTime(item.at) : "-")}</span>
+        <small>${escapeHtml(item.detail || "No comment")}</small>
+      </div>
+    `).join("")
+    : `<div class="timeline-empty">No governance events yet.</div>`;
+}
+
+function approvalTimelineTitle(status = "") {
+  return {
+    submitted: "Submitted for review",
+    approved: "Approved draft",
+    draft: "Draft changed"
+  }[status] || status || "Governance event";
 }
 
 async function runVersionAction(action, version) {
@@ -2988,6 +3044,7 @@ function renderMessageList() {
   const status = document.querySelector("#message-filter-status")?.value || "";
   const template = document.querySelector("#message-filter-template")?.value || "";
   const surface = document.querySelector("#message-filter-surface")?.value.trim().toLowerCase() || "";
+  const campaign = document.querySelector("#message-filter-campaign")?.value.trim().toLowerCase() || "";
   const filtered = cachedMessages.filter((item) => {
     const content = item.default_content || {};
     const itemTemplate = content.template_type || item.metadata?.template_type || "";
@@ -2998,17 +3055,19 @@ function renderMessageList() {
       item.status,
       itemTemplate,
       JSON.stringify(content),
-      JSON.stringify(item.metadata || {})
+      JSON.stringify(item.metadata || {}),
+      campaignSearchText(item.metadata || {})
     ].join(" ").toLowerCase();
     return (!search || haystack.includes(search)) &&
       (!status || (item.status || "active") === status) &&
       (!template || itemTemplate === template) &&
-      (!surface || String(item.surface || "").toLowerCase().includes(surface));
+      (!surface || String(item.surface || "").toLowerCase().includes(surface)) &&
+      (!campaign || campaignSearchText(item.metadata || {}).includes(campaign));
   });
-  target.innerHTML = header(["Preview", "Name", "Surface", "Status", "Updated", "Details"]);
+  target.innerHTML = header(["Preview", "Name", "Surface", "Campaign", "Status", "Updated", "Details"]);
   target.innerHTML += filtered.length
     ? filtered.map((item) => messageCatalogRow(item)).join("")
-    : row(["No messages match the current filters", "", "", "", "", ""]);
+    : row(["No messages match the current filters", "", "", "", "", "", ""]);
   target.querySelectorAll("[data-message-id]").forEach((element) => {
     element.addEventListener("click", () => loadMessage(element.dataset.messageId, cachedMessages));
   });
@@ -3031,6 +3090,7 @@ function messageCatalogRow(item) {
     messageCatalogPreview(item),
     item.name,
     item.surface || "-",
+    campaignValue(item.metadata) || folderValue(item.metadata) || "-",
     item.status || "active",
     item.updated_at ? formatTime(item.updated_at) : "-",
     `${title} · ${details}`
@@ -3118,6 +3178,8 @@ function newMessage(options = {}) {
   document.querySelector("#message-status").value = "active";
   document.querySelector("#message-template-type").value = "banner";
   document.querySelector("#message-placement").value = "homepage.hero.top";
+  document.querySelector("#message-campaign").value = "";
+  document.querySelector("#message-folder").value = "";
   document.querySelector("#message-starts-at").value = "";
   document.querySelector("#message-expires-at").value = "";
   document.querySelector("#message-priority").value = "0";
@@ -3171,6 +3233,8 @@ function loadMessage(id, messages) {
   document.querySelector("#message-name").value = message.name;
   document.querySelector("#message-surface").value = message.surface || "";
   document.querySelector("#message-status").value = message.status || "active";
+  document.querySelector("#message-campaign").value = campaignValue(message.metadata || {});
+  document.querySelector("#message-folder").value = folderValue(message.metadata || {});
   document.querySelector("#message-content").value = JSON.stringify(message.default_content || {}, null, 2);
   document.querySelector("#message-schema").value = JSON.stringify(message.content_schema || {}, null, 2);
   document.querySelector("#message-metadata").value = JSON.stringify(message.metadata || {}, null, 2);
@@ -3194,10 +3258,12 @@ function duplicateSelectedMessage() {
   document.querySelector("#message-name").value = `${source.name || source.id} Copy`;
   document.querySelector("#message-surface").value = source.surface || "";
   document.querySelector("#message-status").value = "active";
-  document.querySelector("#message-content").value = JSON.stringify(source.default_content || {}, null, 2);
-  document.querySelector("#message-schema").value = JSON.stringify(source.content_schema || {}, null, 2);
   const metadata = { ...(source.metadata || {}) };
   delete metadata.created_from_assistant_plan;
+  document.querySelector("#message-campaign").value = campaignValue(metadata);
+  document.querySelector("#message-folder").value = folderValue(metadata);
+  document.querySelector("#message-content").value = JSON.stringify(source.default_content || {}, null, 2);
+  document.querySelector("#message-schema").value = JSON.stringify(source.content_schema || {}, null, 2);
   document.querySelector("#message-metadata").value = JSON.stringify(metadata, null, 2);
   syncMessageDeliveryFromMetadata(metadata);
   syncMessagePreviewFromJson();
@@ -3305,6 +3371,8 @@ function syncMessageDeliveryFromMetadata(metadata = {}) {
   document.querySelector("#message-expires-at").value = dateTimeLocalValue(lifecycle.expires_at || metadata.expires_at || "");
   document.querySelector("#message-priority").value = Number(metadata.priority ?? lifecycle.priority ?? 0);
   document.querySelector("#message-frequency-ttl").value = Number(lifecycle.ttl_seconds ?? metadata.ttl_seconds ?? 0) || "";
+  document.querySelector("#message-campaign").value = campaignValue(metadata);
+  document.querySelector("#message-folder").value = folderValue(metadata);
 }
 
 function syncMessageMetadataFromDelivery() {
@@ -3319,6 +3387,11 @@ function syncMessageMetadataFromDelivery() {
     expires_at: expiresAt,
     ttl_seconds: Number.isFinite(ttl) && ttl > 0 ? ttl : 0
   };
+  metadata.campaign = campaignMetadata(
+    document.querySelector("#message-campaign")?.value.trim(),
+    document.querySelector("#message-folder")?.value.trim()
+  );
+  if (!metadata.campaign.name && !metadata.campaign.folder) delete metadata.campaign;
   document.querySelector("#message-metadata").value = JSON.stringify(metadata, null, 2);
 }
 
@@ -3871,6 +3944,14 @@ function rate(numerator, denominator) {
 
 function readEditorPayload() {
   const type = document.querySelector("#rule-type").value;
+  const metadata = {
+    ...(selectedRuleMetadata || {}),
+    campaign: campaignMetadata(
+      document.querySelector("#rule-campaign")?.value.trim(),
+      document.querySelector("#rule-folder")?.value.trim()
+    )
+  };
+  if (!metadata.campaign.name && !metadata.campaign.folder) delete metadata.campaign;
   const payload = {
     name: document.querySelector("#rule-name").value.trim(),
     decision_key: document.querySelector("#rule-key").value.trim(),
@@ -3879,10 +3960,11 @@ function readEditorPayload() {
     priority: Number(document.querySelector("#rule-priority").value || 0),
     surface: document.querySelector("#rule-surface").value.trim(),
     cache_policy: readCachePolicy(),
+    metadata,
     draft: JSON.parse(document.querySelector("#rule-draft").value),
     tags: []
   };
-  if (type === "experiment") payload.metadata = { experiment: readExperimentMetadata() };
+  if (type === "experiment") payload.metadata.experiment = readExperimentMetadata();
   return payload;
 }
 
@@ -3893,6 +3975,31 @@ function readCachePolicy() {
   if (ttl > 0) policy.client_ttl = ttl;
   if (scope !== "none") policy.scope = scope;
   return policy;
+}
+
+function campaignMetadata(name = "", folder = "") {
+  return {
+    name: name || "",
+    folder: folder || ""
+  };
+}
+
+function campaignValue(metadata = {}) {
+  if (typeof metadata?.campaign === "string") return metadata.campaign;
+  return metadata?.campaign?.name || "";
+}
+
+function folderValue(metadata = {}) {
+  return metadata?.campaign?.folder || metadata?.folder || "";
+}
+
+function campaignSearchText(metadata = {}) {
+  return [
+    campaignValue(metadata),
+    folderValue(metadata),
+    metadata?.campaign_id,
+    metadata?.campaign?.id
+  ].filter(Boolean).join(" ").toLowerCase();
 }
 
 function parseLiteral(value) {

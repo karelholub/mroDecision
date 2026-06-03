@@ -195,14 +195,14 @@ Status: started with experiment significance calculations, confidence labels, mi
 1. Lock integration-critical identifiers: keep Decision Key editable only before first save; saved and published rule keys are immutable and must be duplicated for a new client-facing key. Implemented.
 2. Improve message authoring: support non-URL image assets, live preview syncing, richer CTA/footer content, and "used by rules" backlinks. Initial upload/drop, live sync, richer content, and backlinks are implemented; persistent asset storage is pending.
 3. Improve experiment operations: validate allocation weights to 100%, explain significance methodology, and add a Declare Winner flow that prepares a 100% allocation draft. Implemented.
-4. Improve governance: capture review assignee, submission comment, approval comment, and approval history. Implemented; notifications and task assignment integrations remain pending.
-5. Improve information architecture: typed rule creation, sortable rule list, raw audit payload collapsed by default, and optional full-screen rule editing. Implemented; campaign/folder grouping and page-mode editing remain pending.
-6. Improve marketer setup flows: add form-based profile builders for Evaluate, reusable frequency-cap blocks, campaign folders, and clearer campaign-level change logs. Evaluate Profile Builder and Frequency Cap Helper are implemented; campaign folders and change logs are pending.
+4. Improve governance: capture review assignee, submission comment, approval comment, approval history, and a compact rule governance timeline. Implemented; notifications and task assignment integrations remain pending.
+5. Improve information architecture: typed rule creation, sortable rule list, raw audit payload collapsed by default, optional full-screen rule editing, and campaign/folder grouping for rules and messages. Implemented; page-mode editing remains pending.
+6. Improve marketer setup flows: add form-based profile builders for Evaluate, reusable frequency-cap blocks, campaign folders, and clearer campaign-level change logs. Evaluate Profile Builder, Frequency Cap Helper, and campaign/folder fields are implemented; fuller platform change logs are pending.
 
 ## Recommended Next Sprint
 
-1. Add campaign/folder grouping across rules, messages, experiments, audit, and overview filters.
-2. Add a platform change log and persistent governance timeline for rule/message/experiment edits.
+1. Extend campaign/folder grouping into experiments, audit, and overview filters.
+2. Add a platform change log for message/experiment/reference-data edits beyond the first rule governance timeline.
 3. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.
 4. Add a managed-database adapter path for enterprise deployments.
 5. Add persistent message asset storage and deeper personalization helpers such as token suggestions and content-variant previews.

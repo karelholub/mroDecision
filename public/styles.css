@@ -2288,6 +2288,7 @@ header {
     minmax(86px, 0.55fr)
     minmax(104px, 0.7fr)
     minmax(72px, 0.45fr)
+    minmax(100px, 0.65fr)
     minmax(72px, 0.42fr)
     minmax(118px, 0.78fr)
     minmax(145px, 0.9fr);
@@ -2324,14 +2325,14 @@ header {
   font-size: 12px;
 }
 
-.rule-list-pane .row > div:nth-child(8) {
+.rule-list-pane .row > div:nth-child(9) {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   padding-top: 4px;
 }
 
-.rule-list-pane .row > div:nth-child(8):empty {
+.rule-list-pane .row > div:nth-child(9):empty {
   display: none;
 }
 
@@ -3382,6 +3383,7 @@ header {
     minmax(180px, 1.3fr)
     minmax(130px, 0.95fr)
     minmax(105px, 0.7fr)
+    minmax(100px, 0.65fr)
     minmax(76px, 0.45fr)
     minmax(112px, 0.7fr)
     minmax(145px, 1fr);
@@ -3394,7 +3396,7 @@ header {
 }
 
 .message-list .row > div:nth-child(n+2),
-.message-list .row > div:nth-child(6) {
+.message-list .row > div:nth-child(7) {
   color: var(--muted);
   overflow-wrap: anywhere;
   min-width: 0;
@@ -3405,7 +3407,7 @@ header {
   font-weight: 700;
 }
 
-.message-list .row > div:nth-child(4) {
+.message-list .row > div:nth-child(5) {
   align-self: center;
   justify-self: start;
   padding: 3px 8px;
@@ -3415,6 +3417,37 @@ header {
   color: var(--ink);
   font-size: 12px;
   font-weight: 700;
+}
+
+.governance-timeline {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.timeline-item,
+.timeline-empty {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--panel-soft);
+}
+
+.timeline-item strong,
+.timeline-item span,
+.timeline-item small,
+.timeline-empty {
+  overflow-wrap: anywhere;
+}
+
+.timeline-item span,
+.timeline-item small,
+.timeline-empty {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .message-image-dropzone {

@@ -178,6 +178,10 @@
                 Tag
                 <input id="rule-filter-tag" placeholder="nbo" />
               </label>
+              <label>
+                Campaign
+                <input id="rule-filter-campaign" placeholder="retention" />
+              </label>
             </div>
             <div id="rule-list" class="table"></div>
           </div>
@@ -241,6 +245,16 @@
                       <option value="global">Global response</option>
                       <option value="request">Exact request</option>
                     </select>
+                  </label>
+                </div>
+                <div class="grid-two">
+                  <label>
+                    Campaign
+                    <input id="rule-campaign" placeholder="retention_q3" />
+                  </label>
+                  <label>
+                    Folder
+                    <input id="rule-folder" placeholder="Retention / Web" />
                   </label>
                 </div>
                 <label>
@@ -350,6 +364,10 @@
                     <div><span>Graph nodes</span><strong id="inspector-nodes">0</strong></div>
                     <div><span>Mode</span><strong id="inspector-mode">Branch rules</strong></div>
                   </div>
+                </div>
+                <div class="inspector-section">
+                  <h3>Governance Timeline</h3>
+                  <div id="rule-governance-timeline" class="governance-timeline"></div>
                 </div>
               </div>
             </div>
@@ -945,6 +963,10 @@
                 Surface
                 <input id="message-filter-surface" list="message-surface-options" placeholder="homepage_hero" />
               </label>
+              <label>
+                Campaign
+                <input id="message-filter-campaign" placeholder="retention" />
+              </label>
             </div>
             <datalist id="message-surface-options"></datalist>
             <div id="message-list" class="table message-list"></div>
@@ -997,6 +1019,14 @@
                       <label>
                         Placement
                         <input id="message-placement" placeholder="homepage.hero.top" />
+                      </label>
+                      <label>
+                        Campaign
+                        <input id="message-campaign" placeholder="retention_q3" />
+                      </label>
+                      <label>
+                        Folder
+                        <input id="message-folder" placeholder="Retention / Web" />
                       </label>
                     </div>
                   </div>
