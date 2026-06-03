@@ -419,6 +419,22 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  const messageVersionsMatch = pathname.match(/^\/v1\/messages\/([^/]+)\/versions$/);
+  if (messageVersionsMatch && req.method === "GET") {
+    requireScope(req, "viewer");
+    sendJson(res, 200, { versions: store.listMessageVersions(decodeURIComponent(messageVersionsMatch[1])) });
+    return;
+  }
+
+  const messageVersionMatch = pathname.match(/^\/v1\/messages\/([^/]+)\/versions\/(\d+)$/);
+  if (messageVersionMatch && req.method === "GET") {
+    requireScope(req, "viewer");
+    sendJson(res, 200, {
+      message: store.getMessageVersion(decodeURIComponent(messageVersionMatch[1]), Number(messageVersionMatch[2]))
+    });
+    return;
+  }
+
   const messageMatch = pathname.match(/^\/v1\/messages\/([^/]+)$/);
   if (messageMatch && req.method === "PUT") {
     requireScope(req, "editor");

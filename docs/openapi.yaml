@@ -966,6 +966,51 @@ paths:
                 properties:
                   message:
                     $ref: "#/components/schemas/Message"
+  /v1/messages/{id}/versions:
+    get:
+      summary: List durable message versions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Message version summaries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  versions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MessageVersionSummary"
+  /v1/messages/{id}/versions/{version}:
+    get:
+      summary: Get a durable message version snapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Message version snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    $ref: "#/components/schemas/Message"
   /v1/evaluation-profiles:
     get:
       summary: List saved evaluation test profiles
@@ -2188,6 +2233,34 @@ components:
         default_content:
           type: object
           additionalProperties: true
+        metadata:
+          type: object
+          additionalProperties: true
+        updated_at:
+          type: string
+          format: date-time
+        author:
+          type: string
+        version:
+          type: integer
+    MessageVersionSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        version:
+          type: integer
+        name:
+          type: string
+        surface:
+          type: string
+        status:
+          type: string
+          enum: [active, archived]
+        content_keys:
+          type: array
+          items:
+            type: string
         metadata:
           type: object
           additionalProperties: true

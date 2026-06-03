@@ -22,6 +22,7 @@ const messageDetailModal = document.querySelector("#message-detail-modal");
 const messageInspectorSummary = document.querySelector("#message-inspector-summary");
 const messageRuleLinks = document.querySelector("#message-rule-links");
 const messagePreviewHealth = document.querySelector("#message-preview-health");
+const messageVersionList = document.querySelector("#message-version-list");
 const lookupInspectorSummary = document.querySelector("#lookup-inspector-summary");
 const lookupHelpTable = document.querySelector("#lookup-help-table");
 const lookupHelpKey = document.querySelector("#lookup-help-key");
@@ -3364,6 +3365,7 @@ function newMessage(options = {}) {
   }, null, 2);
   syncMessagePreviewFromJson();
   messageOutput.textContent = "Ready for a new message";
+  if (messageVersionList) messageVersionList.innerHTML = row(["Save the message to start version history", "", "", ""]);
   if (!options.silent) openMessageDetail();
 }
 
@@ -3387,6 +3389,7 @@ function loadMessage(id, messages) {
   syncMessageDeliveryFromMetadata(message.metadata || {});
   syncMessagePreviewFromJson();
   messageOutput.textContent = `Loaded ${id}`;
+  loadMessageVersions(id);
   openMessageDetail();
 }
 
@@ -3414,6 +3417,39 @@ function duplicateSelectedMessage() {
   syncMessageDeliveryFromMetadata(metadata);
   syncMessagePreviewFromJson();
   messageOutput.textContent = `Duplicated ${source.id}. Review the copy and save it as ${copyId}.`;
+}
+
+async function loadMessageVersions(id = selectedMessageId) {
+  if (!messageVersionList || !id) return;
+  messageVersionList.innerHTML = header(["Version", "Updated", "Author", "Status", "Content"]);
+  try {
+    const body = await api(`/v1/messages/${encodeURIComponent(id)}/versions`);
+    const versions = body.versions || [];
+    messageVersionList.innerHTML += versions.length
+      ? versions.map((version) => row([
+          `v${version.version}`,
+          formatTime(version.updated_at),
+          version.author || "-",
+          version.status || "-",
+          (version.content_keys || []).join(", ") || "-"
+        ], { messageVersion: version.version })).join("")
+      : row(["No versions recorded yet", "", "", "", ""]);
+    messageVersionList.querySelectorAll("[data-message-version]").forEach((element) => {
+      element.addEventListener("click", () => loadMessageVersionDetail(id, element.dataset.messageVersion));
+    });
+  } catch (error) {
+    messageVersionList.innerHTML += row([error.message, "", "", "", ""]);
+  }
+}
+
+async function loadMessageVersionDetail(id, version) {
+  try {
+    const body = await api(`/v1/messages/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}`);
+    messageOutput.textContent = JSON.stringify(body.message, null, 2);
+    document.querySelector('[data-message-drawer-tab="output"]')?.click();
+  } catch (error) {
+    messageOutput.textContent = error.message;
+  }
 }
 
 function uniqueMessageCopyId(baseId) {
@@ -3449,6 +3485,7 @@ async function saveMessage(event) {
     document.querySelector("#message-id").disabled = true;
     messageOutput.textContent = JSON.stringify(response, null, 2);
     await loadMessages();
+    await loadMessageVersions(response.message.id);
   } catch (error) {
     messageOutput.textContent = error.message;
   }

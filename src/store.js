@@ -1152,6 +1152,7 @@ export class Store {
     if (!id) badRequest("Message id is required");
     const existing = this.db.prepare("SELECT * FROM messages WHERE id = ?").get(id);
     const now = createdAtNow();
+    const nextVersion = Number(existing?.version || this.latestMessageVersion(id) || 0) + 1;
     const message = {
       id,
       name: input.name || existing?.name || id,
@@ -1161,40 +1162,68 @@ export class Store {
       default_content: isPlainObject(input.default_content) ? input.default_content : existing ? parse(existing.default_content_json) : {},
       metadata: isPlainObject(input.metadata) ? input.metadata : existing ? parse(existing.metadata_json) : {},
       updated_at: now,
-      author
+      author,
+      version: nextVersion
     };
-    this.db
-      .prepare(
-        `INSERT INTO messages (
-          id, name, surface, status, content_schema_json, default_content_json, metadata_json, updated_at, author
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          name = excluded.name,
-          surface = excluded.surface,
-          status = excluded.status,
-          content_schema_json = excluded.content_schema_json,
-          default_content_json = excluded.default_content_json,
-          metadata_json = excluded.metadata_json,
-          updated_at = excluded.updated_at,
-          author = excluded.author`
-      )
-      .run(
-        message.id,
-        message.name,
-        message.surface,
-        message.status,
-        stringify(message.content_schema),
-        stringify(message.default_content),
-        stringify(message.metadata),
-        message.updated_at,
-        message.author
-      );
+    this.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO messages (
+            id, name, surface, status, content_schema_json, default_content_json, metadata_json, updated_at, author, version
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            surface = excluded.surface,
+            status = excluded.status,
+            content_schema_json = excluded.content_schema_json,
+            default_content_json = excluded.default_content_json,
+            metadata_json = excluded.metadata_json,
+            updated_at = excluded.updated_at,
+            author = excluded.author,
+            version = excluded.version`
+        )
+        .run(
+          message.id,
+          message.name,
+          message.surface,
+          message.status,
+          stringify(message.content_schema),
+          stringify(message.default_content),
+          stringify(message.metadata),
+          message.updated_at,
+          message.author,
+          message.version
+        );
+      insertMessageVersion(this.db, message);
+    });
     return message;
   }
 
   getMessage(id) {
     const row = this.db.prepare("SELECT * FROM messages WHERE id = ?").get(id);
     return row ? rowToMessage(row) : null;
+  }
+
+  latestMessageVersion(id) {
+    const row = this.db.prepare("SELECT MAX(version) AS version FROM message_versions WHERE id = ?").get(id);
+    return Number(row?.version || 0);
+  }
+
+  listMessageVersions(id) {
+    if (!this.db.prepare("SELECT id FROM messages WHERE id = ?").get(id)) notFound(`Message not found: ${id}`);
+    return this.db
+      .prepare("SELECT * FROM message_versions WHERE id = ? ORDER BY version DESC")
+      .all(id)
+      .map(rowToMessageVersionSummary);
+  }
+
+  getMessageVersion(id, requestedVersion) {
+    if (!this.db.prepare("SELECT id FROM messages WHERE id = ?").get(id)) notFound(`Message not found: ${id}`);
+    const row = this.db
+      .prepare("SELECT * FROM message_versions WHERE id = ? AND version = ?")
+      .get(id, Number(requestedVersion));
+    if (!row) notFound(`Message version not found: ${requestedVersion}`);
+    return rowToMessageVersion(row);
   }
 
   listEvaluationProfiles(params = {}) {
@@ -1673,7 +1702,22 @@ function migrate(db) {
       default_content_json TEXT NOT NULL DEFAULT '{}',
       metadata_json TEXT NOT NULL DEFAULT '{}',
       updated_at TEXT NOT NULL,
-      author TEXT NOT NULL
+      author TEXT NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS message_versions (
+      id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      surface TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL CHECK (status IN ('active', 'archived')),
+      content_schema_json TEXT NOT NULL DEFAULT '{}',
+      default_content_json TEXT NOT NULL DEFAULT '{}',
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL,
+      author TEXT NOT NULL,
+      PRIMARY KEY (id, version)
     );
 
     CREATE TABLE IF NOT EXISTS evaluation_profiles (
@@ -1781,6 +1825,7 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_schema_items_kind ON schema_items(kind, name);
     CREATE INDEX IF NOT EXISTS idx_lookup_table_versions ON lookup_table_versions(id, version);
     CREATE INDEX IF NOT EXISTS idx_messages_surface_status ON messages(surface, status);
+    CREATE INDEX IF NOT EXISTS idx_message_versions ON message_versions(id, version);
     CREATE INDEX IF NOT EXISTS idx_evaluation_profiles_rule ON evaluation_profiles(decision_key, updated_at);
     CREATE INDEX IF NOT EXISTS idx_condition_blocks_name ON condition_blocks(name, id);
     CREATE INDEX IF NOT EXISTS idx_meiro_deliveries_time ON meiro_deliveries(attempted_at);
@@ -1794,8 +1839,10 @@ function migrate(db) {
   ensureColumn(db, "rule_versions", "metadata_json", "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn(db, "lookup_tables", "metadata_json", "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn(db, "lookup_table_versions", "metadata_json", "TEXT NOT NULL DEFAULT '{}'");
+  ensureColumn(db, "messages", "version", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "api_tokens", "decision_keys_json", "TEXT NOT NULL DEFAULT '[]'");
   seedLookupHistory(db);
+  seedMessageHistory(db);
   seedSettings(db);
   seedConditionBlocks(db);
 }
@@ -2079,6 +2126,45 @@ function seedLookupHistory(db) {
   }
 }
 
+function insertMessageVersion(db, message) {
+  db.prepare(
+    `INSERT INTO message_versions (
+       id, version, name, surface, status, content_schema_json, default_content_json, metadata_json, updated_at, author
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id, version) DO UPDATE SET
+       name = excluded.name,
+       surface = excluded.surface,
+       status = excluded.status,
+       content_schema_json = excluded.content_schema_json,
+       default_content_json = excluded.default_content_json,
+       metadata_json = excluded.metadata_json,
+       updated_at = excluded.updated_at,
+       author = excluded.author`
+  ).run(
+    message.id,
+    message.version || 1,
+    message.name,
+    message.surface || "",
+    message.status || "active",
+    stringify(message.content_schema || {}),
+    stringify(message.default_content || {}),
+    stringify(message.metadata || {}),
+    message.updated_at,
+    message.author
+  );
+}
+
+function seedMessageHistory(db) {
+  const messages = db.prepare("SELECT * FROM messages").all();
+  for (const row of messages) {
+    const message = rowToMessage(row);
+    const exists = db
+      .prepare("SELECT id FROM message_versions WHERE id = ? AND version = ?")
+      .get(message.id, message.version || 1);
+    if (!exists) insertMessageVersion(db, message);
+  }
+}
+
 function rowToRuleSet(row) {
   return {
     name: row.name,
@@ -2170,7 +2256,27 @@ function rowToMessage(row) {
     default_content: parse(row.default_content_json || "{}"),
     metadata: parse(row.metadata_json || "{}"),
     updated_at: row.updated_at,
-    author: row.author
+    author: row.author,
+    version: Number(row.version || 1)
+  };
+}
+
+function rowToMessageVersion(row) {
+  return rowToMessage(row);
+}
+
+function rowToMessageVersionSummary(row) {
+  const message = rowToMessage(row);
+  return {
+    id: message.id,
+    version: message.version,
+    name: message.name,
+    surface: message.surface,
+    status: message.status,
+    content_keys: Object.keys(message.default_content || {}),
+    metadata: message.metadata,
+    updated_at: message.updated_at,
+    author: message.author
   };
 }
 

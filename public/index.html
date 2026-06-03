@@ -1153,6 +1153,7 @@
                     <button type="button" class="active" data-message-drawer-tab="content">Content JSON</button>
                     <button type="button" data-message-drawer-tab="schema">Schema</button>
                     <button type="button" data-message-drawer-tab="metadata">Metadata</button>
+                    <button type="button" data-message-drawer-tab="versions">Versions</button>
                     <button type="button" data-message-drawer-tab="output">Output</button>
                   </div>
                   <button type="button" id="format-message-json" class="drawer-action">Format JSON</button>
@@ -1165,6 +1166,9 @@
                 </div>
                 <div class="drawer-panel" data-message-drawer-panel="metadata">
                   <textarea id="message-metadata" spellcheck="false"></textarea>
+                </div>
+                <div class="drawer-panel" data-message-drawer-panel="versions">
+                  <div id="message-version-list" class="table"></div>
                 </div>
                 <div class="drawer-panel" data-message-drawer-panel="output">
                   <pre id="message-output"></pre>
