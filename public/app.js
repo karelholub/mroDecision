@@ -2877,6 +2877,7 @@ function renderBranchEditor() {
       bindSchemaKeySuggestions(conditionNode, branchIndex, conditionIndex);
       bindValueSourceSuggestions(conditionNode, branchIndex, conditionIndex);
       renderConditionCompareMode(conditionNode, builderBranches[branchIndex].conditions[conditionIndex]);
+      renderConditionGuidance(conditionNode, builderBranches[branchIndex].conditions[conditionIndex]);
       conditionNode.querySelector("[data-action='remove-condition']").addEventListener("click", () => {
         builderBranches[branchIndex].conditions.splice(conditionIndex, 1);
         renderBranchEditor();
@@ -2923,9 +2924,13 @@ function bindBranchSummary(node, branchIndex) {
     outputs.ttl_seconds ? `offer TTL ${outputs.ttl_seconds}s` : "no offer TTL",
     branch.logic === "any" ? "match any" : "match all"
   ];
+  const readable = branchReadableSummary(branch);
   target.innerHTML = [
-    ...items.map((item) => `<span class="branch-chip">${escapeHtml(item)}</span>`),
-    ...warnings.map((item) => `<span class="branch-chip warn">${escapeHtml(item)}</span>`)
+    `<div class="branch-readable"><span>${escapeHtml(branch.conditions.length ? "IF " : "WHEN ")}</span><strong>${escapeHtml(readable)}</strong></div>`,
+    `<div class="branch-chip-row">${[
+      ...items.map((item) => `<span class="branch-chip">${escapeHtml(item)}</span>`),
+      ...warnings.map((item) => `<span class="branch-chip warn">${escapeHtml(item)}</span>`)
+    ].join("")}</div>`
   ].join("");
 }
 
@@ -2935,6 +2940,14 @@ function branchSummaryWarnings(branch, outputs) {
   if (!Object.keys(outputs).length) warnings.push("no outputs");
   if (outputs.expires_at && Number.isNaN(Date.parse(outputs.expires_at))) warnings.push("invalid expiry");
   return warnings;
+}
+
+function branchReadableSummary(branch) {
+  const result = branch.result || "eligible";
+  if (!branch.conditions.length) return `Always return ${result}.`;
+  const joiner = branch.logic === "any" ? " OR " : " AND ";
+  const conditions = branch.conditions.map((condition) => conditionReadableText(condition)).filter(Boolean);
+  return `${conditions.join(joiner)} THEN return ${result}.`;
 }
 
 function bindConditionBlockHelper(node) {
@@ -3749,12 +3762,21 @@ function bindConditionField(node, branchIndex, conditionIndex, field) {
       renderBranchEditor();
     }
     if (field === "compare_mode") renderConditionCompareMode(node, builderBranches[branchIndex].conditions[conditionIndex]);
+    renderConditionGuidance(node, builderBranches[branchIndex].conditions[conditionIndex]);
+    refreshBranchSummary(branchIndex);
     syncJsonFromBuilder();
   });
   input.addEventListener("change", () => {
     if (["source", "value_source_source", "compare_mode"].includes(field)) renderBranchEditor();
+    renderConditionGuidance(node, builderBranches[branchIndex].conditions[conditionIndex]);
+    refreshBranchSummary(branchIndex);
     syncJsonFromBuilder();
   });
+}
+
+function refreshBranchSummary(branchIndex) {
+  const node = branchEditor.querySelector(`[data-branch-index="${branchIndex}"]`);
+  if (node) bindBranchSummary(node, branchIndex);
 }
 
 function bindSchemaKeySuggestions(node, branchIndex, conditionIndex) {
@@ -3795,6 +3817,23 @@ function renderConditionCompareMode(node, condition) {
   const mode = condition.compare_mode || "value";
   node.classList.toggle("field-mode", mode === "field");
   node.classList.toggle("value-mode", mode !== "field");
+}
+
+function renderConditionGuidance(node, condition) {
+  const target = node.querySelector("[data-role='condition-guidance']");
+  if (!target) return;
+  const schema = conditionSchemaStatus(condition.source, condition.key);
+  const compareSchema = condition.compare_mode === "field"
+    ? conditionSchemaStatus(condition.value_source_source, condition.value_source_key)
+    : null;
+  const chips = [
+    schemaChipHtml(schema),
+    compareSchema ? schemaChipHtml(compareSchema, "Compare field") : ""
+  ].filter(Boolean).join("");
+  target.innerHTML = `
+    <div class="condition-readable">${escapeHtml(conditionReadableText(condition))}</div>
+    <div class="condition-schema-hints">${chips}</div>
+  `;
 }
 
 function syncJsonFromBuilder() {
@@ -3980,6 +4019,122 @@ function validateConditionGroup(group, label, depth) {
 function schemaItemsForSource(source) {
   const kind = source === "attribute" ? "attribute" : source === "segment" ? "segment" : source === "context" ? "context" : null;
   return kind ? cachedSchema.filter((item) => item.kind === kind) : [];
+}
+
+function schemaItemForSource(source, key) {
+  if (!key) return null;
+  return schemaItemsForSource(source).find((item) => item.name === key) || null;
+}
+
+function conditionReadableText(condition) {
+  const source = condition.source || "attribute";
+  const key = condition.key || "";
+  const field = schemaDisplayName(source, key);
+  const operator = condition.operator || "equals";
+  const operatorText = conditionOperatorText(operator);
+  if (!key) return `${sourceLabel(source)} field is not selected`;
+  if (["is_blank", "is_not_blank"].includes(operator)) return `${field} ${operatorText}`;
+  const value = condition.compare_mode === "field"
+    ? schemaDisplayName(condition.value_source_source || "attribute", condition.value_source_key || "")
+    : conditionValueText(condition);
+  return `${field} ${operatorText} ${value || "(empty)"}`;
+}
+
+function schemaDisplayName(source, key) {
+  if (!key) return `${sourceLabel(source)} field`;
+  const item = schemaItemForSource(source, key);
+  const label = item?.raw?.name || item?.raw?.label || item?.raw?.display_name || item?.dimension || "";
+  const display = label && label !== "value" && label !== "audience" ? label : humanizeKey(key);
+  return `${display} (${sourceLabel(source)})`;
+}
+
+function conditionValueText(condition) {
+  const operator = condition.operator || "equals";
+  const raw = String(condition.value ?? "").trim();
+  if (["in", "not_in"].includes(operator)) {
+    const values = raw.split(",").map((item) => item.trim()).filter(Boolean);
+    return values.length ? values.join(", ") : "(empty list)";
+  }
+  return raw;
+}
+
+function conditionOperatorText(operator) {
+  const labels = {
+    equals: "is",
+    not_equals: "is not",
+    greater_than: "is greater than",
+    greater_than_or_equal: "is at least",
+    less_than: "is less than",
+    less_than_or_equal: "is at most",
+    in: "is one of",
+    not_in: "is not one of",
+    contains: "contains",
+    not_contains: "does not contain",
+    is_blank: "is blank",
+    is_not_blank: "is not blank",
+    matches_regex: "matches pattern",
+    within_last_days: "was seen within the last days",
+    before_date: "is before",
+    after_date: "is after"
+  };
+  return labels[operator] || operator.replaceAll("_", " ");
+}
+
+function sourceLabel(source) {
+  if (source === "segment") return "Segment";
+  if (source === "context") return "Context";
+  return "Attribute";
+}
+
+function humanizeKey(key) {
+  return String(key || "")
+    .replace(/^identifier\./, "")
+    .replace(/^event\./, "")
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function conditionSchemaStatus(source, key) {
+  const items = schemaItemsForSource(source);
+  const item = schemaItemForSource(source, key);
+  if (!key) {
+    return {
+      state: "empty",
+      label: `${sourceLabel(source)} not selected`,
+      detail: items.length ? `${items.length} synced options available` : "No synced schema options"
+    };
+  }
+  if (!items.length) {
+    return {
+      state: "unknown",
+      label: `${sourceLabel(source)} schema not synced`,
+      detail: key
+    };
+  }
+  if (!item) {
+    return {
+      state: "warn",
+      label: "Not in synced schema",
+      detail: `${sourceLabel(source)} ${key}`
+    };
+  }
+  return {
+    state: "ok",
+    label: `Known ${sourceLabel(source)}`,
+    detail: [item.type, item.dimension, item.source].filter(Boolean).join(" · ") || item.name
+  };
+}
+
+function schemaChipHtml(status, prefix = "") {
+  const label = prefix ? `${prefix}: ${status.label}` : status.label;
+  return `
+    <span class="condition-schema-chip ${escapeHtml(status.state)}">
+      <strong>${escapeHtml(label)}</strong>
+      <span>${escapeHtml(status.detail)}</span>
+    </span>
+  `;
 }
 
 function schemaReferenceWarnings(draft) {

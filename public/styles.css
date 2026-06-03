@@ -3732,10 +3732,41 @@ button.graph-node:hover {
 }
 
 .branch-summary {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.branch-readable {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  border: 1px solid rgba(20, 184, 166, 0.22);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(20, 184, 166, 0.08);
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.branch-readable span {
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.branch-readable strong {
+  min-width: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.branch-chip-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 10px;
 }
 
 .branch-chip {
@@ -3789,6 +3820,78 @@ button.graph-node:hover {
     auto;
   gap: 8px;
   align-items: end;
+}
+
+.condition-guidance {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(220px, 1.1fr) minmax(260px, 1fr);
+  gap: 8px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.condition-readable,
+.condition-schema-hints {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.condition-readable {
+  padding: 9px 10px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.condition-schema-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 7px;
+}
+
+.condition-schema-chip {
+  display: inline-grid;
+  min-width: 120px;
+  max-width: 100%;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 6px 8px;
+  background: var(--soft);
+  overflow-wrap: anywhere;
+}
+
+.condition-schema-chip strong {
+  color: var(--ink);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.condition-schema-chip span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.condition-schema-chip.ok {
+  border-color: rgba(20, 184, 166, 0.28);
+  background: rgba(20, 184, 166, 0.08);
+}
+
+.condition-schema-chip.warn {
+  border-color: rgba(180, 83, 9, 0.32);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.condition-schema-chip.empty,
+.condition-schema-chip.unknown {
+  border-color: rgba(100, 116, 139, 0.24);
+  background: rgba(100, 116, 139, 0.08);
 }
 
 .condition-row.value-mode [data-role^="value-source"] {
@@ -4125,6 +4228,7 @@ pre {
   .branch-head,
   .branch-logic,
   .condition-row,
+  .condition-guidance,
   .output-field-row,
   .lookup-output-grid,
   .ttl-helper-grid,
