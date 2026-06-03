@@ -135,6 +135,12 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  if (req.method === "GET" && pathname === "/v1/client/rule-catalog") {
+    requireScope(req, "client");
+    sendJson(res, 200, { rule_sets: clientRuleCatalog(req.auth) });
+    return;
+  }
+
   if (req.method === "POST" && pathname === "/v1/client/surface") {
     requireScope(req, "client");
     enforceClientRateLimit(req, res, "surface");
@@ -1976,6 +1982,173 @@ function clientEventFromRequest(eventType, body, req) {
     context: body.context || {},
     event: body.event || {}
   };
+}
+
+function clientRuleCatalog(auth) {
+  return store
+    .listRuleSets()
+    .filter((ruleSet) =>
+      ruleSet.status === "published" &&
+      (!auth.decision_keys?.length || auth.decision_keys.includes(ruleSet.decision_key))
+    )
+    .map((ruleSet) => {
+      const fullRuleSet = store.getRuleSet(ruleSet.decision_key);
+      const latest = fullRuleSet?.versions?.at(-1);
+      const definition = latest?.definition || fullRuleSet?.draft || {};
+      return {
+        name: ruleSet.name,
+        decision_key: ruleSet.decision_key,
+        description: ruleSet.description,
+        type: ruleSet.type,
+        priority: ruleSet.priority,
+        surface: ruleSet.surface,
+        version: ruleSet.version,
+        cache_policy: ruleSet.cache_policy,
+        tags: ruleSet.tags,
+        inputs: inferClientCatalogInputs(fullRuleSet?.input_schema || ruleSet.input_schema || {}, definition)
+      };
+    });
+}
+
+function inferClientCatalogInputs(inputSchema = {}, definition = {}) {
+  const fields = new Map();
+  addCatalogSchemaInputs(fields, inputSchema);
+  addCatalogDefinitionInputs(fields, definition);
+  return [...fields.values()].sort((a, b) =>
+    catalogSourceOrder(a.source) - catalogSourceOrder(b.source) ||
+    a.key.localeCompare(b.key)
+  );
+}
+
+function addCatalogSchemaInputs(fields, schema = {}) {
+  for (const [key, meta] of Object.entries(schema.attributes || schema.properties || {})) {
+    addCatalogInput(fields, {
+      source: "attribute",
+      key,
+      type: catalogMetaType(meta, key),
+      required: true,
+      default: catalogDefaultValue(key, catalogMetaType(meta, key))
+    });
+  }
+  for (const [key, meta] of Object.entries(schema.context || {})) {
+    addCatalogInput(fields, {
+      source: "context",
+      key,
+      type: catalogMetaType(meta, key),
+      required: false,
+      default: catalogDefaultValue(key, catalogMetaType(meta, key))
+    });
+  }
+  for (const [key, meta] of Object.entries(schema.segments || {})) {
+    addCatalogInput(fields, {
+      source: "segment",
+      key,
+      type: catalogMetaType(meta, key, "boolean"),
+      required: false,
+      default: false
+    });
+  }
+}
+
+function addCatalogDefinitionInputs(fields, value) {
+  if (Array.isArray(value)) {
+    value.forEach((item) => addCatalogDefinitionInputs(fields, item));
+    return;
+  }
+  if (!value || typeof value !== "object") {
+    if (typeof value === "string") addCatalogExpressionInputs(fields, value);
+    return;
+  }
+  if (["attribute", "segment", "context"].includes(value.source) && value.key) {
+    const type = catalogTypeForKey(value.key, value.value, value.source === "segment" ? "boolean" : "string");
+    addCatalogInput(fields, {
+      source: value.source,
+      key: value.key,
+      type,
+      required: true,
+      default: catalogDefaultValue(value.key, type)
+    });
+  }
+  Object.values(value).forEach((item) => addCatalogDefinitionInputs(fields, item));
+}
+
+function addCatalogExpressionInputs(fields, expression) {
+  for (const { source, regex } of [
+    { source: "attribute", regex: /attribute\(["']([^"']+)["']\)/g },
+    { source: "context", regex: /context\(["']([^"']+)["']\)/g },
+    { source: "segment", regex: /segment\(["']([^"']+)["']\)/g }
+  ]) {
+    let match;
+    while ((match = regex.exec(expression))) {
+      const key = match[1];
+      const type = catalogTypeForKey(key, undefined, source === "segment" ? "boolean" : "string");
+      addCatalogInput(fields, {
+        source,
+        key,
+        type,
+        required: true,
+        default: catalogDefaultValue(key, type)
+      });
+    }
+  }
+}
+
+function addCatalogInput(fields, input) {
+  const id = `${input.source}:${input.key}`;
+  if (!fields.has(id)) {
+    fields.set(id, input);
+    return;
+  }
+  const existing = fields.get(id);
+  existing.required = Boolean(existing.required || input.required);
+  if (!existing.default && input.default != null) existing.default = input.default;
+}
+
+function catalogMetaType(meta, key, fallback = "string") {
+  if (typeof meta === "string") return catalogNormalizeType(meta, key, fallback);
+  return catalogNormalizeType(meta?.type, key, fallback);
+}
+
+function catalogNormalizeType(type, key, fallback = "string") {
+  if (["number", "integer"].includes(type)) return "number";
+  if (type === "boolean") return "boolean";
+  if (type === "array") return "array";
+  return catalogTypeForKey(key, undefined, fallback);
+}
+
+function catalogTypeForKey(key, sampleValue, fallback = "string") {
+  if (typeof sampleValue === "number") return "number";
+  if (typeof sampleValue === "boolean") return "boolean";
+  if (Array.isArray(sampleValue)) return "array";
+  if (/(score|count|value|rfm|payments|balance|lifetime)/i.test(key)) return "number";
+  if (/(promotions|list|ids)$/i.test(key)) return "array";
+  return fallback;
+}
+
+function catalogDefaultValue(key, type) {
+  const defaults = {
+    lead_score: 85,
+    web_engagement_score: 80,
+    churn_risk_score: 15,
+    outstanding_balance_tier: "low",
+    late_payments_count_12m: 0,
+    interacted_promotions: [],
+    customer_lifetime_value: 12500,
+    monetary_rfm: 4,
+    sustainability_score: 85,
+    survey_nps_latest: 8,
+    channel: "web",
+    request_source: "meiro_web_banner"
+  };
+  if (key in defaults) return defaults[key];
+  if (type === "number") return 0;
+  if (type === "boolean") return false;
+  if (type === "array") return [];
+  return "";
+}
+
+function catalogSourceOrder(source) {
+  return { attribute: 1, segment: 2, context: 3 }[source] || 9;
 }
 
 function idempotencyKey(req) {

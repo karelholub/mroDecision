@@ -181,6 +181,29 @@ paths:
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
+  /v1/client/rule-catalog:
+    get:
+      summary: List published client-safe decision rules and required inputs
+      description: Requires a token with the `client` scope. Tokens with a decision-key allow-list only see allowed rules. The response omits draft logic and returns inferred input fields for browser-side form builders.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Published rule catalog for client-side form rendering
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rule_sets]
+                properties:
+                  rule_sets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ClientRuleCatalogItem"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
   /v1/client/surface:
     post:
       summary: Evaluate all published in-app messages for a surface and return the highest-priority eligible result
@@ -1897,6 +1920,52 @@ components:
               type: boolean
             duplicate:
               type: boolean
+    ClientRuleCatalogInput:
+      type: object
+      required: [source, key, type, required]
+      properties:
+        source:
+          type: string
+          enum: [attribute, segment, context]
+        key:
+          type: string
+        type:
+          type: string
+          enum: [string, number, boolean, array]
+        required:
+          type: boolean
+        default:
+          nullable: true
+    ClientRuleCatalogItem:
+      type: object
+      required: [name, decision_key, type, version, inputs]
+      properties:
+        name:
+          type: string
+        decision_key:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [decision, inapp_message, experiment]
+        priority:
+          type: integer
+        surface:
+          type: string
+        version:
+          type: integer
+          nullable: true
+        cache_policy:
+          type: object
+        tags:
+          type: array
+          items:
+            type: string
+        inputs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientRuleCatalogInput"
     RuleSetSummary:
       type: object
       required: [name, decision_key, status]
