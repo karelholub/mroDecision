@@ -404,6 +404,55 @@
                       <button type="button" id="create-graph-template">Create Template</button>
                       <button type="button" id="reset-graph-layout">Reset Layout</button>
                     </div>
+                    <div class="frequency-cap-helper">
+                      <div class="builder-section-head">
+                        <div>
+                          <strong>Frequency Cap Helper</strong>
+                          <span>Create a configured cap node from message, surface, and event settings.</span>
+                        </div>
+                        <button type="button" id="add-frequency-cap-helper">Add Cap Node</button>
+                      </div>
+                      <div class="frequency-cap-grid">
+                        <label>
+                          Event
+                          <select id="frequency-cap-event">
+                            <option value="impression">Impression</option>
+                            <option value="exposure">Exposure</option>
+                          </select>
+                        </label>
+                        <label>
+                          Max events
+                          <input id="frequency-cap-max" type="number" min="1" value="3" />
+                        </label>
+                        <label>
+                          Window days
+                          <input id="frequency-cap-window" type="number" min="1" value="7" />
+                        </label>
+                        <label>
+                          Decision key
+                          <input id="frequency-cap-decision" list="frequency-cap-decision-options" placeholder="Use current rule" />
+                        </label>
+                        <label>
+                          Message
+                          <input id="frequency-cap-message" list="frequency-cap-message-options" placeholder="Optional message id" />
+                        </label>
+                        <label>
+                          Surface
+                          <input id="frequency-cap-surface" list="frequency-cap-surface-options" placeholder="homepage_hero" />
+                        </label>
+                        <label>
+                          Capped route
+                          <input id="frequency-cap-capped" placeholder="fallback" />
+                        </label>
+                        <label>
+                          Store count as
+                          <input id="frequency-cap-output-key" value="frequency_count" />
+                        </label>
+                      </div>
+                      <datalist id="frequency-cap-decision-options"></datalist>
+                      <datalist id="frequency-cap-message-options"></datalist>
+                      <datalist id="frequency-cap-surface-options"></datalist>
+                    </div>
                     <div id="graph-node-editor" class="graph-node-editor"></div>
                   </div>
                 </div>
@@ -691,6 +740,37 @@
               <button type="button" id="delete-eval-profile">Delete</button>
               <button type="button" id="run-eval-secondary">Run</button>
               <button type="button" id="compare-eval">Compare Draft</button>
+            </div>
+            <div class="eval-profile-builder">
+              <div class="builder-section-head">
+                <div>
+                  <strong>Profile Builder</strong>
+                  <span>Edit common request fields without opening JSON.</span>
+                </div>
+                <div class="actions">
+                  <button type="button" id="add-eval-attribute">Add Attribute</button>
+                  <button type="button" id="add-eval-context">Add Context</button>
+                  <button type="button" id="add-eval-segment">Add Segment</button>
+                </div>
+              </div>
+              <div class="eval-builder-columns">
+                <div>
+                  <h3>Attributes</h3>
+                  <div id="eval-attribute-builder" class="eval-builder-list"></div>
+                </div>
+                <div>
+                  <h3>Context</h3>
+                  <div id="eval-context-builder" class="eval-builder-list"></div>
+                </div>
+                <div>
+                  <h3>Segments</h3>
+                  <div id="eval-segment-builder" class="eval-builder-list"></div>
+                </div>
+              </div>
+              <div class="actions left">
+                <button type="button" id="sync-eval-builder">Apply Builder To Payload</button>
+                <button type="button" id="reload-eval-builder">Reload From Payload</button>
+              </div>
             </div>
             <div id="eval-validation" class="eval-validation"></div>
             <div class="inspector-section">

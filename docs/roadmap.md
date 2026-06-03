@@ -197,13 +197,12 @@ Status: started with experiment significance calculations, confidence labels, mi
 3. Improve experiment operations: validate allocation weights to 100%, explain significance methodology, and add a Declare Winner flow that prepares a 100% allocation draft. Implemented.
 4. Improve governance: capture review assignee, submission comment, approval comment, and approval history. Implemented; notifications and task assignment integrations remain pending.
 5. Improve information architecture: typed rule creation, sortable rule list, raw audit payload collapsed by default, and optional full-screen rule editing. Implemented; campaign/folder grouping and page-mode editing remain pending.
-6. Improve marketer setup flows: add form-based profile builders for Evaluate, reusable frequency-cap blocks, campaign folders, and clearer campaign-level change logs. Pending.
+6. Improve marketer setup flows: add form-based profile builders for Evaluate, reusable frequency-cap blocks, campaign folders, and clearer campaign-level change logs. Evaluate Profile Builder and Frequency Cap Helper are implemented; campaign folders and change logs are pending.
 
 ## Recommended Next Sprint
 
-1. Build the Evaluate Profile Builder and reusable Frequency Cap Builder so non-technical users can create realistic tests without editing JSON.
-2. Add campaign/folder grouping across rules, messages, experiments, audit, and overview filters.
-3. Add a platform change log and persistent governance timeline for rule/message/experiment edits.
-4. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.
-5. Add a managed-database adapter path for enterprise deployments.
-6. Add persistent message asset storage and deeper personalization helpers such as token suggestions and content-variant previews.
+1. Add campaign/folder grouping across rules, messages, experiments, audit, and overview filters.
+2. Add a platform change log and persistent governance timeline for rule/message/experiment edits.
+3. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.
+4. Add a managed-database adapter path for enterprise deployments.
+5. Add persistent message asset storage and deeper personalization helpers such as token suggestions and content-variant previews.

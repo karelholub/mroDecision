@@ -268,6 +268,11 @@ document.querySelector("#close-eval-payload").addEventListener("click", closeEva
 document.querySelector("#save-eval-profile").addEventListener("click", saveEvaluateProfile);
 document.querySelector("#delete-eval-profile").addEventListener("click", deleteEvaluateProfile);
 document.querySelector("#compare-eval").addEventListener("click", compareEvaluateVersions);
+document.querySelector("#add-eval-attribute")?.addEventListener("click", () => addEvaluateBuilderRow("attribute"));
+document.querySelector("#add-eval-context")?.addEventListener("click", () => addEvaluateBuilderRow("context"));
+document.querySelector("#add-eval-segment")?.addEventListener("click", () => addEvaluateBuilderRow("segment"));
+document.querySelector("#sync-eval-builder")?.addEventListener("click", syncEvaluatePayloadFromBuilder);
+document.querySelector("#reload-eval-builder")?.addEventListener("click", () => renderEvaluateProfileBuilder(readEvaluateInputSafe()));
 document.querySelector("#eval-saved-profile").addEventListener("change", loadSavedEvaluateProfile);
 document.querySelector("#eval-mode").addEventListener("change", () => {
   renderEvaluateModeLabels();
@@ -310,6 +315,8 @@ document.querySelector("#add-branch").addEventListener("click", () => {
   syncJsonFromBuilder();
 });
 document.querySelector("#add-graph-node").addEventListener("click", addGraphNode);
+document.querySelector("#add-frequency-cap-helper")?.addEventListener("click", addFrequencyCapFromHelper);
+document.querySelector("#frequency-cap-message")?.addEventListener("change", applyFrequencyCapMessageSuggestion);
 document.querySelector("#create-graph-template").addEventListener("click", () => {
   graphBuilder = starterGraphBuilder();
   renderGraphBuilder();
@@ -4468,6 +4475,7 @@ function bindGraphNodeDrag() {
 
 function renderGraphBuilder() {
   document.querySelector("#graph-entry").value = graphBuilder.entry || "";
+  renderFrequencyCapHelperOptions();
   graphNodeEditor.innerHTML = (graphBuilder.nodes || []).map((node, index) => graphNodeEditorCard(node, index)).join("");
   graphNodeEditor.querySelectorAll("[data-graph-field]").forEach((input) => {
     input.addEventListener("input", () => updateGraphNodeField(Number(input.dataset.nodeIndex), input.dataset.graphField, input.value));
@@ -4484,6 +4492,48 @@ function renderGraphBuilder() {
     });
   });
   renderRuleGraph();
+}
+
+function renderFrequencyCapHelperOptions() {
+  const decisionList = document.querySelector("#frequency-cap-decision-options");
+  const messageList = document.querySelector("#frequency-cap-message-options");
+  const surfaceList = document.querySelector("#frequency-cap-surface-options");
+  if (decisionList) decisionList.innerHTML = datalistOptions(cachedRuleSets.map((item) => item.decision_key));
+  if (messageList) messageList.innerHTML = datalistOptions(cachedMessages.map((item) => item.id));
+  if (surfaceList) surfaceList.innerHTML = datalistOptions(graphSurfaceSuggestions());
+  const decisionInput = document.querySelector("#frequency-cap-decision");
+  if (decisionInput && !decisionInput.value) decisionInput.placeholder = document.querySelector("#rule-key")?.value || "Use current rule";
+}
+
+function datalistOptions(values) {
+  return [...new Set((values || []).filter(Boolean).map(String))]
+    .map((value) => `<option value="${escapeHtml(value)}"></option>`)
+    .join("");
+}
+
+function applyFrequencyCapMessageSuggestion() {
+  const messageId = document.querySelector("#frequency-cap-message")?.value.trim();
+  const message = cachedMessages.find((item) => item.id === messageId);
+  const surfaceInput = document.querySelector("#frequency-cap-surface");
+  if (message?.surface && surfaceInput && !surfaceInput.value) surfaceInput.value = message.surface;
+}
+
+function addFrequencyCapFromHelper() {
+  const node = {
+    ...graphNodeDefaults("frequency_cap", uniqueGraphNodeId("frequency_cap")),
+    event_type: document.querySelector("#frequency-cap-event")?.value || "impression",
+    max: Number(document.querySelector("#frequency-cap-max")?.value || 1),
+    window_days: Number(document.querySelector("#frequency-cap-window")?.value || 1),
+    decision_key: document.querySelector("#frequency-cap-decision")?.value.trim() || document.querySelector("#rule-key")?.value.trim() || "",
+    message_id: document.querySelector("#frequency-cap-message")?.value.trim() || "",
+    surface: document.querySelector("#frequency-cap-surface")?.value.trim() || document.querySelector("#rule-surface")?.value.trim() || "",
+    capped: document.querySelector("#frequency-cap-capped")?.value.trim() || "",
+    output_key: document.querySelector("#frequency-cap-output-key")?.value.trim() || "frequency_count"
+  };
+  graphBuilder.nodes.push(node);
+  if (!graphBuilder.entry) graphBuilder.entry = node.id;
+  renderGraphBuilder();
+  syncJsonFromBuilder();
 }
 
 function graphNodeEditorCard(node, index) {
@@ -5953,6 +6003,7 @@ function loadEvaluatePreset() {
   document.querySelector("#eval-rule-key").value = request.decision_key;
   document.querySelector("#eval-profile-key").value = request.profile_key;
   evalInput.value = JSON.stringify(request, null, 2);
+  renderEvaluateProfileBuilder(request);
   renderEvaluateModeLabels();
   renderEvaluateValidation(request);
 }
@@ -5966,6 +6017,7 @@ function loadEvaluatePresetForSelectedRule() {
   document.querySelector("#eval-profile-key").value = request.profile_key;
   syncEvaluatePresetSelect(rule);
   evalInput.value = JSON.stringify(request, null, 2);
+  renderEvaluateProfileBuilder(request);
   renderEvaluateModeLabels();
   renderEvaluationSummary(null, document.querySelector("#eval-mode").value);
   renderEvaluationOutputSummary(null);
@@ -6070,8 +6122,129 @@ function loadSavedEvaluateProfile() {
   document.querySelector("#eval-profile-key").value = request.profile_key || "";
   syncEvaluatePresetSelect(selectedEvaluateRule());
   evalInput.value = JSON.stringify(request, null, 2);
+  renderEvaluateProfileBuilder(request);
   renderEvaluateModeLabels();
   renderEvaluateValidation(request, "Loaded saved profile.");
+}
+
+function renderEvaluateProfileBuilder(request = readEvaluateInputSafe()) {
+  renderEvaluateBuilderList("attribute", request.attributes || {});
+  renderEvaluateBuilderList("context", request.context || {});
+  renderEvaluateBuilderList("segment", request.segments || {});
+}
+
+function renderEvaluateBuilderList(kind, values = {}) {
+  const target = document.querySelector(`#eval-${kind}-builder`);
+  if (!target) return;
+  const entries = Object.entries(values || {});
+  target.innerHTML = entries.length
+    ? entries.map(([key, value], index) => evaluateBuilderRow(kind, key, value, index)).join("")
+    : `<div class="eval-builder-empty">No ${kind === "attribute" ? "attributes" : `${kind}s`} yet.</div>`;
+  target.querySelectorAll("[data-eval-builder-remove]").forEach(attachEvaluateBuilderRemove);
+}
+
+function evaluateBuilderRow(kind, key = "", rawValue = "", index = Date.now()) {
+  const value = normalizeEvaluateBuilderValue(kind, rawValue);
+  const type = inferBuilderValueType(value);
+  const listId = `eval-${kind}-keys-${index}`;
+  return `
+    <div class="eval-builder-row" data-eval-builder-kind="${kind}">
+      <input data-eval-builder-key value="${escapeHtml(key)}" placeholder="${kind === "attribute" ? "lead_score" : kind === "context" ? "channel" : "vip_segment"}" list="${listId}" />
+      <input data-eval-builder-value value="${escapeHtml(valueToBuilderText(value))}" placeholder="value" />
+      <select data-eval-builder-type>
+        ${["string", "number", "boolean", "json"].map((item) => `<option value="${item}"${item === type ? " selected" : ""}>${item}</option>`).join("")}
+      </select>
+      <button type="button" data-eval-builder-remove>Remove</button>
+      ${graphDatalist(listId, evaluateBuilderKeySuggestions(kind))}
+    </div>
+  `;
+}
+
+function addEvaluateBuilderRow(kind) {
+  const target = document.querySelector(`#eval-${kind}-builder`);
+  if (!target) return;
+  target.querySelector(".eval-builder-empty")?.remove();
+  const existing = new Set([...target.querySelectorAll("[data-eval-builder-key]")].map((input) => input.value.trim()).filter(Boolean));
+  const suggestion = evaluateBuilderKeySuggestions(kind).find((key) => !existing.has(key)) || "";
+  target.insertAdjacentHTML("beforeend", evaluateBuilderRow(kind, suggestion, kind === "segment" ? true : "", Date.now()));
+  attachEvaluateBuilderRemove(target.querySelector(".eval-builder-row:last-child [data-eval-builder-remove]"));
+}
+
+function attachEvaluateBuilderRemove(button) {
+  if (!button) return;
+  button.addEventListener("click", () => {
+    const row = button.closest(".eval-builder-row");
+    const target = row?.parentElement;
+    const kind = row?.dataset.evalBuilderKind || "item";
+    row?.remove();
+    if (target && !target.querySelector(".eval-builder-row")) {
+      target.innerHTML = `<div class="eval-builder-empty">No ${kind === "attribute" ? "attributes" : `${kind}s`} yet.</div>`;
+    }
+  });
+}
+
+function evaluateBuilderKeySuggestions(kind) {
+  if (kind === "attribute") return schemaItemsForSource("attribute").map((item) => item.name);
+  if (kind === "context") {
+    return [
+      ...schemaItemsForSource("context").map((item) => item.name),
+      "channel",
+      "surface",
+      "session_id",
+      "request_source"
+    ];
+  }
+  return schemaItemsForSource("segment").map((item) => item.name).filter(Boolean);
+}
+
+function normalizeEvaluateBuilderValue(kind, rawValue) {
+  if (kind === "attribute" && Array.isArray(rawValue)) return rawValue[0]?.value ?? "";
+  if (rawValue && typeof rawValue === "object" && "value" in rawValue) return rawValue.value;
+  return rawValue;
+}
+
+function inferBuilderValueType(value) {
+  if (typeof value === "number") return "number";
+  if (typeof value === "boolean") return "boolean";
+  if (value && typeof value === "object") return "json";
+  return "string";
+}
+
+function valueToBuilderText(value) {
+  if (value == null) return "";
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
+function syncEvaluatePayloadFromBuilder() {
+  const body = readEvaluateInputSafe();
+  body.decision_key = document.querySelector("#eval-rule-key").value || body.decision_key;
+  body.profile_key = document.querySelector("#eval-profile-key").value.trim() || body.profile_key;
+  body.identifiers = Array.isArray(body.identifiers) ? body.identifiers : [];
+  body.attributes = readEvaluateBuilderObject("attribute");
+  body.context = readEvaluateBuilderObject("context");
+  body.segments = readEvaluateBuilderObject("segment");
+  evalInput.value = JSON.stringify(body, null, 2);
+  renderEvaluateValidation(body, "Profile builder applied to payload.");
+}
+
+function readEvaluateBuilderObject(kind) {
+  const rows = [...document.querySelectorAll(`[data-eval-builder-kind="${kind}"]`)];
+  return rows.reduce((acc, row) => {
+    const key = row.querySelector("[data-eval-builder-key]")?.value.trim();
+    if (!key) return acc;
+    const type = row.querySelector("[data-eval-builder-type]")?.value || "string";
+    const rawValue = row.querySelector("[data-eval-builder-value]")?.value || "";
+    const value = parseBuilderValue(rawValue, type);
+    acc[key] = kind === "attribute" ? [{ value }] : value;
+    return acc;
+  }, {});
+}
+
+function parseBuilderValue(rawValue, type) {
+  if (type === "number") return Number(rawValue || 0);
+  if (type === "boolean") return ["true", "1", "yes", "y"].includes(String(rawValue).trim().toLowerCase());
+  if (type === "json") return parseJsonSafe(rawValue || "null", null);
+  return rawValue;
 }
 
 function syncEvaluatePresetSelect(rule = {}) {
