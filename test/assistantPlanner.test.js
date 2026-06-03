@@ -17,6 +17,8 @@ test("assistant planner creates guarded experiment draft plan", () => {
   assert.equal(ruleAction.object.metadata.experiment.variants[1].weight, 20);
   assert.equal(ruleAction.object.draft.branches[0].when.key, "sustainability_score");
   assert.equal(plan.preview.draft_evaluation.result, "eligible");
+  assert.ok(plan.clarifications.some((item) => item.id === "surface_inferred"));
+  assert.ok(plan.clarifications.some((item) => item.id === "message_content" && item.priority === "high"));
 });
 
 test("assistant planner uses cached schema for condition fields", () => {
@@ -39,6 +41,19 @@ test("assistant planner uses cached schema for condition fields", () => {
   assert.equal(plan.schema.matched_fields[0].key, "monetary_rfm");
   assert.equal(plan.schema.missing_fields.length, 0);
   assert.equal(plan.preview.sample_request.attributes.monetary_rfm, 5000);
+});
+
+test("assistant planner flags broad ambiguous audience assumptions", () => {
+  const plan = createAssistantPlan({
+    prompt: "Create a new offer decision",
+    type: "decision",
+    decision_key: "ambiguous_offer"
+  });
+
+  const audience = plan.clarifications.find((item) => item.id === "audience");
+  assert.equal(audience.priority, "high");
+  assert.match(audience.assumed, /channel/);
+  assert.ok(plan.guardrails.warnings.some((item) => item.includes("assistant assumption")));
 });
 
 test("assistant apply only uses draft-safe store methods", () => {

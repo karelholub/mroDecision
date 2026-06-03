@@ -21,7 +21,8 @@ export function createAssistantPlan(input = {}, context = {}) {
     lookupTables: context.lookupTables,
     clientEventCounter: context.clientEventCounter
   });
-  const guardrails = guardrailsFor({ ruleSet, message, context, schema, preview });
+  const clarifications = clarificationsFor({ input, prompt, type, surface, conditions, variants, message, ruleSet });
+  const guardrails = guardrailsFor({ ruleSet, message, context, schema, preview, clarifications });
   const actions = [];
   if (message) actions.push({ action: "upsert_message", id: message.id, object: message });
   actions.push({ action: context.ruleExists?.(decisionKey) ? "update_rule_draft" : "create_rule_draft", id: decisionKey, object: ruleSet });
@@ -29,6 +30,7 @@ export function createAssistantPlan(input = {}, context = {}) {
     mode: "draft_only",
     prompt,
     summary: summaryFor({ type, name, decisionKey, surface, conditions, variants, message }),
+    clarifications,
     schema,
     preview,
     guardrails,
@@ -130,7 +132,7 @@ function buildMessage({ id, name, surface, input }) {
   };
 }
 
-function guardrailsFor({ ruleSet, message, context, schema, preview }) {
+function guardrailsFor({ ruleSet, message, context, schema, preview, clarifications = [] }) {
   const warnings = [];
   const errors = [];
   if (!ruleSet.decision_key) errors.push("Decision key is required.");
@@ -144,6 +146,8 @@ function guardrailsFor({ ruleSet, message, context, schema, preview }) {
     if (Math.round(total * 1000) !== 100000) errors.push("Experiment variant allocation must sum to 100%.");
     if (variants.length < 2) warnings.push("Experiments should have at least two variants.");
   }
+  const reviewClarifications = clarifications.filter((item) => item.priority !== "low");
+  if (reviewClarifications.length) warnings.push(`${reviewClarifications.length} assistant assumption(s) should be reviewed before publishing.`);
   if (preview?.draft_evaluation?.errors?.length) warnings.push(`Draft preview reported ${preview.draft_evaluation.errors.length} evaluation issue(s).`);
   if (message?.status === "active") warnings.push("Message content is saved as active but only used after a referencing rule is published.");
   warnings.push("Assistant apply creates or updates drafts only. Publishing still requires the normal publish review.");
@@ -152,6 +156,115 @@ function guardrailsFor({ ruleSet, message, context, schema, preview }) {
     errors,
     warnings
   };
+}
+
+function clarificationsFor({ input, prompt, type, surface, conditions, variants, message, ruleSet }) {
+  const clarifications = [];
+  const lower = prompt.toLowerCase();
+  if (!input.type) {
+    clarifications.push(clarification({
+      id: "decision_type",
+      topic: "Decision type",
+      question: "Confirm the object type the assistant inferred.",
+      assumed: type,
+      options: ["decision", "inapp_message", "experiment"],
+      priority: "low"
+    }));
+  }
+  if (!surface) {
+    clarifications.push(clarification({
+      id: "surface",
+      topic: "Placement",
+      question: "Which channel, surface, or placement should this decision run on?",
+      assumed: "no surface restriction",
+      options: ["homepage", "mobile_app", "email", "web"],
+      priority: ["inapp_message", "experiment"].includes(type) ? "medium" : "low"
+    }));
+  } else if (!input.surface && ["homepage", "email", "app"].includes(surface)) {
+    clarifications.push(clarification({
+      id: "surface_inferred",
+      topic: "Placement",
+      question: "Confirm the inferred target surface.",
+      assumed: surface,
+      options: [surface, "all surfaces"],
+      priority: "low"
+    }));
+  }
+  const flattened = flattenConditions(conditionGroup(conditions));
+  if (!Array.isArray(input.conditions) || !input.conditions.length) {
+    const fallbackAudience = flattened.length === 1 && flattened[0].source === "context" && flattened[0].key === "channel";
+    clarifications.push(clarification({
+      id: "audience",
+      topic: "Audience",
+      question: fallbackAudience ? "No audience was detected, so the draft uses a broad channel-present check. Which audience should be targeted?" : "Confirm the inferred audience condition.",
+      assumed: fallbackAudience ? "any request with channel context" : conditionSummary(flattened),
+      options: ["high intent", "high value", "retention risk", "green affinity", "custom condition"],
+      priority: fallbackAudience ? "high" : "medium"
+    }));
+  }
+  if (type === "experiment" && !Array.isArray(input.variants)) {
+    clarifications.push(clarification({
+      id: "variant_allocation",
+      topic: "Experiment split",
+      question: hasExplicitSplit(prompt) ? "Confirm the inferred experiment allocation." : "No experiment allocation was specified, so the draft uses a balanced split.",
+      assumed: variants.map((variant) => `${variant.key} ${variant.weight}%`).join(", "),
+      options: ["50/50", "80/20", "90/10"],
+      priority: hasExplicitSplit(prompt) ? "low" : "medium"
+    }));
+  }
+  if (message) {
+    if (!input.template_type && !/(alert|modal|banner|toast|in page|in-page)/.test(lower)) {
+      clarifications.push(clarification({
+        id: "message_template",
+        topic: "Message template",
+        question: "Which message template and placement should be used?",
+        assumed: message.metadata?.template_type || "banner",
+        options: ["banner", "modal", "alert", "in_page"],
+        priority: "medium"
+      }));
+    }
+    if (!input.body || !input.cta_url) {
+      clarifications.push(clarification({
+        id: "message_content",
+        topic: "Message content",
+        question: "Confirm final copy, CTA label, and CTA link before publishing.",
+        assumed: `${message.default_content?.title || ruleSet.name} / ${message.default_content?.ctas?.[0]?.label || "CTA"} -> ${message.default_content?.ctas?.[0]?.url || "#"}`,
+        options: ["provide final copy", "connect reference data", "leave placeholder"],
+        priority: "high"
+      }));
+    }
+  }
+  if (input.ttl_seconds == null && ruleSet.cache_policy?.client_ttl) {
+    clarifications.push(clarification({
+      id: "ttl",
+      topic: "TTL",
+      question: "Confirm how long the website or client may cache this response.",
+      assumed: `${ruleSet.cache_policy.client_ttl}s`,
+      options: ["no cache", "300s", "900s", "3600s"],
+      priority: "low"
+    }));
+  }
+  return clarifications;
+}
+
+function clarification({ id, topic, question, assumed, options, priority }) {
+  return {
+    id,
+    topic,
+    question,
+    assumed,
+    options,
+    priority,
+    blocking: false
+  };
+}
+
+function conditionSummary(conditions) {
+  return conditions.map((item) => `${item.source}.${item.key} ${item.operator}${item.value == null ? "" : ` ${item.value}`}`).join("; ");
+}
+
+function hasExplicitSplit(prompt) {
+  return /(\d{1,3})\s*\/\s*(\d{1,3})/.test(prompt);
 }
 
 function inferConditions(inputConditions, prompt, schemaItems = []) {

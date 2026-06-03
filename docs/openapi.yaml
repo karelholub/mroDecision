@@ -1454,6 +1454,29 @@ components:
           type: string
         summary:
           type: string
+        clarifications:
+          type: array
+          description: Non-blocking assumptions and questions that should be reviewed before publishing.
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              topic:
+                type: string
+              question:
+                type: string
+              assumed:
+                type: string
+              options:
+                type: array
+                items:
+                  type: string
+              priority:
+                type: string
+                enum: [low, medium, high]
+              blocking:
+                type: boolean
         schema:
           type: object
           properties:

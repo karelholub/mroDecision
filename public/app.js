@@ -510,11 +510,16 @@ async function planAssistantRequest() {
   const guardrails = document.querySelector("#assistant-guardrails");
   const applyButton = document.querySelector("#assistant-apply");
   const handoff = document.querySelector("#assistant-handoff");
+  const clarifications = document.querySelector("#assistant-clarifications");
   try {
     applyButton.disabled = true;
     if (handoff) {
       handoff.hidden = true;
       handoff.innerHTML = "";
+    }
+    if (clarifications) {
+      clarifications.hidden = true;
+      clarifications.innerHTML = "";
     }
     const body = {
       prompt: document.querySelector("#assistant-prompt").value.trim(),
@@ -535,6 +540,7 @@ async function planAssistantRequest() {
     if (guardrails) guardrails.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
     if (output) output.textContent = "{}";
     if (handoff) handoff.hidden = true;
+    if (clarifications) clarifications.hidden = true;
   }
 }
 
@@ -572,6 +578,7 @@ function renderAssistantPlan(plan) {
     ...(guardrails.warnings || []).slice(0, 4).map((item) => statusItem("Warning", item))
   ].join("");
   renderAssistantPreview(plan);
+  renderAssistantClarifications(plan);
   renderAssistantHandoff(plan, [], { applied: false });
   document.querySelector("#assistant-apply").disabled = Boolean(guardrails.errors?.length);
 }
@@ -611,6 +618,42 @@ function assistantPreviewCard(title, rows) {
           <strong>${escapeHtml(value)}</strong>
         </div>
       `).join("")}
+    </div>
+  `;
+}
+
+function renderAssistantClarifications(plan) {
+  const target = document.querySelector("#assistant-clarifications");
+  if (!target) return;
+  const items = plan.clarifications || [];
+  if (!items.length) {
+    target.hidden = true;
+    target.innerHTML = "";
+    return;
+  }
+  target.hidden = false;
+  target.innerHTML = `
+    <div class="assistant-clarifications-head">
+      <strong>Review Assumptions</strong>
+      <span>These are non-blocking, but should be confirmed before publishing.</span>
+    </div>
+    <div class="assistant-clarification-list">
+      ${items.map(assistantClarificationRow).join("")}
+    </div>
+  `;
+}
+
+function assistantClarificationRow(item) {
+  return `
+    <div class="assistant-clarification-row ${escapeHtml(item.priority || "low")}">
+      <div>
+        <strong>${escapeHtml(item.topic || item.id)}</strong>
+        <span>${escapeHtml(item.question || "")}</span>
+        <small>Assumed: ${escapeHtml(item.assumed || "-")}</small>
+      </div>
+      <div class="assistant-clarification-options">
+        ${(item.options || []).slice(0, 4).map((option) => `<span>${escapeHtml(option)}</span>`).join("")}
+      </div>
     </div>
   `;
 }

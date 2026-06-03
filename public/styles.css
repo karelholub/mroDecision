@@ -489,6 +489,83 @@ aside input {
   overflow-wrap: anywhere;
 }
 
+.assistant-clarifications {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  margin: 12px 0;
+  overflow: hidden;
+}
+
+.assistant-clarifications-head {
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+
+.assistant-clarifications-head span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.assistant-clarification-list {
+  display: grid;
+}
+
+.assistant-clarification-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 0.52fr);
+  gap: 12px;
+  padding: 12px 14px;
+  align-items: start;
+  border-left: 4px solid var(--line-strong);
+  min-width: 0;
+}
+
+.assistant-clarification-row.medium {
+  border-left-color: #d97706;
+}
+
+.assistant-clarification-row.high {
+  border-left-color: var(--danger);
+}
+
+.assistant-clarification-row + .assistant-clarification-row {
+  border-top: 1px solid var(--line);
+}
+
+.assistant-clarification-row > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.assistant-clarification-row span,
+.assistant-clarification-row small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.assistant-clarification-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.assistant-clarification-options span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  padding: 4px 8px;
+  color: var(--ink);
+  font-size: 0.78rem;
+  max-width: 100%;
+}
+
 .assistant-handoff {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -3719,7 +3796,15 @@ pre {
     grid-template-columns: 1fr;
   }
 
+  .assistant-clarification-row {
+    grid-template-columns: 1fr;
+  }
+
   .assistant-handoff-actions {
+    justify-content: flex-start;
+  }
+
+  .assistant-clarification-options {
     justify-content: flex-start;
   }
 
