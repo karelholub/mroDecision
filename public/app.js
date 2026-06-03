@@ -26,6 +26,7 @@ const lookupInspectorSummary = document.querySelector("#lookup-inspector-summary
 const lookupHelpTable = document.querySelector("#lookup-help-table");
 const lookupHelpKey = document.querySelector("#lookup-help-key");
 const lookupHelpExpression = document.querySelector("#lookup-help-expression");
+const lookupValidationSummary = document.querySelector("#lookup-validation-summary");
 const referenceGrid = document.querySelector("#reference-grid");
 const auditDetail = document.querySelector("#audit-detail");
 const auditDetailSummary = document.querySelector("#audit-detail-summary");
@@ -159,6 +160,7 @@ function switchView(viewName) {
   updateTopbarForView(view);
   if (viewName === "overview") loadMetrics();
   if (viewName === "experiments") loadExperiments();
+  if (viewName === "audit") loadAudit();
 }
 
 document.querySelectorAll("[data-settings-tab]").forEach((button) => {
@@ -218,7 +220,14 @@ document.querySelector("#rule-filter-tag").addEventListener("input", renderRuleL
 document.querySelector("#refresh-audit").addEventListener("click", loadAudit);
 document.querySelector("#clear-audit-filters").addEventListener("click", clearAuditFilters);
 document.querySelector("#refresh-lookups").addEventListener("click", loadLookups);
+document.querySelector("#lookup-filter-search")?.addEventListener("input", renderLookupList);
+document.querySelector("#lookup-filter-column")?.addEventListener("input", renderLookupList);
+document.querySelector("#lookup-filter-rows")?.addEventListener("change", renderLookupList);
 document.querySelector("#refresh-messages").addEventListener("click", loadMessages);
+document.querySelector("#message-filter-search")?.addEventListener("input", renderMessageList);
+document.querySelector("#message-filter-status")?.addEventListener("change", renderMessageList);
+document.querySelector("#message-filter-template")?.addEventListener("change", renderMessageList);
+document.querySelector("#message-filter-surface")?.addEventListener("input", renderMessageList);
 document.querySelector("#export-lookup-csv").addEventListener("click", exportLookupCsv);
 document.querySelector("#refresh-settings").addEventListener("click", loadSettings);
 document.querySelector("#test-meiro-profile").addEventListener("click", () => testMeiroConnection("profile"));
@@ -262,6 +271,7 @@ document.querySelector("#new-message").addEventListener("click", newMessage);
 document.querySelector("#close-lookup-detail").addEventListener("click", closeLookupDetail);
 document.querySelector("#close-message-detail").addEventListener("click", closeMessageDetail);
 document.querySelector("#cancel-message-detail").addEventListener("click", closeMessageDetail);
+document.querySelector("#duplicate-message").addEventListener("click", duplicateSelectedMessage);
 document.querySelector("#close-overview-rule-detail")?.addEventListener("click", closeOverviewRuleDetail);
 document.querySelector("#export-config")?.addEventListener("click", exportConfig);
 document.querySelector("#download-config")?.addEventListener("click", downloadConfig);
@@ -368,6 +378,7 @@ document.querySelector("#add-reference-row").addEventListener("click", addRefere
 document.querySelector("#add-reference-column").addEventListener("click", addReferenceColumn);
 document.querySelector("#sync-reference-json").addEventListener("click", syncReferenceGridFromJson);
 document.querySelector("#lookup-rows").addEventListener("change", syncReferenceGridFromJson);
+document.querySelector("#lookup-rows").addEventListener("input", renderLookupInspector);
 document.querySelector("#lookup-key-column").addEventListener("change", () => {
   renderReferenceGrid();
   renderLookupInspector();
@@ -393,6 +404,8 @@ loadRules();
 newRule({ silent: true });
 newLookup({ silent: true });
 newMessage({ silent: true });
+initializeAuditDefaults();
+loadAudit();
 loadLookups();
 loadMessages();
 loadSettings();
@@ -2372,10 +2385,11 @@ function renderAuditDetail(entry) {
 }
 
 function clearAuditFilters() {
-  ["audit-decision-key", "audit-profile-key", "audit-result", "audit-from", "audit-to"].forEach((id) => {
+  ["audit-decision-key", "audit-profile-key", "audit-result", "audit-matched-rule", "audit-search", "audit-from", "audit-to"].forEach((id) => {
     document.querySelector(`#${id}`).value = "";
   });
   document.querySelector("#audit-limit").value = "100";
+  initializeAuditDefaults();
   loadAudit();
 }
 
@@ -2385,6 +2399,8 @@ function auditParams() {
     ["audit-decision-key", "decision_key"],
     ["audit-profile-key", "profile_key"],
     ["audit-result", "result"],
+    ["audit-matched-rule", "matched_rule"],
+    ["audit-search", "search"],
     ["audit-from", "from"],
     ["audit-to", "to"],
     ["audit-limit", "limit"]
@@ -2394,6 +2410,21 @@ function auditParams() {
     params.set(key, id === "audit-from" || id === "audit-to" ? new Date(value).toISOString() : value);
   }
   return params;
+}
+
+function initializeAuditDefaults() {
+  const fromInput = document.querySelector("#audit-from");
+  const toInput = document.querySelector("#audit-to");
+  if (!fromInput || !toInput) return;
+  const now = new Date();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  if (!fromInput.value) fromInput.value = toLocalDateTimeInputValue(sevenDaysAgo);
+  if (!toInput.value) toInput.value = toLocalDateTimeInputValue(now);
+}
+
+function toLocalDateTimeInputValue(date) {
+  const offset = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
 async function exportAuditCsv() {
@@ -2417,17 +2448,46 @@ async function loadLookups() {
   try {
     const body = await api("/v1/lookup-tables");
     cachedLookupTables = body.lookup_tables || [];
-    target.innerHTML += body.lookup_tables
-      .map((item) => lookupCatalogRow(item))
-      .join("");
-    document.querySelectorAll("[data-lookup-id]").forEach((element) => {
-      element.addEventListener("click", () => loadLookup(element.dataset.lookupId, body.lookup_tables));
-    });
+    renderLookupList();
     renderBranchEditor();
     if (document.querySelector("#builder-mode")?.value === "graph") renderGraphBuilder();
   } catch (error) {
     target.innerHTML += row([error.message, "", "", "", "", ""]);
   }
+}
+
+function renderLookupList() {
+  const target = document.querySelector("#lookup-list");
+  if (!target) return;
+  const search = document.querySelector("#lookup-filter-search")?.value.trim().toLowerCase() || "";
+  const column = document.querySelector("#lookup-filter-column")?.value.trim().toLowerCase() || "";
+  const rowsFilter = document.querySelector("#lookup-filter-rows")?.value || "";
+  const filtered = cachedLookupTables.filter((item) => {
+    const columns = referenceColumnsFromRowsForTable(item);
+    const rowCount = item.rows?.length || 0;
+    const haystack = [
+      item.name,
+      item.id,
+      item.key_column,
+      columns.join(" "),
+      JSON.stringify((item.rows || []).slice(0, 20))
+    ].join(" ").toLowerCase();
+    const matchesSearch = !search || haystack.includes(search);
+    const matchesColumn = !column || columns.some((name) => name.toLowerCase().includes(column));
+    const matchesRows =
+      !rowsFilter ||
+      (rowsFilter === "empty" && rowCount === 0) ||
+      (rowsFilter === "small" && rowCount >= 1 && rowCount <= 10) ||
+      (rowsFilter === "large" && rowCount >= 11);
+    return matchesSearch && matchesColumn && matchesRows;
+  });
+  target.innerHTML = header(["Name", "ID", "Match column", "Rows", "Version", "Columns"]);
+  target.innerHTML += filtered.length
+    ? filtered.map((item) => lookupCatalogRow(item)).join("")
+    : row(["No reference tables match the current filters", "", "", "", "", ""]);
+  target.querySelectorAll("[data-lookup-id]").forEach((element) => {
+    element.addEventListener("click", () => loadLookup(element.dataset.lookupId, cachedLookupTables));
+  });
 }
 
 function lookupCatalogRow(item) {
@@ -2455,17 +2515,45 @@ async function loadMessages() {
     const body = await api("/v1/messages");
     cachedMessages = body.messages || [];
     renderMessageOutputOptions();
-    target.innerHTML += body.messages.length
-      ? body.messages.map((item) => messageCatalogRow(item)).join("")
-      : row(["No messages", "", "", "", "", ""]);
-    document.querySelectorAll("[data-message-id]").forEach((element) => {
-      element.addEventListener("click", () => loadMessage(element.dataset.messageId, body.messages));
-    });
+    renderMessageList();
     renderBranchEditor();
     if (document.querySelector("#builder-mode")?.value === "graph") renderGraphBuilder();
   } catch (error) {
     target.innerHTML += row([error.message, "", "", "", "", ""]);
   }
+}
+
+function renderMessageList() {
+  const target = document.querySelector("#message-list");
+  if (!target) return;
+  const search = document.querySelector("#message-filter-search")?.value.trim().toLowerCase() || "";
+  const status = document.querySelector("#message-filter-status")?.value || "";
+  const template = document.querySelector("#message-filter-template")?.value || "";
+  const surface = document.querySelector("#message-filter-surface")?.value.trim().toLowerCase() || "";
+  const filtered = cachedMessages.filter((item) => {
+    const content = item.default_content || {};
+    const itemTemplate = content.template_type || item.metadata?.template_type || "";
+    const haystack = [
+      item.name,
+      item.id,
+      item.surface,
+      item.status,
+      itemTemplate,
+      JSON.stringify(content),
+      JSON.stringify(item.metadata || {})
+    ].join(" ").toLowerCase();
+    return (!search || haystack.includes(search)) &&
+      (!status || (item.status || "active") === status) &&
+      (!template || itemTemplate === template) &&
+      (!surface || String(item.surface || "").toLowerCase().includes(surface));
+  });
+  target.innerHTML = header(["Name", "ID", "Surface", "Status", "Updated", "Content"]);
+  target.innerHTML += filtered.length
+    ? filtered.map((item) => messageCatalogRow(item)).join("")
+    : row(["No messages match the current filters", "", "", "", "", ""]);
+  target.querySelectorAll("[data-message-id]").forEach((element) => {
+    element.addEventListener("click", () => loadMessage(element.dataset.messageId, cachedMessages));
+  });
 }
 
 function messageCatalogRow(item) {
@@ -2562,6 +2650,41 @@ function loadMessage(id, messages) {
   syncMessagePreviewFromJson();
   messageOutput.textContent = `Loaded ${id}`;
   openMessageDetail();
+}
+
+function duplicateSelectedMessage() {
+  const sourceId = selectedMessageId || document.querySelector("#message-id").value.trim();
+  const source = cachedMessages.find((item) => item.id === sourceId);
+  if (!source) {
+    messageOutput.textContent = "Open a saved message before duplicating it.";
+    return;
+  }
+  selectedMessageId = null;
+  const copyId = uniqueMessageCopyId(source.id);
+  document.querySelector("#message-id").value = copyId;
+  document.querySelector("#message-id").disabled = false;
+  document.querySelector("#message-name").value = `${source.name || source.id} Copy`;
+  document.querySelector("#message-surface").value = source.surface || "";
+  document.querySelector("#message-status").value = "active";
+  document.querySelector("#message-content").value = JSON.stringify(source.default_content || {}, null, 2);
+  document.querySelector("#message-schema").value = JSON.stringify(source.content_schema || {}, null, 2);
+  const metadata = { ...(source.metadata || {}) };
+  delete metadata.created_from_assistant_plan;
+  document.querySelector("#message-metadata").value = JSON.stringify(metadata, null, 2);
+  syncMessageDeliveryFromMetadata(metadata);
+  syncMessagePreviewFromJson();
+  messageOutput.textContent = `Duplicated ${source.id}. Review the copy and save it as ${copyId}.`;
+}
+
+function uniqueMessageCopyId(baseId) {
+  const base = slug(`${baseId}_copy`);
+  const existing = new Set(cachedMessages.map((item) => item.id));
+  if (!existing.has(base)) return base;
+  for (let index = 2; index < 100; index += 1) {
+    const candidate = `${base}_${index}`;
+    if (!existing.has(candidate)) return candidate;
+  }
+  return `${base}_${Date.now()}`;
 }
 
 async function saveMessage(event) {
@@ -4753,6 +4876,60 @@ function renderLookupInspector(rows = null) {
   lookupHelpTable.textContent = tableId;
   lookupHelpKey.textContent = keyColumn;
   lookupHelpExpression.textContent = `=lookup("${tableId}", attributes.${keyColumn}, "${firstReturnColumn}")`;
+  renderLookupValidation(currentRows, columns, keyColumn);
+}
+
+function renderLookupValidation(rows, columns, keyColumn) {
+  if (!lookupValidationSummary) return;
+  const checks = validateLookupColumns(rows, columns, keyColumn);
+  lookupValidationSummary.innerHTML = checks
+    .map((check) => `
+      <div class="lookup-validation-item ${escapeHtml(check.level)}">
+        <strong>${escapeHtml(check.title)}</strong>
+        <span>${escapeHtml(check.detail)}</span>
+      </div>
+    `)
+    .join("");
+}
+
+function validateLookupColumns(rows, columns, keyColumn) {
+  if (!rows.length) return [{ level: "warn", title: "No rows", detail: "Add rows or import CSV before using this table in rules." }];
+  const checks = [];
+  const keyValues = rows.map((rowItem) => rowItem?.[keyColumn]).filter((value) => value !== "" && value != null);
+  const duplicateKeys = duplicateValues(keyValues);
+  const blankKeyCount = rows.filter((rowItem) => rowItem?.[keyColumn] === "" || rowItem?.[keyColumn] == null).length;
+  if (blankKeyCount) checks.push({ level: "warn", title: "Blank match keys", detail: `${formatNumber(blankKeyCount)} row${blankKeyCount === 1 ? "" : "s"} cannot be matched.` });
+  if (duplicateKeys.length) checks.push({ level: "warn", title: "Duplicate match keys", detail: duplicateKeys.slice(0, 4).join(", ") });
+  for (const column of columns) {
+    const values = rows.map((rowItem) => rowItem?.[column]).filter((value) => value !== "" && value != null);
+    const missing = rows.length - values.length;
+    const types = [...new Set(values.map(referenceValueType))].filter(Boolean);
+    if (missing && column !== keyColumn) checks.push({ level: "info", title: `${column} missing values`, detail: `${formatNumber(missing)} row${missing === 1 ? "" : "s"} are blank.` });
+    if (types.length > 1) checks.push({ level: "warn", title: `${column} mixed types`, detail: `Contains ${types.join(", ")} values.` });
+  }
+  if (!checks.length) checks.push({ level: "ok", title: "Ready", detail: "Match keys are unique and populated, with consistent column value types." });
+  return checks.slice(0, 8);
+}
+
+function duplicateValues(values) {
+  const seen = new Set();
+  const duplicates = new Set();
+  values.forEach((value) => {
+    const key = String(value);
+    if (seen.has(key)) duplicates.add(key);
+    seen.add(key);
+  });
+  return [...duplicates];
+}
+
+function referenceValueType(value) {
+  if (Array.isArray(value)) return "array";
+  if (value == null) return "";
+  if (value instanceof Date) return "date";
+  if (typeof value === "number" && Number.isFinite(value)) return "number";
+  if (typeof value === "boolean") return "boolean";
+  if (typeof value === "object") return "object";
+  return "text";
 }
 
 function formatReferenceCell(value) {
@@ -4787,6 +4964,7 @@ function syncReferenceJsonFromGrid() {
     if (Object.values(rowItem).some((value) => value !== "")) rows.push(rowItem);
   });
   document.querySelector("#lookup-rows").value = JSON.stringify(rows, null, 2);
+  renderLookupInspector(rows);
 }
 
 function syncReferenceGridFromJson() {

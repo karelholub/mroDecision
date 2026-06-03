@@ -417,6 +417,14 @@ export class Store {
       conditions.push("evaluated_at <= ?");
       values.push(params.to);
     }
+    if (params.matched_rule) {
+      conditions.push("entry_json LIKE ?");
+      values.push(`%"${params.matched_rule}"%`);
+    }
+    if (params.search) {
+      conditions.push("entry_json LIKE ?");
+      values.push(`%${params.search}%`);
+    }
     const limit = Math.min(Number(params.limit || 100), 1000);
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     return this.db

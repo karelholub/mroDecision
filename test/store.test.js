@@ -96,6 +96,8 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
     errors: []
   });
   assert.equal(store.queryAudit({ decision_key: "campaign_suppression" })[0].result, "suppressed");
+  assert.equal(store.queryAudit({ matched_rule: "risk_segment" })[0].profile_key, "p-1");
+  assert.equal(store.queryAudit({ search: "high_risk" })[0].matched_rules[0], "risk_segment");
   assert.equal(store.queryAudit({ from: "2026-05-28T00:00:00.000Z" }).length, 0);
   const metrics = store.getMetrics();
   assert.equal(metrics.requests.total, 1);

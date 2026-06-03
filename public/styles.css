@@ -2797,11 +2797,22 @@ header {
 
 .message-list-pane {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 12px;
   height: calc(100vh - 184px);
   min-height: 520px;
   overflow: hidden;
+}
+
+.message-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(130px, 0.55fr) minmax(150px, 0.65fr) minmax(180px, 0.8fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.message-filter-bar label {
+  min-width: 0;
 }
 
 .message-list {
@@ -3418,11 +3429,22 @@ header {
 
 .lookup-list-pane {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 12px;
   height: calc(100vh - 184px);
   min-height: 520px;
   overflow: hidden;
+}
+
+.lookup-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(180px, 0.8fr) minmax(150px, 0.6fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.lookup-filter-bar label {
+  min-width: 0;
 }
 
 .lookup-list .row {
@@ -3577,6 +3599,48 @@ header {
 
 .lookup-inspector-pane .inspector-lines strong {
   font-size: 13px;
+}
+
+.lookup-validation-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.lookup-validation-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.lookup-validation-item.ok {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.lookup-validation-item.warn {
+  border-color: rgba(245, 158, 11, 0.42);
+  background: rgba(245, 158, 11, 0.09);
+}
+
+.lookup-validation-item.info {
+  border-color: rgba(59, 130, 246, 0.28);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.lookup-validation-item strong,
+.lookup-validation-item span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.lookup-validation-item span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .lookup-bottom-drawer {
@@ -4503,10 +4567,12 @@ pre {
     .audit-workbench,
     .evaluate-workbench,
     .message-workbench,
+    .message-filter-bar,
     .message-editor-main,
     .message-field-grid,
     .message-rule-link-row,
     .lookup-workbench,
+    .lookup-filter-bar,
     .lookup-editor-main,
     .filter-bar,
     .metric-grid,

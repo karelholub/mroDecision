@@ -721,6 +721,14 @@
                 <input id="audit-result" placeholder="eligible" />
               </label>
               <label>
+                Matched rule
+                <input id="audit-matched-rule" placeholder="branch or fallback" />
+              </label>
+              <label>
+                Search payload
+                <input id="audit-search" placeholder="offer, message, error" />
+              </label>
+              <label>
                 From
                 <input id="audit-from" type="datetime-local" />
               </label>
@@ -770,6 +778,35 @@
         <div class="message-workbench">
           <div class="message-list-pane editor">
             <div class="editor-title">Defined Messages</div>
+            <div class="message-filter-bar">
+              <label>
+                Search
+                <input id="message-filter-search" placeholder="Name, ID, content, or CTA" />
+              </label>
+              <label>
+                Status
+                <select id="message-filter-status">
+                  <option value="">Any status</option>
+                  <option value="active">Active</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </label>
+              <label>
+                Template
+                <select id="message-filter-template">
+                  <option value="">Any template</option>
+                  <option value="banner">Banner</option>
+                  <option value="alert">Alert</option>
+                  <option value="modal">Modal</option>
+                  <option value="inline">In page</option>
+                  <option value="toast">Toast</option>
+                </select>
+              </label>
+              <label>
+                Surface
+                <input id="message-filter-surface" placeholder="homepage_hero" />
+              </label>
+            </div>
             <div id="message-list" class="table message-list"></div>
           </div>
         </div>
@@ -930,6 +967,7 @@
             </div>
             <div class="message-detail-footer">
               <button type="button" id="cancel-message-detail">Cancel</button>
+              <button type="button" id="duplicate-message">Duplicate</button>
               <button type="button" id="sync-message-json">Sync JSON</button>
               <button type="submit" class="primary">Save Message</button>
             </div>
@@ -952,6 +990,25 @@
         <div class="lookup-workbench">
           <div class="lookup-list-pane editor">
             <div class="editor-title">Reference Tables</div>
+            <div class="lookup-filter-bar">
+              <label>
+                Search
+                <input id="lookup-filter-search" placeholder="Name, ID, column, or value" />
+              </label>
+              <label>
+                Column
+                <input id="lookup-filter-column" placeholder="offer_id" />
+              </label>
+              <label>
+                Rows
+                <select id="lookup-filter-rows">
+                  <option value="">Any size</option>
+                  <option value="empty">Empty tables</option>
+                  <option value="small">1-10 rows</option>
+                  <option value="large">11+ rows</option>
+                </select>
+              </label>
+            </div>
             <div id="lookup-list" class="table lookup-list"></div>
           </div>
         </div>
@@ -1001,6 +1058,10 @@
                       <div><span>Match column</span><strong id="lookup-help-key">product_code</strong></div>
                       <div><span>Output expression</span><strong id="lookup-help-expression">=lookup("table", key, "field")</strong></div>
                     </div>
+                  </div>
+                  <div class="inspector-section">
+                    <h3>Column Quality</h3>
+                    <div id="lookup-validation-summary" class="lookup-validation-summary"></div>
                   </div>
                 </div>
               </div>
