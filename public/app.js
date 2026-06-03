@@ -61,6 +61,7 @@ const requestTrendPanel = document.querySelector("#metrics-request-trend");
 const overviewAlerts = document.querySelector("#overview-alerts");
 const overviewAnomalyHistory = document.querySelector("#overview-anomaly-history");
 const overviewServiceFooter = document.querySelector("#overview-service-footer");
+const overviewChangeLog = document.querySelector("#overview-change-log");
 const overviewRuleDetailModal = document.querySelector("#overview-rule-detail-modal");
 const experimentKpis = document.querySelector("#experiment-kpis");
 const experimentList = document.querySelector("#experiment-list");
@@ -602,6 +603,7 @@ function renderMetrics(metrics) {
   renderOverviewAnomalyHistory(metrics.anomaly_baseline || {});
   renderRuleUsage(metrics.rule_usage || []);
   loadClientEventMetrics();
+  loadChangeLog();
   renderRequestTrend(metrics);
   renderResultDistribution(metrics);
   renderRulesInventory(rules);
@@ -699,6 +701,51 @@ function renderOverviewAnomalyHistory(baseline = {}) {
       `).join("") : `<div class="anomaly-alert-item ok"><span>Baseline</span><strong>No anomalies detected</strong><small>Current metrics are within conservative baseline thresholds.</small></div>`}
     </div>
   `;
+}
+
+async function loadChangeLog() {
+  if (!overviewChangeLog) return;
+  try {
+    const body = await api("/v1/change-log?limit=12");
+    renderChangeLog(body.changes || []);
+  } catch (error) {
+    overviewChangeLog.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderChangeLog(changes) {
+  if (!overviewChangeLog) return;
+  overviewChangeLog.innerHTML = changes.length
+    ? changes.map((change) => changeLogItem(change)).join("")
+    : `<div class="status-line">No platform changes recorded yet.</div>`;
+}
+
+function changeLogItem(change) {
+  const label = changeLogLabel(change);
+  const campaign = change.campaign || change.metadata?.surface || "";
+  return `
+    <div class="change-log-item">
+      <span>${escapeHtml(label)}</span>
+      <div>
+        <strong>${escapeHtml(change.object_name || change.object_id || "-")}</strong>
+        <small>${escapeHtml(change.object_id || "")}${change.version ? ` · v${escapeHtml(change.version)}` : ""}</small>
+      </div>
+      <em>${escapeHtml(campaign || "-")}</em>
+      <small>${escapeHtml(change.author || "system")} · ${escapeHtml(change.changed_at ? formatTime(change.changed_at) : "-")}</small>
+    </div>
+  `;
+}
+
+function changeLogLabel(change) {
+  const labels = {
+    experiment_draft_updated: "Experiment draft",
+    experiment_published: "Experiment published",
+    message_updated: "Message updated",
+    reference_data_updated: "Reference data",
+    rule_draft_updated: "Rule draft",
+    rule_published: "Rule published"
+  };
+  return labels[change.action] || change.object_type || "Change";
 }
 
 async function loadExperiments() {

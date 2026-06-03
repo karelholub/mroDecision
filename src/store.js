@@ -81,6 +81,83 @@ export class Store {
     };
   }
 
+  listChangeLog(params = {}) {
+    const limit = Math.max(1, Math.min(200, Number(params.limit || 50)));
+    const changes = [];
+    for (const row of this.db.prepare("SELECT decision_key, name, type, status, metadata_json, updated_at, author FROM rule_sets").all()) {
+      const metadata = parse(row.metadata_json || "{}");
+      changes.push({
+        id: `rule:${row.decision_key}:draft:${row.updated_at}`,
+        object_type: row.type === "experiment" ? "experiment" : "rule",
+        action: row.type === "experiment" ? "experiment_draft_updated" : "rule_draft_updated",
+        object_id: row.decision_key,
+        object_name: row.name,
+        status: row.status,
+        version: null,
+        author: row.author,
+        changed_at: row.updated_at,
+        campaign: campaignLabel(metadata),
+        metadata
+      });
+    }
+    for (const row of this.db.prepare(
+      `SELECT rv.decision_key, rv.version, rv.published_at, rv.author, rv.metadata_json, rs.name, rs.type
+       FROM rule_versions rv
+       LEFT JOIN rule_sets rs ON rs.decision_key = rv.decision_key`
+    ).all()) {
+      const metadata = parse(row.metadata_json || "{}");
+      changes.push({
+        id: `rule:${row.decision_key}:published:${row.version}`,
+        object_type: row.type === "experiment" ? "experiment" : "rule",
+        action: row.type === "experiment" ? "experiment_published" : "rule_published",
+        object_id: row.decision_key,
+        object_name: row.name || row.decision_key,
+        status: "published",
+        version: row.version,
+        author: row.author,
+        changed_at: row.published_at,
+        campaign: campaignLabel(metadata),
+        metadata
+      });
+    }
+    for (const row of this.db.prepare("SELECT id, version, name, metadata_json, updated_at, author FROM lookup_table_versions").all()) {
+      const metadata = parse(row.metadata_json || "{}");
+      changes.push({
+        id: `lookup:${row.id}:${row.version}`,
+        object_type: "reference_data",
+        action: "reference_data_updated",
+        object_id: row.id,
+        object_name: row.name,
+        status: "versioned",
+        version: row.version,
+        author: row.author,
+        changed_at: row.updated_at,
+        campaign: campaignLabel(metadata),
+        metadata
+      });
+    }
+    for (const row of this.db.prepare("SELECT id, name, surface, status, metadata_json, updated_at, author FROM messages").all()) {
+      const metadata = parse(row.metadata_json || "{}");
+      changes.push({
+        id: `message:${row.id}:${row.updated_at}`,
+        object_type: "message",
+        action: "message_updated",
+        object_id: row.id,
+        object_name: row.name,
+        status: row.status,
+        version: null,
+        author: row.author,
+        changed_at: row.updated_at,
+        campaign: campaignLabel(metadata),
+        metadata: { ...metadata, surface: row.surface }
+      });
+    }
+    return changes
+      .filter((item) => item.changed_at)
+      .sort((left, right) => String(right.changed_at).localeCompare(String(left.changed_at)))
+      .slice(0, limit);
+  }
+
   createRuleSet(input, author) {
     const key = normalizeKey(input.decision_key || input.name);
     if (!key) badRequest("decision_key is required");
@@ -2022,6 +2099,12 @@ function rowToConditionBlock(row) {
     updated_at: row.updated_at,
     author: row.author
   };
+}
+
+function campaignLabel(metadata = {}) {
+  const campaign = typeof metadata?.campaign === "string" ? metadata.campaign : metadata?.campaign?.name || "";
+  const folder = metadata?.campaign?.folder || metadata?.folder || "";
+  return [campaign, folder].filter(Boolean).join(" / ");
 }
 
 function portableSettings(settings) {

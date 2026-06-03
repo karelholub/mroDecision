@@ -1712,6 +1712,10 @@ header {
   grid-column: 1 / -1;
 }
 
+.overview-change-card {
+  grid-column: 1 / -1;
+}
+
 .overview-card {
   min-width: 0;
   overflow: hidden;
@@ -1737,6 +1741,50 @@ header {
   display: grid;
   gap: 0;
   border-top: 1px solid var(--line);
+}
+
+.change-log-list {
+  display: grid;
+  gap: 0;
+  max-height: 360px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+}
+
+.change-log-item {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.8fr) minmax(180px, 1.2fr) minmax(120px, 0.8fr) minmax(150px, 0.9fr);
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.change-log-item span,
+.change-log-item strong,
+.change-log-item small,
+.change-log-item em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-style: normal;
+}
+
+.change-log-item span {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.change-log-item strong,
+.change-log-item small {
+  display: block;
+}
+
+.change-log-item small,
+.change-log-item em {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .rule-usage-header,

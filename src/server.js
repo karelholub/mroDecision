@@ -242,6 +242,12 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  if (req.method === "GET" && pathname === "/v1/change-log") {
+    requireScope(req, "viewer");
+    sendJson(res, 200, { changes: store.listChangeLog(Object.fromEntries(url.searchParams)) });
+    return;
+  }
+
   if (req.method === "POST" && pathname === "/v1/rule-sets") {
     requireScope(req, "editor");
     const body = await readJson(req, config.requestBodyLimitBytes);
