@@ -51,6 +51,15 @@ export function sendText(res, statusCode, body, contentType = "text/plain; chars
   res.end(body);
 }
 
+export function sendBuffer(res, statusCode, body, contentType = "application/octet-stream") {
+  res.writeHead(statusCode, {
+    "content-type": contentType,
+    "cache-control": "public, max-age=31536000, immutable",
+    ...responseHeaders(res)
+  });
+  res.end(body);
+}
+
 export function sendError(res, error) {
   sendJson(res, error.statusCode || 500, {
     error: error.code || "error",

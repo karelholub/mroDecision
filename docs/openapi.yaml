@@ -958,6 +958,106 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Message"
+  /v1/message-assets:
+    get:
+      summary: List managed message image assets
+      responses:
+        "200":
+          description: Managed message assets with usage references
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MessageAsset"
+    post:
+      summary: Upload a managed message image asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, content_type]
+              properties:
+                filename:
+                  type: string
+                content_type:
+                  type: string
+                  enum: [image/gif, image/jpeg, image/png, image/svg+xml, image/webp]
+                data_url:
+                  type: string
+                  description: Base64 data URL for browser uploads.
+                base64:
+                  type: string
+                  description: Raw base64 image content for scripted uploads.
+                metadata:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "201":
+          description: Uploaded message asset
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  asset:
+                    $ref: "#/components/schemas/MessageAsset"
+  /v1/message-assets/cleanup:
+    post:
+      summary: Delete unused managed message assets
+      responses:
+        "200":
+          description: Cleanup result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: integer
+                  assets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MessageAsset"
+  /v1/message-assets/{id}:
+    delete:
+      summary: Delete a managed message asset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: force
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Deleted asset
+  /v1/message-assets/{id}/content:
+    get:
+      summary: Fetch managed message asset image content
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Image bytes
+          content:
+            image/png: {}
+            image/jpeg: {}
+            image/webp: {}
+            image/gif: {}
+            image/svg+xml: {}
   /v1/messages/{id}:
     put:
       summary: Create or update an in-app message library item
@@ -2289,6 +2389,39 @@ components:
           type: string
         version:
           type: integer
+    MessageAsset:
+      type: object
+      required: [id, filename, content_type, size_bytes, content_url, used_by]
+      properties:
+        id:
+          type: string
+        filename:
+          type: string
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+        content_url:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+        used_by:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              surface:
+                type: string
     MessageVersionSummary:
       type: object
       properties:

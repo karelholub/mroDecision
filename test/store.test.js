@@ -337,6 +337,40 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(message.status, "active");
   assert.equal(store.getMessage("hero_offer").default_content.title, "Hello");
   assert.equal(store.listMessages({ surface: "homepage" })[0].id, "hero_offer");
+  const asset = store.createMessageAsset(
+    {
+      filename: "hero.png",
+      content_type: "image/png",
+      data_url: "data:image/png;base64,iVBORw0KGgo="
+    },
+    "tester"
+  );
+  assert.equal(asset.content_url, `/v1/message-assets/${asset.id}/content`);
+  store.upsertMessage(
+    "hero_offer",
+    {
+      name: "Hero Offer",
+      surface: "homepage",
+      default_content: { title: "Hello", body: "Offer body", image_url: asset.content_url },
+      content_schema: { title: "string", body: "string", image_url: "url" }
+    },
+    "tester"
+  );
+  assert.equal(store.listMessageAssets()[0].used_by[0].id, "hero_offer");
+  assert.throws(() => store.deleteMessageAsset(asset.id), /still used/);
+  assert.equal(store.cleanupMessageAssets().deleted, 0);
+  store.upsertMessage(
+    "hero_offer",
+    {
+      name: "Hero Offer",
+      surface: "homepage",
+      default_content: { title: "Hello", body: "Offer body", image_url: "" },
+      content_schema: { title: "string", body: "string", image_url: "url" }
+    },
+    "tester"
+  );
+  assert.equal(store.cleanupMessageAssets().deleted, 1);
+  assert.equal(store.listMessageAssets().length, 0);
 
   const savedProfile = store.upsertEvaluationProfile(
     "nbo_green_profile",

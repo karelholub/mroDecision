@@ -6,7 +6,7 @@ import { applyAssistantPlan, createAssistantPlan } from "./assistantPlanner.js";
 import { config } from "./config.js";
 import { createClientResultCache } from "./clientCache.js";
 import { evaluateDecision } from "./evaluator.js";
-import { notFound, readJson, sendError, sendJson, sendText, serveStatic } from "./http.js";
+import { notFound, readJson, sendBuffer, sendError, sendJson, sendText, serveStatic } from "./http.js";
 import { createProfileCache, profileCacheKey } from "./profileCache.js";
 import { createRateLimiter } from "./rateLimiter.js";
 import { createRequestMetrics } from "./requestMetrics.js";
@@ -377,6 +377,46 @@ async function routeApi(req, res, url) {
   if (req.method === "GET" && pathname === "/v1/messages") {
     requireScope(req, "viewer");
     sendJson(res, 200, { messages: store.listMessages(Object.fromEntries(url.searchParams)) });
+    return;
+  }
+
+  const messageAssetContentMatch = pathname.match(/^\/v1\/message-assets\/([^/]+)\/content$/);
+  if (messageAssetContentMatch && req.method === "GET") {
+    const asset = store.getMessageAsset(decodeURIComponent(messageAssetContentMatch[1]), true);
+    sendBuffer(res, 200, Buffer.from(asset.content_base64, "base64"), asset.content_type);
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/v1/message-assets") {
+    requireScope(req, "viewer");
+    sendJson(res, 200, { assets: store.listMessageAssets() });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/v1/message-assets") {
+    requireScope(req, "editor");
+    const asset = store.createMessageAsset(await readJson(req, config.batchRequestBodyLimitBytes), req.auth.name);
+    await store.save();
+    sendJson(res, 201, { asset });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/v1/message-assets/cleanup") {
+    requireScope(req, "editor");
+    const result = store.cleanupMessageAssets();
+    await store.save();
+    sendJson(res, 200, result);
+    return;
+  }
+
+  const messageAssetMatch = pathname.match(/^\/v1\/message-assets\/([^/]+)$/);
+  if (messageAssetMatch && req.method === "DELETE") {
+    requireScope(req, "editor");
+    const result = store.deleteMessageAsset(decodeURIComponent(messageAssetMatch[1]), {
+      force: url.searchParams.get("force") === "true"
+    });
+    await store.save();
+    sendJson(res, 200, result);
     return;
   }
 

@@ -4341,6 +4341,71 @@ header {
   overflow-wrap: anywhere;
 }
 
+.message-asset-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.message-asset-panel-head,
+.message-asset-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.message-asset-panel-head strong,
+.message-asset-panel-head span,
+.message-asset-copy strong,
+.message-asset-copy span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.message-asset-panel-head span,
+.message-asset-copy span,
+.message-asset-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.message-asset-list {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.message-asset-row {
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.message-asset-row.selected {
+  border-color: rgba(0, 145, 125, 0.55);
+  box-shadow: 0 0 0 2px rgba(0, 145, 125, 0.12);
+}
+
+.message-asset-thumb {
+  width: 52px;
+  height: 40px;
+  border-radius: 6px;
+  background: #e5eaf2 center / cover no-repeat;
+}
+
+.message-asset-copy {
+  min-width: 0;
+}
+
 .lookup-workbench {
   min-height: calc(100vh - 184px);
   min-width: 0;

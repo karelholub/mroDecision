@@ -1158,6 +1158,97 @@ export class Store {
       .map(rowToMessage);
   }
 
+  listMessageAssets() {
+    const rows = this.db
+      .prepare("SELECT id, filename, content_type, size_bytes, metadata_json, created_at, created_by FROM message_assets ORDER BY created_at DESC, id ASC")
+      .all();
+    const references = this.messageAssetReferences();
+    return rows.map((row) => rowToMessageAsset(row, references.get(row.id) || []));
+  }
+
+  createMessageAsset(input, author) {
+    const filename = String(input.filename || "message-asset").slice(0, 180);
+    const contentType = String(input.content_type || "").toLowerCase();
+    const allowedTypes = new Set(["image/gif", "image/jpeg", "image/png", "image/svg+xml", "image/webp"]);
+    if (!allowedTypes.has(contentType)) badRequest("Message asset must be a PNG, JPEG, WebP, GIF, or SVG image");
+    const base64 = imageBase64FromInput(input);
+    const sizeBytes = Buffer.byteLength(base64, "base64");
+    if (sizeBytes <= 0) badRequest("Message asset is empty");
+    if (sizeBytes > 2 * 1024 * 1024) badRequest("Message asset limit is 2 MB");
+    const now = createdAtNow();
+    const id = `msg_asset_${randomBytes(8).toString("hex")}`;
+    const asset = {
+      id,
+      filename,
+      content_type: contentType,
+      size_bytes: sizeBytes,
+      content_base64: base64,
+      metadata: isPlainObject(input.metadata) ? input.metadata : {},
+      created_at: now,
+      created_by: author
+    };
+    this.db
+      .prepare(
+        `INSERT INTO message_assets (
+          id, filename, content_type, size_bytes, content_base64, metadata_json, created_at, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        asset.id,
+        asset.filename,
+        asset.content_type,
+        asset.size_bytes,
+        asset.content_base64,
+        stringify(asset.metadata),
+        asset.created_at,
+        asset.created_by
+      );
+    return rowToMessageAsset(asset, []);
+  }
+
+  getMessageAsset(id, includeContent = false) {
+    const row = this.db.prepare("SELECT * FROM message_assets WHERE id = ?").get(id);
+    if (!row) notFound(`Message asset not found: ${id}`);
+    const references = this.messageAssetReferences().get(id) || [];
+    const asset = rowToMessageAsset(row, references);
+    if (includeContent) asset.content_base64 = row.content_base64;
+    return asset;
+  }
+
+  deleteMessageAsset(id, options = {}) {
+    const asset = this.getMessageAsset(id);
+    if (asset.used_by.length && !options.force) badRequest("Message asset is still used by messages");
+    this.db.prepare("DELETE FROM message_assets WHERE id = ?").run(id);
+    return { deleted: true, asset };
+  }
+
+  cleanupMessageAssets() {
+    const assets = this.listMessageAssets();
+    const unused = assets.filter((asset) => !asset.used_by.length);
+    for (const asset of unused) {
+      this.db.prepare("DELETE FROM message_assets WHERE id = ?").run(asset.id);
+    }
+    return { deleted: unused.length, assets: unused };
+  }
+
+  messageAssetReferences() {
+    const references = new Map();
+    const messages = this.listMessages();
+    const assetUrlPattern = /\/v1\/message-assets\/([^/]+)\/content/g;
+    for (const message of messages) {
+      const payload = stringify({
+        default_content: message.default_content || {},
+        metadata: message.metadata || {}
+      });
+      for (const match of payload.matchAll(assetUrlPattern)) {
+        const id = decodeURIComponent(match[1]);
+        if (!references.has(id)) references.set(id, []);
+        references.get(id).push({ id: message.id, name: message.name, surface: message.surface || "" });
+      }
+    }
+    return references;
+  }
+
   upsertMessage(id, input, author) {
     if (!id) badRequest("Message id is required");
     const existing = this.db.prepare("SELECT * FROM messages WHERE id = ?").get(id);
@@ -1730,6 +1821,17 @@ function migrate(db) {
       PRIMARY KEY (id, version)
     );
 
+    CREATE TABLE IF NOT EXISTS message_assets (
+      id TEXT PRIMARY KEY,
+      filename TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      content_base64 TEXT NOT NULL,
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      created_by TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS evaluation_profiles (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -1836,6 +1938,7 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_lookup_table_versions ON lookup_table_versions(id, version);
     CREATE INDEX IF NOT EXISTS idx_messages_surface_status ON messages(surface, status);
     CREATE INDEX IF NOT EXISTS idx_message_versions ON message_versions(id, version);
+    CREATE INDEX IF NOT EXISTS idx_message_assets_created ON message_assets(created_at);
     CREATE INDEX IF NOT EXISTS idx_evaluation_profiles_rule ON evaluation_profiles(decision_key, updated_at);
     CREATE INDEX IF NOT EXISTS idx_condition_blocks_name ON condition_blocks(name, id);
     CREATE INDEX IF NOT EXISTS idx_meiro_deliveries_time ON meiro_deliveries(attempted_at);
@@ -2290,6 +2393,20 @@ function rowToMessageVersionSummary(row) {
   };
 }
 
+function rowToMessageAsset(row, usedBy = []) {
+  return {
+    id: row.id,
+    filename: row.filename,
+    content_type: row.content_type,
+    size_bytes: Number(row.size_bytes || 0),
+    content_url: `/v1/message-assets/${encodeURIComponent(row.id)}/content`,
+    metadata: parse(row.metadata_json || "{}"),
+    created_at: row.created_at,
+    created_by: row.created_by,
+    used_by: usedBy
+  };
+}
+
 function rowToEvaluationProfile(row) {
   return {
     id: row.id,
@@ -2699,6 +2816,17 @@ function stringify(value) {
 
 function parse(value) {
   return JSON.parse(value || "null");
+}
+
+function imageBase64FromInput(input) {
+  if (input.data_url) {
+    const match = String(input.data_url).match(/^data:([^;,]+);base64,(.+)$/);
+    if (!match) badRequest("data_url must be a base64 data URL");
+    if (String(input.content_type || "").toLowerCase() !== match[1].toLowerCase()) badRequest("content_type must match the data URL media type");
+    return match[2];
+  }
+  if (input.base64) return String(input.base64).replace(/\s+/g, "");
+  badRequest("Message asset requires data_url or base64");
 }
 
 function hashToken(plaintext) {

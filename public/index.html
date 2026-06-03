@@ -1078,6 +1078,16 @@
                         <input id="message-image-file" type="file" accept="image/*" hidden />
                       </div>
                     </div>
+                    <div class="message-asset-panel">
+                      <div class="message-asset-panel-head">
+                        <div>
+                          <strong>Managed assets</strong>
+                          <span>Uploaded images are stored once and referenced by URL.</span>
+                        </div>
+                        <button type="button" id="cleanup-message-assets">Clean Unused</button>
+                      </div>
+                      <div id="message-asset-list" class="message-asset-list"></div>
+                    </div>
                     <label>
                       Body
                       <textarea id="message-preview-body" spellcheck="false"></textarea>

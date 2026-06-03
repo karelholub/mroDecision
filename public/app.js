@@ -104,6 +104,7 @@ let graphBuilder = { entry: "input", nodes: [] };
 let cachedRuleSets = [];
 let cachedLookupTables = [];
 let cachedMessages = [];
+let cachedMessageAssets = [];
 let cachedExperiments = [];
 let cachedExperimentSummary = {};
 let cachedMeiroDeliveries = [];
@@ -379,6 +380,7 @@ document.querySelector("#sync-message-json").addEventListener("click", syncMessa
 document.querySelector("#format-message-json").addEventListener("click", formatActiveMessageJson);
 document.querySelector("#upload-message-image")?.addEventListener("click", () => document.querySelector("#message-image-file")?.click());
 document.querySelector("#message-image-file")?.addEventListener("change", handleMessageImageFile);
+document.querySelector("#cleanup-message-assets")?.addEventListener("click", cleanupMessageAssets);
 document.querySelector("#message-image-dropzone")?.addEventListener("dragover", (event) => {
   event.preventDefault();
   event.currentTarget.classList.add("dragging");
@@ -3207,11 +3209,16 @@ async function loadMessages() {
   const target = document.querySelector("#message-list");
   target.innerHTML = header(["Preview", "Name", "Surface", "Status", "Updated", "Details"]);
   try {
-    const body = await api("/v1/messages");
+    const [body, assetBody] = await Promise.all([
+      api("/v1/messages"),
+      api("/v1/message-assets").catch(() => ({ assets: [] }))
+    ]);
     cachedMessages = body.messages || [];
+    cachedMessageAssets = assetBody.assets || [];
     renderMessageSurfaceOptions();
     renderMessageOutputOptions();
     renderMessageList();
+    renderMessageAssetList();
     renderBranchEditor();
     if (document.querySelector("#builder-mode")?.value === "graph") renderGraphBuilder();
   } catch (error) {
@@ -3298,6 +3305,44 @@ function messageCatalogPreview(item) {
       </div>
     </div>
   `;
+}
+
+function renderMessageAssetList() {
+  const target = document.querySelector("#message-asset-list");
+  if (!target) return;
+  if (!cachedMessageAssets.length) {
+    target.innerHTML = `<div class="message-asset-empty">No managed assets yet.</div>`;
+    return;
+  }
+  target.innerHTML = cachedMessageAssets.map((asset) => {
+    const usedBy = asset.used_by || [];
+    const isSelected = document.querySelector("#message-preview-image")?.value.trim() === asset.content_url;
+    return `
+      <div class="message-asset-row ${isSelected ? "selected" : ""}">
+        <div class="message-asset-thumb"${safeBackgroundImageStyle(asset.content_url)}></div>
+        <div class="message-asset-copy">
+          <strong>${escapeHtml(asset.filename || asset.id)}</strong>
+          <span>${escapeHtml(asset.content_type || "image")} · ${formatBytes(asset.size_bytes || 0)} · ${usedBy.length ? `Used by ${usedBy.length}` : "Unused"}</span>
+        </div>
+        <button type="button" data-use-message-asset="${escapeHtml(asset.content_url)}">${isSelected ? "Selected" : "Use"}</button>
+      </div>
+    `;
+  }).join("");
+  target.querySelectorAll("[data-use-message-asset]").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelector("#message-preview-image").value = button.dataset.useMessageAsset;
+      syncMessageJsonFromPreviewLive();
+      renderMessageAssetList();
+      messageOutput.textContent = "Image asset linked to message.";
+    });
+  });
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 102.4) / 10} KB`;
+  return `${Math.round(bytes / 1024 / 102.4) / 10} MB`;
 }
 
 function safeBackgroundImageStyle(value) {
@@ -3399,6 +3444,7 @@ function newMessage(options = {}) {
     priority: 0
   }, null, 2);
   syncMessagePreviewFromJson();
+  renderMessageAssetList();
   messageOutput.textContent = "Ready for a new message";
   if (messageVersionList) messageVersionList.innerHTML = row(["Save the message to start version history", "", "", ""]);
   if (messageVersionPreview) messageVersionPreview.innerHTML = "";
@@ -3424,6 +3470,7 @@ function loadMessage(id, messages) {
   document.querySelector("#message-metadata").value = JSON.stringify(message.metadata || {}, null, 2);
   syncMessageDeliveryFromMetadata(message.metadata || {});
   syncMessagePreviewFromJson();
+  renderMessageAssetList();
   messageOutput.textContent = `Loaded ${id}`;
   if (messageVersionPreview) messageVersionPreview.innerHTML = "";
   loadMessageVersions(id);
@@ -3453,6 +3500,7 @@ function duplicateSelectedMessage() {
   document.querySelector("#message-metadata").value = JSON.stringify(metadata, null, 2);
   syncMessageDeliveryFromMetadata(metadata);
   syncMessagePreviewFromJson();
+  renderMessageAssetList();
   messageOutput.textContent = `Duplicated ${source.id}. Review the copy and save it as ${copyId}.`;
 }
 
@@ -3816,11 +3864,13 @@ function renderMessagePreview() {
   ].join("");
   renderMessagePreviewHealth(health);
   renderMessageRuleLinks();
+  renderMessageAssetList();
 }
 
 function messagePreviewCardInnerHtml({ templateType = "banner", placement = "", surface = "", title = "Untitled message", body = "No message body yet.", footer = "", imageUrl = "", ctas = [] } = {}) {
+  const imageStyle = safeBackgroundImageStyle(imageUrl);
   return `
-    ${imageUrl ? `<div class="message-preview-image" style="background-image:url('${escapeHtml(imageUrl)}')"></div>` : ""}
+    ${imageStyle ? `<div class="message-preview-image"${imageStyle}></div>` : ""}
     <div class="message-preview-body">
       <span>${escapeHtml([templateType, placement || surface].filter(Boolean).join(" · "))}</span>
       <strong>${escapeHtml(title)}</strong>
@@ -3857,21 +3907,55 @@ function handleMessageImageFile(event) {
   event.target.value = "";
 }
 
-function loadMessageImageFile(file) {
+async function loadMessageImageFile(file) {
   if (!file.type.startsWith("image/")) {
     messageOutput.textContent = "Choose an image file.";
     return;
   }
-  const reader = new FileReader();
-  reader.onload = () => {
-    document.querySelector("#message-preview-image").value = reader.result;
+  messageOutput.textContent = `Uploading image: ${file.name}`;
+  try {
+    const dataUrl = await readFileAsDataUrl(file);
+    const body = await api("/v1/message-assets", {
+      method: "POST",
+      body: JSON.stringify({
+        filename: file.name,
+        content_type: file.type,
+        data_url: dataUrl,
+        metadata: {
+          source: "message_editor_upload",
+          message_id: selectedMessageId || document.querySelector("#message-id").value.trim() || ""
+        }
+      })
+    });
+    cachedMessageAssets = [body.asset, ...cachedMessageAssets.filter((asset) => asset.id !== body.asset.id)];
+    document.querySelector("#message-preview-image").value = body.asset.content_url;
     syncMessageJsonFromPreviewLive();
-    messageOutput.textContent = `Loaded image: ${file.name}`;
-  };
-  reader.onerror = () => {
-    messageOutput.textContent = "Could not read image file.";
-  };
-  reader.readAsDataURL(file);
+    renderMessageAssetList();
+    messageOutput.textContent = `Uploaded image asset: ${file.name}`;
+  } catch (error) {
+    messageOutput.textContent = error.message;
+  }
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Could not read image file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function cleanupMessageAssets() {
+  try {
+    const result = await api("/v1/message-assets/cleanup", { method: "POST", body: "{}" });
+    const body = await api("/v1/message-assets");
+    cachedMessageAssets = body.assets || [];
+    renderMessageAssetList();
+    messageOutput.textContent = `Cleaned ${result.deleted || 0} unused asset${result.deleted === 1 ? "" : "s"}.`;
+  } catch (error) {
+    messageOutput.textContent = error.message;
+  }
 }
 
 function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, placement, surface, title, body, footer, imageUrl, ctas }) {
