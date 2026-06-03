@@ -21,6 +21,7 @@ const messagePreview = document.querySelector("#message-preview");
 const messageDetailModal = document.querySelector("#message-detail-modal");
 const messageInspectorSummary = document.querySelector("#message-inspector-summary");
 const messageRuleLinks = document.querySelector("#message-rule-links");
+const messagePreviewHealth = document.querySelector("#message-preview-health");
 const lookupInspectorSummary = document.querySelector("#lookup-inspector-summary");
 const lookupHelpTable = document.querySelector("#lookup-help-table");
 const lookupHelpKey = document.querySelector("#lookup-help-key");
@@ -2491,14 +2492,17 @@ function renderMessagePreview() {
   if (!messagePreview) return;
   const templateType = messageTemplateType(document.querySelector("#message-template-type").value);
   const placement = document.querySelector("#message-placement").value.trim();
-  const title = document.querySelector("#message-preview-title").value.trim() || document.querySelector("#message-name").value.trim() || "Untitled message";
-  const body = document.querySelector("#message-preview-body").value.trim() || "No message body yet.";
+  const rawTitle = document.querySelector("#message-preview-title").value.trim();
+  const rawBody = document.querySelector("#message-preview-body").value.trim();
+  const title = rawTitle || document.querySelector("#message-name").value.trim() || "Untitled message";
+  const body = rawBody || "No message body yet.";
   const footer = document.querySelector("#message-preview-footer").value.trim();
   const imageUrl = document.querySelector("#message-preview-image").value.trim();
   const surface = document.querySelector("#message-surface").value.trim() || "-";
   const status = document.querySelector("#message-status").value || "active";
   const ttl = Number(document.querySelector("#message-frequency-ttl").value || 0);
   const expiresAt = document.querySelector("#message-expires-at").value;
+  const startsAt = document.querySelector("#message-starts-at").value;
   const ctas = [
     {
       label: document.querySelector("#message-primary-cta-label").value.trim(),
@@ -2511,6 +2515,23 @@ function renderMessagePreview() {
       style: "secondary"
     }
   ].filter((cta) => cta.label || cta.url);
+  const health = messagePreviewChecks({
+    status,
+    startsAt,
+    expiresAt,
+    ttl,
+    templateType,
+    placement,
+    surface,
+    title: rawTitle,
+    body: rawBody,
+    footer,
+    imageUrl,
+    ctas
+  });
+  messagePreview.dataset.health = health.level;
+  messagePreview.dataset.hasCta = ctas.length ? "true" : "false";
+  messagePreview.dataset.archived = status === "archived" ? "true" : "false";
   messagePreview.dataset.template = templateType;
   messagePreview.innerHTML = `
     ${imageUrl ? `<div class="message-preview-image" style="background-image:url('${escapeHtml(imageUrl)}')"></div>` : ""}
@@ -2524,15 +2545,70 @@ function renderMessagePreview() {
   `;
   messageInspectorSummary.innerHTML = [
     statusItem("Status", status),
+    statusItem("Preview health", messagePreviewHealthLabel(health)),
     statusItem("Template", templateType),
     statusItem("Placement", placement || "-"),
     statusItem("Surface", surface),
     statusItem("TTL", ttl > 0 ? `${ttl}s` : "No recheck hint"),
+    statusItem("Starts", startsAt ? formatTime(new Date(startsAt).toISOString()) : "Now"),
     statusItem("Expires", expiresAt ? formatTime(new Date(expiresAt).toISOString()) : "-"),
     statusItem("Message ID", document.querySelector("#message-id").value.trim() || "-"),
     statusItem("Schema fields", Object.keys(parseJsonSafe(document.querySelector("#message-schema").value || "{}")).length)
   ].join("");
+  renderMessagePreviewHealth(health);
   renderMessageRuleLinks();
+}
+
+function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, placement, surface, title, body, footer, imageUrl, ctas }) {
+  const checks = [];
+  const now = Date.now();
+  const starts = startsAt ? new Date(startsAt).getTime() : 0;
+  const expires = expiresAt ? new Date(expiresAt).getTime() : 0;
+  if (status === "archived") checks.push({ level: "warn", title: "Archived", detail: "Archived messages can still be referenced, but should not be used for new live experiences." });
+  if (starts && starts > now) checks.push({ level: "info", title: "Scheduled", detail: `Starts ${formatTime(new Date(starts).toISOString())}.` });
+  if (expires && expires < now) checks.push({ level: "error", title: "Expired", detail: `Expired ${formatTime(new Date(expires).toISOString())}.` });
+  if (starts && expires && expires <= starts) checks.push({ level: "error", title: "Invalid window", detail: "Expires at must be later than starts at." });
+  if (!title) checks.push({ level: "warn", title: "Missing title", detail: "Add a clear headline before launch." });
+  if (!body) checks.push({ level: "warn", title: "Missing body", detail: "Add supporting copy so the offer is understandable." });
+  if (!ctas.length) checks.push({ level: "warn", title: "No CTA", detail: "Most message templates should include at least one action." });
+  ctas.forEach((cta, index) => {
+    if (cta.label && !cta.url) checks.push({ level: "warn", title: `${index === 0 ? "Primary" : "Secondary"} CTA URL missing`, detail: "Add a URL or remove the CTA label." });
+    if (!cta.label && cta.url) checks.push({ level: "warn", title: `${index === 0 ? "Primary" : "Secondary"} CTA label missing`, detail: "Add a short CTA label." });
+  });
+  if (ttl <= 0) checks.push({ level: "info", title: "No recheck TTL", detail: "Clients will not receive a message-specific recheck hint." });
+  if (["modal", "toast"].includes(templateType) && body.length > 220) checks.push({ level: "warn", title: "Long compact copy", detail: "This may feel crowded in modal or toast placements." });
+  if (body.length > 320 || footer.length > 180 || title.length > 70) checks.push({ level: "warn", title: "Mobile clipping risk", detail: "Preview on mobile and shorten content if it pushes below the fold." });
+  if (templateType === "banner" && !imageUrl) checks.push({ level: "info", title: "No image", detail: "Banners can work without media, but a visual may improve recognition." });
+  if (!placement || surface === "-") checks.push({ level: "info", title: "Placement not fully defined", detail: "Surface and placement help client apps render this consistently." });
+  const level = checks.some((item) => item.level === "error") ? "error" : checks.some((item) => item.level === "warn") ? "warn" : "ok";
+  return {
+    level,
+    checks: checks.length ? checks : [{ level: "ok", title: "Ready for preview", detail: "No obvious content or delivery issues detected." }]
+  };
+}
+
+function renderMessagePreviewHealth(health) {
+  if (!messagePreviewHealth) return;
+  messagePreviewHealth.innerHTML = `
+    <div class="message-preview-health-head ${escapeHtml(health.level)}">
+      <strong>${escapeHtml(messagePreviewHealthLabel(health))}</strong>
+      <span>${escapeHtml(`${health.checks.length} check${health.checks.length === 1 ? "" : "s"}`)}</span>
+    </div>
+    <div class="message-preview-health-list">
+      ${health.checks.map((item) => `
+        <div class="message-preview-check ${escapeHtml(item.level)}">
+          <strong>${escapeHtml(item.title)}</strong>
+          <span>${escapeHtml(item.detail)}</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function messagePreviewHealthLabel(health) {
+  if (health.level === "error") return "Needs fixes";
+  if (health.level === "warn") return "Review recommended";
+  return "Looks ready";
 }
 
 function normalizeMessageCtas(content) {
