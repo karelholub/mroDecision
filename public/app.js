@@ -101,6 +101,7 @@ let cachedRuleSets = [];
 let cachedLookupTables = [];
 let cachedMessages = [];
 let cachedExperiments = [];
+let cachedExperimentSummary = {};
 let cachedMeiroDeliveries = [];
 let cachedSettings = {};
 let cachedSchema = [];
@@ -208,6 +209,7 @@ document.querySelectorAll("[data-lookup-drawer-tab]").forEach((button) => {
 document.querySelector("#refresh-metrics").addEventListener("click", loadMetrics);
 document.querySelector("#overview-window")?.addEventListener("change", loadMetrics);
 document.querySelector("#refresh-experiments")?.addEventListener("click", loadExperiments);
+document.querySelector("#experiment-filter-campaign")?.addEventListener("input", () => renderExperiments());
 document.querySelector("#quick-create-experiment")?.addEventListener("click", quickCreateExperiment);
 document.querySelector("#export-experiments-csv")?.addEventListener("click", exportExperimentsCsv);
 document.querySelector("#assistant-toggle")?.addEventListener("click", openAssistantPanel);
@@ -704,7 +706,8 @@ async function loadExperiments() {
   try {
     const body = await api("/v1/experiments");
     cachedExperiments = body.experiments || [];
-    renderExperiments(body);
+    cachedExperimentSummary = body.summary || {};
+    renderExperiments();
   } catch (error) {
     experimentList.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
     if (experimentDetail) experimentDetail.innerHTML = `<div class="status-line">Experiment reporting is unavailable.</div>`;
@@ -949,8 +952,9 @@ async function handleAssistantHandoffAction(event) {
   }
 }
 
-function renderExperiments(body) {
-  const summary = body.summary || {};
+function renderExperiments() {
+  const summary = cachedExperimentSummary || {};
+  const experiments = campaignFilteredExperiments();
   if (experimentKpis) {
     experimentKpis.innerHTML = [
       metricCard("Experiments", formatNumber(summary.total || 0), `${formatNumber(summary.running || 0)} running`, "EX", "teal"),
@@ -965,11 +969,21 @@ function renderExperiments(body) {
     experimentDetail.innerHTML = `<div class="status-line">Select an experiment to inspect variants and feedback.</div>`;
     return;
   }
-  experimentList.innerHTML = cachedExperiments.map((experiment, index) => experimentOpsCard(experiment, index)).join("");
+  if (!experiments.length) {
+    experimentList.innerHTML = `<div class="status-line">No experiments match the current campaign filter.</div>`;
+    experimentDetail.innerHTML = `<div class="status-line">Clear the campaign filter or select another campaign to inspect performance.</div>`;
+    return;
+  }
+  experimentList.innerHTML = experiments.map((experiment, index) => experimentOpsCard(experiment, index)).join("");
   experimentList.querySelectorAll("[data-experiment-index]").forEach((button) => {
-    button.addEventListener("click", () => renderExperimentDetail(cachedExperiments[Number(button.dataset.experimentIndex)]));
+    button.addEventListener("click", () => renderExperimentDetail(experiments[Number(button.dataset.experimentIndex)]));
   });
-  renderExperimentDetail(cachedExperiments[0]);
+  renderExperimentDetail(experiments[0]);
+}
+
+function campaignFilteredExperiments() {
+  const campaign = document.querySelector("#experiment-filter-campaign")?.value.trim().toLowerCase() || "";
+  return cachedExperiments.filter((experiment) => matchesDecisionCampaign(experiment.decision_key, campaign));
 }
 
 function experimentOpsCard(experiment, index) {
@@ -977,6 +991,7 @@ function experimentOpsCard(experiment, index) {
   const impressionCount = experiment.events?.impression?.count || 0;
   const conversionCount = experiment.events?.conversion?.count || 0;
   const allocationState = Math.round(Number(experiment.allocation_total || 0) * 1000) === 100000 ? "ok" : "warn";
+  const campaign = campaignForDecisionKey(experiment.decision_key);
   return `
     <button type="button" class="experiment-ops-card" data-experiment-index="${index}">
       <div class="experiment-ops-head">
@@ -990,6 +1005,7 @@ function experimentOpsCard(experiment, index) {
         <span>v${escapeHtml(experiment.version || "-")}</span>
         <span>${escapeHtml(experiment.assignment_unit || "profile")} assignment</span>
         <span class="${allocationState}">${formatNumber(experiment.allocation_total || 0)}% allocation</span>
+        ${campaign ? `<span>${escapeHtml(campaign)}</span>` : ""}
       </div>
       <div class="experiment-ops-bars">
         ${experiment.variants.map((variant) => variantAllocationBar(variant)).join("")}
@@ -1028,6 +1044,7 @@ function renderExperimentDetail(experiment) {
       ${statusItem("Status", experiment.experiment_status || "draft")}
       ${statusItem("Rule status", experiment.status || "-")}
       ${statusItem("Version", experiment.version || "-")}
+      ${statusItem("Campaign", campaignForDecisionKey(experiment.decision_key) || "-")}
       ${statusItem("Assignment", experiment.assignment_unit || "profile")}
       ${statusItem("Baseline", experiment.baseline_variant || "-")}
       ${statusItem("Winner", experiment.winner_variant ? `${experiment.winner_variant} ${formatLift(experiment.winner_lift_vs_baseline)}` : "-")}
@@ -1213,6 +1230,7 @@ function ruleUsageHeader() {
   return `
     <div class="rule-usage-header">
       <span>Rule</span>
+      <span>Campaign</span>
       <span>Requests</span>
       <span>Profiles</span>
       <span>Last Request</span>
@@ -1224,9 +1242,11 @@ function ruleUsageHeader() {
 
 function ruleUsageCard(item, total) {
   const share = Math.round((Number(item.requests || 0) / total) * 100);
+  const campaign = campaignForDecisionKey(item.decision_key) || "-";
   return `
     <button type="button" class="rule-usage-card" data-metric-rule-key="${escapeHtml(item.decision_key)}">
       <span>${escapeHtml(item.decision_key)}</span>
+      <em>${escapeHtml(campaign)}</em>
       <strong>${escapeHtml(formatNumber(item.requests))}</strong>
       <em>${escapeHtml(`${formatNumber(item.unique_profiles)} profiles`)}</em>
       <small>${escapeHtml(item.last_evaluated_at ? formatTime(item.last_evaluated_at) : "No recent traffic")}</small>
@@ -2712,7 +2732,7 @@ async function loadDecisionAudit() {
   try {
     const params = auditParams();
     const body = await api(`/v1/audit${params.toString() ? `?${params}` : ""}`);
-    const audit = body.audit || [];
+    const audit = filterAuditByCampaign(body.audit || []);
     target.innerHTML += audit.length
       ? audit.map((item, index) => row([formatTime(item.evaluated_at), item.decision_key, item.profile_key, item.result, item.matched_rules.join(", ") || "fallback"], { auditIndex: index })).join("")
       : row(["No audit entries match the current filters", "", "", "", ""]);
@@ -2738,7 +2758,7 @@ async function loadClientEventAudit() {
     params.set("limit", document.querySelector("#audit-limit").value || "100");
     params.set("recent_limit", document.querySelector("#audit-limit").value || "100");
     const body = await api(`/v1/metrics/client-events${params.toString() ? `?${params}` : ""}`);
-    const events = body.metrics?.recent_events || [];
+    const events = filterAuditByCampaign(body.metrics?.recent_events || []);
     target.innerHTML += events.length
       ? events.map((item, index) => row([
           formatTime(item.occurred_at),
@@ -2857,8 +2877,13 @@ function renderClientEventAuditDetail(entry) {
   auditDetail.textContent = JSON.stringify(entry, null, 2);
 }
 
+function filterAuditByCampaign(items) {
+  const campaign = document.querySelector("#audit-campaign")?.value.trim().toLowerCase() || "";
+  return campaign ? items.filter((item) => matchesDecisionCampaign(item.decision_key, campaign)) : items;
+}
+
 function clearAuditFilters() {
-  ["audit-decision-key", "audit-profile-key", "audit-result", "audit-event-type", "audit-event-object", "audit-surface", "audit-matched-rule", "audit-search", "audit-from", "audit-to"].forEach((id) => {
+  ["audit-decision-key", "audit-campaign", "audit-profile-key", "audit-result", "audit-event-type", "audit-event-object", "audit-surface", "audit-matched-rule", "audit-search", "audit-from", "audit-to"].forEach((id) => {
     document.querySelector(`#${id}`).value = "";
   });
   document.querySelector("#audit-limit").value = "100";
@@ -2926,7 +2951,12 @@ async function exportAuditCsv() {
     if (document.querySelector("#audit-mode")?.value === "client_events") {
       params.set("recent_limit", document.querySelector("#audit-limit").value || "100");
       const body = await api(`/v1/metrics/client-events${params.toString() ? `?${params}` : ""}`);
-      auditDetail.textContent = clientEventsToCsv(body.metrics?.recent_events || []);
+      auditDetail.textContent = clientEventsToCsv(filterAuditByCampaign(body.metrics?.recent_events || []));
+      return;
+    }
+    if (document.querySelector("#audit-campaign")?.value.trim()) {
+      const body = await api(`/v1/audit${params.toString() ? `?${params}` : ""}`);
+      auditDetail.textContent = decisionAuditToCsv(filterAuditByCampaign(body.audit || []));
       return;
     }
     params.set("format", "csv");
@@ -2939,6 +2969,15 @@ async function exportAuditCsv() {
   } catch (error) {
     auditDetail.textContent = error.message;
   }
+}
+
+function decisionAuditToCsv(audit) {
+  const columns = ["evaluated_at", "decision_key", "profile_key", "result", "matched_rules", "rule_version", "request_id"];
+  const lines = [columns.join(",")];
+  for (const item of audit) {
+    lines.push(columns.map((column) => csvCell(column === "matched_rules" ? (item.matched_rules || []).join("|") : item[column] ?? "")).join(","));
+  }
+  return lines.join("\n");
 }
 
 function clientEventsToCsv(events) {
@@ -4000,6 +4039,20 @@ function campaignSearchText(metadata = {}) {
     metadata?.campaign_id,
     metadata?.campaign?.id
   ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function ruleMetadataForDecision(decisionKey) {
+  return cachedRuleSets.find((item) => item.decision_key === decisionKey || item.key === decisionKey)?.metadata || {};
+}
+
+function campaignForDecisionKey(decisionKey) {
+  const metadata = ruleMetadataForDecision(decisionKey);
+  return [campaignValue(metadata), folderValue(metadata)].filter(Boolean).join(" / ");
+}
+
+function matchesDecisionCampaign(decisionKey, campaign) {
+  if (!campaign) return true;
+  return campaignSearchText(ruleMetadataForDecision(decisionKey)).includes(campaign);
 }
 
 function parseLiteral(value) {

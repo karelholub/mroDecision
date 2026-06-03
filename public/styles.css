@@ -1376,6 +1376,20 @@ header {
   padding: 6px 28px 6px 10px;
 }
 
+.compact-filter {
+  display: grid;
+  gap: 4px;
+  min-width: 180px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.compact-filter input {
+  min-height: 36px;
+  padding: 8px 10px;
+}
+
 .actions.left {
   justify-content: flex-start;
   margin: 8px 0 14px;
@@ -1728,7 +1742,7 @@ header {
 .rule-usage-header,
 .rule-usage-card {
   display: grid;
-  grid-template-columns: minmax(220px, 1.35fr) 96px 80px minmax(118px, 0.8fr) minmax(160px, 1fr) 52px;
+  grid-template-columns: minmax(180px, 1.25fr) minmax(120px, 0.9fr) 88px 82px minmax(118px, 0.8fr) minmax(140px, 1fr) 52px;
   gap: 14px;
   align-items: center;
 }

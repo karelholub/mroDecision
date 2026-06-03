@@ -683,6 +683,10 @@
             <p class="page-subtitle">Monitor experiment status, allocation, and client feedback by variant.</p>
           </div>
           <div class="actions">
+            <label class="compact-filter">
+              Campaign
+              <input id="experiment-filter-campaign" placeholder="Any campaign" />
+            </label>
             <button type="button" id="quick-create-experiment">New Experiment</button>
             <button id="refresh-experiments">Refresh</button>
             <button id="export-experiments-csv">Export CSV</button>
@@ -848,6 +852,10 @@
               <label>
                 Decision key
                 <input id="audit-decision-key" placeholder="next_best_offer" />
+              </label>
+              <label>
+                Campaign
+                <input id="audit-campaign" placeholder="retention" />
               </label>
               <label>
                 Profile key
