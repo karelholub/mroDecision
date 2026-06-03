@@ -58,7 +58,6 @@
                 <option value="720">30d</option>
               </select>
             </label>
-            <button type="button" id="quick-create-experiment-overview">New Experiment</button>
             <button id="refresh-metrics">Refresh</button>
           </div>
         </header>
@@ -138,7 +137,14 @@
             <p class="page-subtitle">Author, publish, and inspect decision logic.</p>
           </div>
           <div class="actions">
-            <button id="new-rule">New</button>
+            <label class="new-rule-picker" aria-label="Create rule type">
+              <select id="new-rule-type">
+                <option value="decision">Decision Rule</option>
+                <option value="experiment">Experiment</option>
+                <option value="inapp_message">In-app Message Rule</option>
+              </select>
+              <button id="new-rule">New</button>
+            </label>
             <button id="refresh-rules">Refresh</button>
           </div>
         </header>
@@ -183,7 +189,10 @@
                 <strong>Rule Details</strong>
                 <span>Edit rule attributes, inspect draft shape, and open logic authoring.</span>
               </div>
-              <button type="button" id="close-rule-detail">Close</button>
+              <div class="modal-header-actions">
+                <button type="button" id="toggle-rule-fullscreen">Full Screen</button>
+                <button type="button" id="close-rule-detail">Close</button>
+              </div>
             </div>
             <div class="rule-editor-pane">
             <div class="rule-editor-main">
@@ -197,6 +206,7 @@
                   <label>
                     Decision key
                     <input id="rule-key" required pattern="[a-z0-9_]+" />
+                    <small id="rule-key-lock-note" class="field-note">Locks after first save or publish because client integrations call this key.</small>
                   </label>
                 </div>
                 <div class="grid-three">
@@ -304,6 +314,7 @@
                       </div>
                     </div>
                     <div id="experiment-variant-builder" class="variant-builder-list"></div>
+                    <div id="experiment-weight-total" class="variant-weight-total"></div>
                   </div>
                   <details class="output-helper">
                     <summary>Advanced variants JSON</summary>
@@ -804,7 +815,10 @@
           <div class="audit-detail-pane editor">
             <div class="editor-title">Detail</div>
             <div id="audit-detail-summary" class="status-panel compact-status-panel"></div>
-            <pre id="audit-detail"></pre>
+            <details class="raw-payload-drawer">
+              <summary>Show raw payload</summary>
+              <pre id="audit-detail"></pre>
+            </details>
           </div>
         </div>
       </section>
@@ -917,6 +931,16 @@
                         Image URL
                         <input id="message-preview-image" placeholder="https://..." />
                       </label>
+                    </div>
+                    <div id="message-image-dropzone" class="message-image-dropzone">
+                      <div>
+                        <strong>Image asset</strong>
+                        <span id="message-image-guidance">Recommended size depends on template.</span>
+                      </div>
+                      <div class="actions">
+                        <button type="button" id="upload-message-image">Upload Image</button>
+                        <input id="message-image-file" type="file" accept="image/*" hidden />
+                      </div>
                     </div>
                     <label>
                       Body

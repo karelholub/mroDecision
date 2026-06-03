@@ -109,6 +109,7 @@ let cachedAssistantPlan = null;
 let selectedLookupMetadata = {};
 let conditionBlocksLoaded = false;
 let selectedConditionBlockId = null;
+let ruleSort = { key: "updated_at", direction: "desc" };
 const savedProfileStorageKey = "meiro-dee-evaluate-profiles";
 const defaultConditionBlockTemplates = [
   {
@@ -204,7 +205,6 @@ document.querySelectorAll("[data-lookup-drawer-tab]").forEach((button) => {
 
 document.querySelector("#refresh-metrics").addEventListener("click", loadMetrics);
 document.querySelector("#overview-window")?.addEventListener("change", loadMetrics);
-document.querySelector("#quick-create-experiment-overview")?.addEventListener("click", quickCreateExperiment);
 document.querySelector("#refresh-experiments")?.addEventListener("click", loadExperiments);
 document.querySelector("#quick-create-experiment")?.addEventListener("click", quickCreateExperiment);
 document.querySelector("#export-experiments-csv")?.addEventListener("click", exportExperimentsCsv);
@@ -281,7 +281,7 @@ document.querySelector("#eval-profile-key").addEventListener("input", () => {
   renderEvaluateValidation();
 });
 evalInput.addEventListener("input", () => renderEvaluateValidation());
-document.querySelector("#new-rule").addEventListener("click", newRule);
+document.querySelector("#new-rule").addEventListener("click", () => newRule({ type: document.querySelector("#new-rule-type")?.value || "decision" }));
 document.querySelector("#new-lookup").addEventListener("click", newLookup);
 document.querySelector("#new-message").addEventListener("click", newMessage);
 document.querySelector("#close-lookup-detail").addEventListener("click", closeLookupDetail);
@@ -297,6 +297,7 @@ document.querySelector("#sync-json").addEventListener("click", syncJsonFromBuild
 document.querySelector("#sync-json-modal").addEventListener("click", syncJsonFromBuilder);
 document.querySelector("#open-rule-builder").addEventListener("click", openRuleBuilder);
 document.querySelector("#close-rule-detail").addEventListener("click", closeRuleDetail);
+document.querySelector("#toggle-rule-fullscreen")?.addEventListener("click", toggleRuleFullscreen);
 document.querySelector("#close-rule-builder").addEventListener("click", closeRuleBuilder);
 document.querySelector("#done-rule-builder").addEventListener("click", () => {
   syncJsonFromBuilder();
@@ -359,6 +360,16 @@ document.querySelector("#lookup-editor").addEventListener("submit", saveLookup);
 document.querySelector("#message-editor").addEventListener("submit", saveMessage);
 document.querySelector("#sync-message-json").addEventListener("click", syncMessageJsonFromPreview);
 document.querySelector("#format-message-json").addEventListener("click", formatActiveMessageJson);
+document.querySelector("#upload-message-image")?.addEventListener("click", () => document.querySelector("#message-image-file")?.click());
+document.querySelector("#message-image-file")?.addEventListener("change", handleMessageImageFile);
+document.querySelector("#message-image-dropzone")?.addEventListener("dragover", (event) => {
+  event.preventDefault();
+  event.currentTarget.classList.add("dragging");
+});
+document.querySelector("#message-image-dropzone")?.addEventListener("dragleave", (event) => {
+  event.currentTarget.classList.remove("dragging");
+});
+document.querySelector("#message-image-dropzone")?.addEventListener("drop", handleMessageImageDrop);
 [
   "#message-name",
   "#message-surface",
@@ -380,6 +391,23 @@ document.querySelector("#format-message-json").addEventListener("click", formatA
 ].forEach((selector) => {
   document.querySelector(selector).addEventListener("input", renderMessagePreview);
   document.querySelector(selector).addEventListener("change", renderMessagePreview);
+});
+[
+  "#message-name",
+  "#message-surface",
+  "#message-template-type",
+  "#message-placement",
+  "#message-preview-title",
+  "#message-preview-body",
+  "#message-preview-footer",
+  "#message-preview-image",
+  "#message-primary-cta-label",
+  "#message-primary-cta-url",
+  "#message-secondary-cta-label",
+  "#message-secondary-cta-url"
+].forEach((selector) => {
+  document.querySelector(selector)?.addEventListener("input", syncMessageJsonFromPreviewLive);
+  document.querySelector(selector)?.addEventListener("change", syncMessageJsonFromPreviewLive);
 });
 document.querySelectorAll("[data-message-preview-device]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -983,6 +1011,7 @@ function renderExperimentDetail(experiment) {
     return;
   }
   const warnings = experimentOpsWarnings(experiment);
+  const winnerKey = experiment.significant_winner_variant || experiment.winner_variant || "";
   experimentDetail.innerHTML = `
     <div class="experiment-detail-summary">
       ${statusItem("Status", experiment.experiment_status || "draft")}
@@ -993,6 +1022,14 @@ function renderExperimentDetail(experiment) {
       ${statusItem("Winner", experiment.winner_variant ? `${experiment.winner_variant} ${formatLift(experiment.winner_lift_vs_baseline)}` : "-")}
       ${statusItem("Significance", experiment.significant_winner_variant ? `${experiment.significant_winner_variant} ${formatPercent(experiment.significant_winner_confidence || 0)}` : "No 95% winner")}
       ${statusItem("Last published", experiment.last_published_at ? formatTime(experiment.last_published_at) : "-")}
+    </div>
+    <div class="significance-methodology">
+      <strong>How significance is calculated</strong>
+      <span>DEE compares each non-baseline variant against the baseline with a two-sided z-test for conversion-rate difference. The confidence label is 1 - p-value; "95% significant" requires at least 95% confidence and the minimum exposure guardrail.</span>
+    </div>
+    <div class="experiment-detail-actions">
+      <button type="button" data-experiment-action="declare-winner" data-rule-key="${escapeHtml(experiment.decision_key)}" data-winner-key="${escapeHtml(winnerKey)}" ${winnerKey ? "" : "disabled"}>Declare Winner</button>
+      <span>${escapeHtml(winnerKey ? `Prepare a draft with ${winnerKey} at 100% allocation.` : "No winner candidate available yet.")}</span>
     </div>
     ${warnings.length ? `<div class="experiment-warning-list">${warnings.map((item) => `<div>${escapeHtml(item)}</div>`).join("")}</div>` : ""}
     <div class="experiment-variant-table">
@@ -1010,6 +1047,30 @@ function renderExperimentDetail(experiment) {
       ${experiment.variants.length ? experiment.variants.map((variant) => experimentVariantRow(variant)).join("") : `<div class="status-line">No variants configured.</div>`}
     </div>
   `;
+  experimentDetail.querySelector('[data-experiment-action="declare-winner"]')?.addEventListener("click", declareExperimentWinner);
+}
+
+async function declareExperimentWinner(event) {
+  const button = event.currentTarget;
+  const ruleKey = button.dataset.ruleKey;
+  const winnerKey = button.dataset.winnerKey;
+  if (!ruleKey || !winnerKey) return;
+  try {
+    switchView("rules");
+    await loadRule(ruleKey);
+    const experiment = readExperimentMetadata({ tolerateInvalid: true });
+    experiment.variants = (experiment.variants || []).map((variant) => ({
+      ...variant,
+      weight: variant.key === winnerKey ? 100 : 0
+    }));
+    experiment.status = "running";
+    setExperimentMetadata(experiment);
+    renderRuleInspector();
+    syncJsonFromBuilder();
+    editorOutput.textContent = `Winner draft prepared: ${winnerKey} now has 100% allocation. Save, submit review, and publish when ready.`;
+  } catch (error) {
+    experimentDetail.innerHTML += `<div class="status-line">${escapeHtml(error.message)}</div>`;
+  }
 }
 
 function experimentVariantRow(variant) {
@@ -1036,7 +1097,7 @@ function experimentSignificanceLabel(significance = {}) {
   if (!significance || significance.status === "baseline") return "Baseline";
   if (significance.p_value == null) return significance.note || "Insufficient data";
   const label = significance.significant ? "95% significant" : "Not significant";
-  return `${label} · ${formatPercent(significance.confidence || 0)}`;
+  return `${label} · ${formatPercent(significance.confidence || 0)} · p=${Number(significance.p_value).toFixed(3)}`;
 }
 
 function experimentOpsWarnings(experiment) {
@@ -1127,7 +1188,7 @@ function renderRuleUsage(items) {
   const target = document.querySelector("#metrics-rule-usage");
   const total = Math.max(1, items.reduce((sum, item) => sum + Number(item.requests || 0), 0));
   target.innerHTML = items.length
-    ? items.map((item) => ruleUsageCard(item, total)).join("")
+    ? `${ruleUsageHeader()}${items.map((item) => ruleUsageCard(item, total)).join("")}`
     : `<div class="status-line">No rule traffic yet</div>`;
   target.querySelectorAll("[data-metric-rule-key]").forEach((element) => {
     element.addEventListener("click", async () => {
@@ -1135,6 +1196,19 @@ function renderRuleUsage(items) {
       openOverviewRuleDetail();
     });
   });
+}
+
+function ruleUsageHeader() {
+  return `
+    <div class="rule-usage-header">
+      <span>Rule</span>
+      <span>Requests</span>
+      <span>Profiles</span>
+      <span>Last Request</span>
+      <span>Share</span>
+      <span>%</span>
+    </div>
+  `;
 }
 
 function ruleUsageCard(item, total) {
@@ -1355,6 +1429,15 @@ function openRuleDetail() {
 function closeRuleDetail() {
   if (!ruleDetailModal) return;
   ruleDetailModal.hidden = true;
+  ruleDetailModal.classList.remove("fullscreen");
+  const toggle = document.querySelector("#toggle-rule-fullscreen");
+  if (toggle) toggle.textContent = "Full Screen";
+}
+
+function toggleRuleFullscreen() {
+  if (!ruleDetailModal) return;
+  const expanded = ruleDetailModal.classList.toggle("fullscreen");
+  document.querySelector("#toggle-rule-fullscreen").textContent = expanded ? "Exit Full Screen" : "Full Screen";
 }
 
 function openRuleBuilder() {
@@ -1417,7 +1500,10 @@ function renderExperimentPanel() {
   if (!experimentPanel) return;
   const type = document.querySelector("#rule-type").value || "decision";
   experimentPanel.hidden = type !== "experiment";
-  if (type !== "experiment") return;
+  if (type !== "experiment") {
+    renderExperimentWeightTotal([]);
+    return;
+  }
   const experiment = readExperimentMetadata({ tolerateInvalid: true });
   const variants = Array.isArray(experiment.variants) ? experiment.variants : [];
   const total = variants.reduce((sum, variant) => sum + Number(variant.weight || 0), 0);
@@ -1435,6 +1521,7 @@ function renderExperimentPanel() {
     statusItem("Duration", planning.durationLabel),
     ...warnings.map((warning) => statusItem("Warning", warning))
   ].join("");
+  renderExperimentWeightTotal(variants);
   renderExperimentPlanningSummary(planning, warnings);
 }
 
@@ -1479,7 +1566,8 @@ function syncExperimentVariantBuilderFromJson() {
 function renderExperimentVariantBuilder(variants = []) {
   const target = document.querySelector("#experiment-variant-builder");
   if (!target) return;
-  target.innerHTML = (variants.length ? variants : defaultExperimentVariants()).map((variant, index) => `
+  const renderedVariants = variants.length ? variants : defaultExperimentVariants();
+  target.innerHTML = renderedVariants.map((variant, index) => `
     <div class="variant-builder-row" data-variant-index="${index}">
       <label>
         Variant key
@@ -1504,6 +1592,29 @@ function renderExperimentVariantBuilder(variants = []) {
       </div>
     </div>
   `).join("");
+  renderExperimentWeightTotal(renderedVariants);
+}
+
+function renderExperimentWeightTotal(variants = readExperimentVariantsFromBuilder()) {
+  const target = document.querySelector("#experiment-weight-total");
+  const saveButton = document.querySelector("#save-draft");
+  const type = document.querySelector("#rule-type")?.value || "decision";
+  const total = variants.reduce((sum, variant) => sum + Number(variant.weight || 0), 0);
+  const ok = Math.round(total * 1000) === 100000;
+  if (target) {
+    target.className = `variant-weight-total ${ok ? "ok" : "error"}`;
+    target.innerHTML = `
+      <strong>Total: ${escapeHtml(formatNumber(total))}%</strong>
+      <span>${ok ? "Allocation is valid." : "Variant weights must sum to 100% before saving."}</span>
+    `;
+  }
+  if (saveButton && type === "experiment") {
+    saveButton.disabled = !ok;
+    saveButton.title = ok ? "" : "Variant weights must sum to 100% before saving.";
+  } else if (saveButton) {
+    saveButton.disabled = false;
+    saveButton.title = "";
+  }
 }
 
 function variantOutputFields(outputs = {}) {
@@ -1572,6 +1683,7 @@ function syncExperimentVariantsFromBuilder(event) {
 
 function writeExperimentVariantsFromBuilder() {
   document.querySelector("#experiment-variants").value = JSON.stringify(readExperimentVariantsFromBuilder(), null, 2);
+  renderExperimentWeightTotal();
   renderRuleInspector();
 }
 
@@ -1758,9 +1870,12 @@ function renderExperimentPlanningSummary(planning, warnings = []) {
 
 function renderRuleList() {
   const target = document.querySelector("#rule-list");
-  target.innerHTML = header(["Name", "Decision key", "Status", "Type", "Priority", "Version", "Actions"]);
+  target.innerHTML = ruleListHeader();
   const filtered = filteredRuleSets();
   target.innerHTML += filtered.map(ruleSetRow).join("");
+  target.querySelectorAll("[data-rule-sort]").forEach((button) => {
+    button.addEventListener("click", () => setRuleSort(button.dataset.ruleSort));
+  });
   document.querySelectorAll("[data-rule-key]").forEach((element) => {
     element.addEventListener("click", () => loadRule(element.dataset.ruleKey));
   });
@@ -1770,6 +1885,32 @@ function renderRuleList() {
       runRuleAction(button.dataset.ruleAction, button.dataset.ruleKey);
     });
   });
+}
+
+function ruleListHeader() {
+  return `
+    <div class="row rule-list-header">
+      ${[
+        ["name", "Name"],
+        ["decision_key", "Decision key"],
+        ["status", "Status"],
+        ["type", "Type"],
+        ["priority", "Priority"],
+        ["version", "Version"],
+        ["updated_at", "Last Modified"]
+      ].map(([key, label]) => `<div><button type="button" data-rule-sort="${key}">${escapeHtml(label)}${ruleSort.key === key ? ` ${ruleSort.direction === "asc" ? "ASC" : "DESC"}` : ""}</button></div>`).join("")}
+      <div>Actions</div>
+    </div>
+  `;
+}
+
+function setRuleSort(key) {
+  if (ruleSort.key === key) {
+    ruleSort.direction = ruleSort.direction === "asc" ? "desc" : "asc";
+  } else {
+    ruleSort = { key, direction: key === "updated_at" ? "desc" : "asc" };
+  }
+  renderRuleList();
 }
 
 function filteredRuleSets() {
@@ -1784,7 +1925,21 @@ function filteredRuleSets() {
       && (!status || item.status === status)
       && (!type || item.type === type)
       && (!tag || tags.some((value) => value.includes(tag)));
-  });
+  }).sort(compareRuleSetsForSort);
+}
+
+function compareRuleSetsForSort(left, right) {
+  const direction = ruleSort.direction === "asc" ? 1 : -1;
+  const key = ruleSort.key;
+  const leftValue = key === "priority" || key === "version"
+    ? Number(left[key] || 0)
+    : String(left[key] || "").toLowerCase();
+  const rightValue = key === "priority" || key === "version"
+    ? Number(right[key] || 0)
+    : String(right[key] || "").toLowerCase();
+  if (leftValue < rightValue) return -1 * direction;
+  if (leftValue > rightValue) return 1 * direction;
+  return String(left.decision_key || "").localeCompare(String(right.decision_key || ""));
 }
 
 function ruleSetRow(item) {
@@ -1802,9 +1957,10 @@ function ruleSetRow(item) {
       item.type || "decision",
       item.priority ?? 0,
       item.version ?? "-",
+      item.updated_at ? formatTime(item.updated_at) : "-",
       actions
     ],
-    { key: item.decision_key, rawColumns: [6] }
+    { key: item.decision_key, rawColumns: [7] }
   );
 }
 
@@ -1845,7 +2001,7 @@ async function loadRule(key) {
     selectedPublishedMetadata = body.version?.metadata || null;
     document.querySelector("#rule-name").value = body.rule_set.name;
     document.querySelector("#rule-key").value = body.rule_set.decision_key;
-    document.querySelector("#rule-key").disabled = true;
+    updateRuleKeyLockState(true);
     document.querySelector("#rule-type").value = body.rule_set.type || "decision";
     document.querySelector("#rule-priority").value = body.rule_set.priority || 0;
     document.querySelector("#rule-surface").value = body.rule_set.surface || "";
@@ -1872,19 +2028,36 @@ function newRule(options = {}) {
   selectedRuleKey = null;
   selectedPublishedDefinition = null;
   selectedPublishedMetadata = null;
-  document.querySelector("#rule-name").value = "New Eligibility Rule";
-  document.querySelector("#rule-key").value = "new_eligibility_rule";
+  const type = options.type || "decision";
+  const defaults = ruleCreationDefaults(type);
+  document.querySelector("#rule-name").value = defaults.name;
+  document.querySelector("#rule-key").value = uniqueCopyKey(defaults.key);
   document.querySelector("#rule-key").disabled = false;
-  document.querySelector("#rule-type").value = "decision";
-  document.querySelector("#rule-priority").value = 0;
-  document.querySelector("#rule-surface").value = "";
-  document.querySelector("#rule-client-ttl").value = "";
-  document.querySelector("#rule-cache-scope").value = "none";
-  document.querySelector("#rule-description").value = "";
-  setExperimentMetadata({});
+  updateRuleKeyLockState(false);
+  document.querySelector("#rule-type").value = type;
+  document.querySelector("#rule-priority").value = defaults.priority;
+  document.querySelector("#rule-surface").value = defaults.surface;
+  document.querySelector("#rule-client-ttl").value = defaults.ttl;
+  document.querySelector("#rule-cache-scope").value = defaults.scope;
+  document.querySelector("#rule-description").value = defaults.description;
+  setExperimentMetadata(type === "experiment" ? {
+    status: "draft",
+    unit: "profile",
+    goal: {
+      event: "conversion",
+      minimum_detectable_lift_pct: 10,
+      baseline_conversion_rate_pct: 5
+    },
+    schedule: {
+      starts_at: "",
+      ends_at: "",
+      daily_eligible_profiles: 1000
+    },
+    variants: defaultExperimentVariants()
+  } : {});
   document.querySelector("#fallback-result").value = "ineligible";
   document.querySelector("#fallback-outputs").value = "{}";
-  versionList.innerHTML = row(["No published versions yet", "", "", ""]);
+  versionList.innerHTML = row(["No published versions yet", "", "", "", ""]);
   document.querySelector("#builder-mode").value = "branches";
   graphBuilder = starterGraphBuilder();
   builderBranches = [newBranch(1)];
@@ -1894,6 +2067,55 @@ function newRule(options = {}) {
   renderRuleInspector();
   editorOutput.textContent = "Ready for a new draft";
   if (!options.silent) openRuleDetail();
+}
+
+function ruleCreationDefaults(type) {
+  if (type === "experiment") {
+    return {
+      name: "New Experiment",
+      key: "new_experiment",
+      priority: 20,
+      surface: "homepage_hero",
+      ttl: "300",
+      scope: "profile",
+      description: "Experiment draft."
+    };
+  }
+  if (type === "inapp_message") {
+    return {
+      name: "New In-app Message Rule",
+      key: "new_inapp_message_rule",
+      priority: 10,
+      surface: "homepage_hero",
+      ttl: "300",
+      scope: "profile",
+      description: "In-app message eligibility rule."
+    };
+  }
+  return {
+    name: "New Decision Rule",
+    key: "new_decision_rule",
+    priority: 0,
+    surface: "",
+    ttl: "",
+    scope: "none",
+    description: ""
+  };
+}
+
+function updateRuleKeyLockState(locked) {
+  const input = document.querySelector("#rule-key");
+  const note = document.querySelector("#rule-key-lock-note");
+  if (!input) return;
+  input.disabled = Boolean(locked);
+  input.title = locked
+    ? "Decision keys are locked after save/publish because clients call this key directly."
+    : "Use lowercase letters, numbers, and underscores. This key locks after save.";
+  if (note) {
+    note.textContent = locked
+      ? "Locked because client integrations call this key. Duplicate the rule to create a new key."
+      : "Use lowercase letters, numbers, and underscores. This key locks after save.";
+  }
 }
 
 function quickCreateExperiment() {
@@ -1941,7 +2163,7 @@ async function saveDraft(event) {
       body: JSON.stringify(payload)
     });
     selectedRuleKey = body.rule_set.decision_key;
-    document.querySelector("#rule-key").disabled = true;
+    updateRuleKeyLockState(true);
     editorOutput.textContent = `${JSON.stringify(body, null, 2)}${formatSchemaWarnings(warnings)}`;
     await loadRules();
     renderRuleInspector();
@@ -1961,13 +2183,15 @@ async function submitSelectedRuleForReview() {
     validateDraft(payload.draft);
     const warnings = schemaReferenceWarnings(payload.draft);
     if (warnings.length) throw new Error(`Cannot submit with broken schema references:\n${warnings.map((item) => `- ${item}`).join("\n")}`);
+    const assignedTo = window.prompt("Assign review to (name or email)", "") || "";
+    const note = window.prompt("Submission comment", "Please review this draft.") || "";
     await api(`/v1/rule-sets/${encodeURIComponent(selectedRuleKey)}/draft`, {
       method: "PUT",
       body: JSON.stringify(payload)
     });
     const body = await api(`/v1/rule-sets/${encodeURIComponent(selectedRuleKey)}/submit-review`, {
       method: "POST",
-      body: JSON.stringify({ note: "Submitted from Rule Builder" })
+      body: JSON.stringify({ note, assigned_to: assignedTo })
     });
     editorOutput.textContent = JSON.stringify(body, null, 2);
     await loadRules();
@@ -1983,9 +2207,10 @@ async function approveSelectedRuleDraft() {
     return;
   }
   try {
+    const note = window.prompt("Approval comment", "Approved for publish.") || "";
     const body = await api(`/v1/rule-sets/${encodeURIComponent(selectedRuleKey)}/approve`, {
       method: "POST",
-      body: JSON.stringify({ note: "Approved from Rule Builder" })
+      body: JSON.stringify({ note })
     });
     editorOutput.textContent = JSON.stringify(body, null, 2);
     await loadRules();
@@ -2091,7 +2316,7 @@ function renderPublishReviewError(error) {
 
 function approvalLabel(approval = {}) {
   if (approval.status === "approved") return `Approved${approval.approved_by ? ` by ${approval.approved_by}` : ""}`;
-  if (approval.status === "submitted") return `Submitted${approval.requested_by ? ` by ${approval.requested_by}` : ""}`;
+  if (approval.status === "submitted") return `Submitted${approval.assigned_to ? ` to ${approval.assigned_to}` : approval.requested_by ? ` by ${approval.requested_by}` : ""}`;
   if (approval.status === "draft") return "Draft changed";
   return "Not submitted";
 }
@@ -2164,6 +2389,7 @@ function hasBlockingExperimentWarnings(payload) {
     warning.includes("missing a key") ||
     warning.includes("Duplicate variant key") ||
     warning.includes("invalid weight") ||
+    warning.includes("Variant weights must sum to 100%") ||
     warning.includes("No variants")
   );
 }
@@ -2204,11 +2430,11 @@ function changeType(left, right) {
 }
 
 async function loadVersions(key) {
-  versionList.innerHTML = header(["Version", "Published", "Author", "Actions"]);
+  versionList.innerHTML = header(["Version", "Published", "Author", "Approval", "Actions"]);
   try {
     const body = await api(`/v1/rule-sets/${encodeURIComponent(key)}/versions`);
     if (!body.versions.length) {
-      versionList.innerHTML += row(["No published versions yet", "", "", ""]);
+      versionList.innerHTML += row(["No published versions yet", "", "", "", ""]);
       return;
     }
     versionList.innerHTML += body.versions
@@ -2220,12 +2446,13 @@ async function loadVersions(key) {
             version.version,
             version.published_at,
             version.author,
+            approvalLabel(version.metadata?.approval || {}),
             [
               `<button type="button" data-version-action="diff" data-version="${version.version}">Diff</button>`,
               `<button type="button" data-version-action="rollback" data-version="${version.version}">Rollback</button>`
             ].join("")
           ],
-          { rawColumns: [3] }
+          { rawColumns: [4] }
         )
       )
       .join("");
@@ -2233,7 +2460,7 @@ async function loadVersions(key) {
       button.addEventListener("click", () => runVersionAction(button.dataset.versionAction, Number(button.dataset.version)));
     });
   } catch (error) {
-    versionList.innerHTML += row([error.message, "", "", ""]);
+    versionList.innerHTML += row([error.message, "", "", "", ""]);
   }
 }
 
@@ -3023,12 +3250,13 @@ function syncMessagePreviewFromJson() {
     document.querySelector("#message-secondary-cta-label").value = ctas[1]?.label || "";
     document.querySelector("#message-secondary-cta-url").value = ctas[1]?.url || "";
     renderMessagePreview();
+    renderMessageRuleLinks();
   } catch (error) {
     messageOutput.textContent = error.message;
   }
 }
 
-function syncMessageJsonFromPreview() {
+function syncMessageJsonFromPreview(options = {}) {
   const current = parseJsonSafe(document.querySelector("#message-content").value || "{}");
   const ctas = [
     {
@@ -3056,7 +3284,12 @@ function syncMessageJsonFromPreview() {
   content.cta_url = ctas[0]?.url || "";
   document.querySelector("#message-content").value = JSON.stringify(content, null, 2);
   renderMessagePreview();
-  messageOutput.textContent = "Message JSON synced";
+  if (!options.quiet) messageOutput.textContent = "Message JSON synced";
+}
+
+function syncMessageJsonFromPreviewLive() {
+  syncMessageJsonFromPreview({ quiet: true });
+  renderMessageRuleLinks();
 }
 
 function syncMessageDeliveryFromMetadata(metadata = {}) {
@@ -3139,6 +3372,7 @@ function renderMessagePreview() {
       style: "secondary"
     }
   ].filter((cta) => cta.label || cta.url);
+  renderMessageImageGuidance(templateType);
   const health = messagePreviewChecks({
     status,
     startsAt,
@@ -3181,6 +3415,49 @@ function renderMessagePreview() {
   ].join("");
   renderMessagePreviewHealth(health);
   renderMessageRuleLinks();
+}
+
+function renderMessageImageGuidance(templateType) {
+  const target = document.querySelector("#message-image-guidance");
+  if (!target) return;
+  const guidance = {
+    banner: "Recommended 1200 x 420 px, wide landscape.",
+    modal: "Recommended 800 x 600 px, centered subject.",
+    alert: "Optional small image, 600 x 240 px.",
+    inline: "Recommended 1000 x 560 px for in-page placements.",
+    toast: "Avoid large images; icon-sized assets work best."
+  };
+  target.textContent = guidance[templateType] || "Recommended size depends on template.";
+}
+
+function handleMessageImageDrop(event) {
+  event.preventDefault();
+  event.currentTarget.classList.remove("dragging");
+  const file = event.dataTransfer?.files?.[0];
+  if (file) loadMessageImageFile(file);
+}
+
+function handleMessageImageFile(event) {
+  const file = event.target.files?.[0];
+  if (file) loadMessageImageFile(file);
+  event.target.value = "";
+}
+
+function loadMessageImageFile(file) {
+  if (!file.type.startsWith("image/")) {
+    messageOutput.textContent = "Choose an image file.";
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    document.querySelector("#message-preview-image").value = reader.result;
+    syncMessageJsonFromPreviewLive();
+    messageOutput.textContent = `Loaded image: ${file.name}`;
+  };
+  reader.onerror = () => {
+    messageOutput.textContent = "Could not read image file.";
+  };
+  reader.readAsDataURL(file);
 }
 
 function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, placement, surface, title, body, footer, imageUrl, ctas }) {

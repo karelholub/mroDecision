@@ -44,12 +44,16 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(store.getVersion("campaign_suppression").definition.branches[0].id, "risk_segment");
   assert.equal(store.getVersion("campaign_suppression").metadata.owner, "growth");
 
-  const submitted = store.setRuleApproval("campaign_suppression", { status: "submitted", draft_hash: "hash-1", note: "ready" }, "editor");
+  const submitted = store.setRuleApproval("campaign_suppression", { status: "submitted", draft_hash: "hash-1", note: "ready", assigned_to: "approver@example.test" }, "editor");
   assert.equal(submitted.metadata.approval.status, "submitted");
   assert.equal(submitted.metadata.approval.requested_by, "editor");
+  assert.equal(submitted.metadata.approval.assigned_to, "approver@example.test");
+  assert.equal(submitted.metadata.approval.history.at(-1).note, "ready");
   const approved = store.setRuleApproval("campaign_suppression", { status: "approved", draft_hash: "hash-1" }, "publisher");
   assert.equal(approved.metadata.approval.status, "approved");
   assert.equal(approved.metadata.approval.approved_by, "publisher");
+  assert.equal(approved.metadata.approval.assigned_to, "approver@example.test");
+  assert.equal(approved.metadata.approval.history.at(-1).status, "approved");
 
   store.updateDraft(
     "campaign_suppression",

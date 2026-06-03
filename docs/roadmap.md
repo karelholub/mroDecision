@@ -188,12 +188,22 @@ Goal: make DEE safer and easier for marketing practitioners to operate without e
 - Add approval workflow with submit-for-review and approver-only publish.
 - Add dashboard date range, alert/anomaly indicators, clearer metric labels, and quick-create shortcuts.
 
-Status: started with experiment significance calculations, confidence labels, minimum-sample guidance, CSV export fields, a visual experiment variant builder with allocation controls and output fields, plain-language branch condition summaries with schema-aware inline field hints, branch output message linking with compact content previews, message-to-rule backlink inventory in the message editor, real-time message preview health states for lifecycle, content completeness, CTA readiness, and mobile clipping risk, approval workflow with submit-for-review, approver approval, and approved-draft publish gating, experiment quick-create shortcuts, goal configuration, scheduling, and sample-size guidance. Reference Data search/filtering, column quality checks, editable validation rules with advisory/warn/block save policies, Audit default date ranges, auto-load, matched-rule/payload filters, client feedback event mode with event type/object/surface filters, Message catalog status/template/surface/search filters, message duplication, surface suggestions, preview thumbnails, Overview range selection with operational alerts, and baseline alert history are implemented. Remaining items are pending.
+Status: started with experiment significance calculations, confidence labels, minimum-sample guidance, CSV export fields, significance-methodology copy, declare-winner draft preparation, a visual experiment variant builder with allocation controls, output fields, and blocking 100% weight validation, plain-language branch condition summaries with schema-aware inline field hints, branch output message linking with compact content previews, message-to-rule backlink inventory in the message editor, live message preview syncing, image upload/drop support for message assets, real-time message preview health states for lifecycle, content completeness, CTA readiness, and mobile clipping risk, approval workflow with review assignees, comments, history, submit-for-review, approver approval, and approved-draft publish gating, typed rule creation, decision-key locking after save, experiment quick-create shortcuts, goal configuration, scheduling, and sample-size guidance. Reference Data search/filtering, column quality checks, editable validation rules with advisory/warn/block save policies, Audit default date ranges, auto-load, matched-rule/payload filters, collapsible raw payload detail, client feedback event mode with event type/object/surface filters, Message catalog status/template/surface/search filters, message duplication, surface suggestions, preview thumbnails, Overview range selection with operational alerts, and baseline alert history are implemented.
+
+## Second-Pass User Feedback Roadmap
+
+1. Lock integration-critical identifiers: keep Decision Key editable only before first save; saved and published rule keys are immutable and must be duplicated for a new client-facing key. Implemented.
+2. Improve message authoring: support non-URL image assets, live preview syncing, richer CTA/footer content, and "used by rules" backlinks. Initial upload/drop, live sync, richer content, and backlinks are implemented; persistent asset storage is pending.
+3. Improve experiment operations: validate allocation weights to 100%, explain significance methodology, and add a Declare Winner flow that prepares a 100% allocation draft. Implemented.
+4. Improve governance: capture review assignee, submission comment, approval comment, and approval history. Implemented; notifications and task assignment integrations remain pending.
+5. Improve information architecture: typed rule creation, sortable rule list, raw audit payload collapsed by default, and optional full-screen rule editing. Implemented; campaign/folder grouping and page-mode editing remain pending.
+6. Improve marketer setup flows: add form-based profile builders for Evaluate, reusable frequency-cap blocks, campaign folders, and clearer campaign-level change logs. Pending.
 
 ## Recommended Next Sprint
 
-1. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.
-2. Add a managed-database adapter path for enterprise deployments.
-3. Add deeper message personalization helpers such as token suggestions and content-variant previews.
-4. Add expanded Meiro delivery retry guidance and failed-attempt replay tooling.
-5. Add persistent alert acknowledgement and incident notes for operator workflows.
+1. Build the Evaluate Profile Builder and reusable Frequency Cap Builder so non-technical users can create realistic tests without editing JSON.
+2. Add campaign/folder grouping across rules, messages, experiments, audit, and overview filters.
+3. Add a platform change log and persistent governance timeline for rule/message/experiment edits.
+4. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.
+5. Add a managed-database adapter path for enterprise deployments.
+6. Add persistent message asset storage and deeper personalization helpers such as token suggestions and content-variant previews.

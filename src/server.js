@@ -1271,6 +1271,9 @@ async function routeRuleSet(req, res, key, suffix) {
     validateRuleSetPayload(body, { partial: true });
     const existing = store.getRuleSet(key);
     if (!existing) notFoundError(`Rule set not found: ${key}`);
+    if (body.decision_key && body.decision_key !== key) {
+      badRequest("decision_key is immutable for saved rule sets. Duplicate the rule to create a new key.");
+    }
     validateRuleDefinition(body.draft || body.definition || {}, body.input_schema || existing.input_schema || {});
     const ruleSet = store.updateDraft(key, body, req.auth.name);
     await store.save();
@@ -1301,6 +1304,7 @@ async function routeRuleSet(req, res, key, suffix) {
     const updated = store.setRuleApproval(key, {
       status: "submitted",
       note: body.note || "",
+      assigned_to: body.assigned_to || "",
       draft_hash: draftHash(ruleSet.draft)
     }, req.auth.name);
     await store.save();

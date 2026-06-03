@@ -186,10 +186,21 @@ export class Store {
       status,
       draft_hash: input.draft_hash || existing.draft_hash || "",
       note: input.note || "",
+      assigned_to: status === "submitted" ? input.assigned_to || existing.assigned_to || "" : existing.assigned_to || "",
       requested_by: status === "submitted" ? author : existing.requested_by || "",
       requested_at: status === "submitted" ? now : existing.requested_at || "",
       approved_by: status === "approved" ? author : "",
-      approved_at: status === "approved" ? now : ""
+      approved_at: status === "approved" ? now : "",
+      history: [
+        ...(Array.isArray(existing.history) ? existing.history : []),
+        {
+          status,
+          by: author,
+          at: now,
+          note: input.note || "",
+          assigned_to: input.assigned_to || existing.assigned_to || ""
+        }
+      ].slice(-20)
     };
     const updated = {
       ...ruleSet,
