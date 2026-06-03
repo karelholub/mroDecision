@@ -170,10 +170,29 @@ Goal: let business users ask DEE to create rules, messages, and experiments whil
 
 Status: first-pass deterministic assistant planner, draft-only apply endpoint, conversational Assistant panel, message/rule/experiment draft generation, allocation checks, shared rule validation, schema-aware field matching, schema diagnostics, generated draft evaluation previews, affected-draft summaries, publish-review handoff, and non-blocking prompt disambiguation are implemented. LLM-backed planning remains.
 
+## Phase 8: Marketer Readiness and Governance
+
+Goal: make DEE safer and easier for marketing practitioners to operate without engineering support.
+
+- Add experiment statistical significance, confidence labels, and minimum-sample guidance.
+- Add a visual experiment variant builder with weight controls and output fields instead of raw JSON.
+- Add experiment creation shortcuts from Overview and Experiments.
+- Add goal/conversion metric configuration, scheduling, duration guidance, and sample-size estimates.
+- Add plain-language condition summaries and richer searchable schema pickers.
+- Add rule/message two-way linkage and navigation.
+- Add real-time message preview, status filters, duplicate actions, surface pickers, and preview thumbnails.
+- Add marketer-friendly Evaluate summaries, form-based payload editing, and real-profile lookup.
+- Add Reference Data search/filtering and column validation rules.
+- Add Audit default date ranges, auto-load, and event type filters.
+- Add approval workflow with submit-for-review and approver-only publish.
+- Add dashboard date range, alert/anomaly indicators, clearer metric labels, and quick-create shortcuts.
+
+Status: started with experiment significance calculations, confidence labels, minimum-sample guidance, and CSV export fields. Remaining items are pending.
+
 ## Recommended Next Sprint
 
-1. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and the same validation guardrails.
-2. Provide a Meiro personal API token (`mpat_...`) for full shared API metadata sync when catalog/audience metadata is needed beyond Profile API samples.
-3. Add managed database adapter implementation if production scale requires multiple replicas.
-4. Add optional graph-canvas minimap/snap guides if rule graphs become large in real customer use.
-5. Add promotion/message governance workflows such as approval queues if multiple teams need controlled publishing.
+1. Add visual experiment variant builder with weight controls and output fields.
+2. Add plain-language condition summaries and stronger schema picker UX.
+3. Add rule/message two-way linkage and real-time message preview improvements.
+4. Add approval workflow with submit-for-review and approver-only publish.
+5. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.

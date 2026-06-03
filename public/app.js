@@ -850,6 +850,7 @@ function renderExperimentDetail(experiment) {
       ${statusItem("Assignment", experiment.assignment_unit || "profile")}
       ${statusItem("Baseline", experiment.baseline_variant || "-")}
       ${statusItem("Winner", experiment.winner_variant ? `${experiment.winner_variant} ${formatLift(experiment.winner_lift_vs_baseline)}` : "-")}
+      ${statusItem("Significance", experiment.significant_winner_variant ? `${experiment.significant_winner_variant} ${formatPercent(experiment.significant_winner_confidence || 0)}` : "No 95% winner")}
       ${statusItem("Last published", experiment.last_published_at ? formatTime(experiment.last_published_at) : "-")}
     </div>
     ${warnings.length ? `<div class="experiment-warning-list">${warnings.map((item) => `<div>${escapeHtml(item)}</div>`).join("")}</div>` : ""}
@@ -861,6 +862,7 @@ function renderExperimentDetail(experiment) {
         <span>Conversions</span>
         <span>Conv. rate</span>
         <span>Lift</span>
+        <span>Confidence</span>
         <span>Impressions</span>
         <span>Last event</span>
       </div>
@@ -882,10 +884,18 @@ function experimentVariantRow(variant) {
       <span>${formatNumber(conversion.count || 0)} / ${formatNumber(conversion.unique_profiles || 0)} profiles</span>
       <span>${formatPercent(variant.conversion_rate || 0)}</span>
       <span>${formatLift(variant.lift_vs_baseline)}</span>
+      <span>${experimentSignificanceLabel(variant.significance)}</span>
       <span>${formatNumber(impression.count || 0)} / ${formatNumber(impression.unique_profiles || 0)} profiles</span>
       <span>${lastSeen ? formatTime(lastSeen) : "-"}</span>
     </div>
   `;
+}
+
+function experimentSignificanceLabel(significance = {}) {
+  if (!significance || significance.status === "baseline") return "Baseline";
+  if (significance.p_value == null) return significance.note || "Insufficient data";
+  const label = significance.significant ? "95% significant" : "Not significant";
+  return `${label} · ${formatPercent(significance.confidence || 0)}`;
 }
 
 function experimentOpsWarnings(experiment) {

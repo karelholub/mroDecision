@@ -804,11 +804,12 @@ aside input {
     minmax(130px, 0.85fr)
     minmax(90px, 0.55fr)
     minmax(80px, 0.5fr)
+    minmax(150px, 0.9fr)
     minmax(130px, 0.85fr)
     minmax(140px, 0.85fr);
   gap: 10px;
   align-items: center;
-  min-width: 1060px;
+  min-width: 1230px;
   padding: 10px 12px;
 }
 

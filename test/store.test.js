@@ -221,6 +221,60 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(treatmentVariant.events.conversion.count, 1);
   assert.equal(treatmentVariant.conversion_rate, 1);
   assert.equal(treatmentVariant.lift_vs_baseline, 1);
+  assert.equal(treatmentVariant.significance.status, "needs_sample");
+  assert.equal(experimentOps.experiments[0].significant_winner_variant, "");
+
+  for (let index = 0; index < 100; index += 1) {
+    store.addClientEvent({
+      event_id: `evt-control-exposure-${index}`,
+      event_type: "exposure",
+      occurred_at: "2026-05-27T01:00:00.000Z",
+      decision_key: "hero_experiment",
+      profile_key: `control-${index}`,
+      rule_version: 1,
+      variant_key: "control",
+      surface: "homepage"
+    });
+    if (index < 10) {
+      store.addClientEvent({
+        event_id: `evt-control-conversion-${index}`,
+        event_type: "conversion",
+        occurred_at: "2026-05-27T01:01:00.000Z",
+        decision_key: "hero_experiment",
+        profile_key: `control-${index}`,
+        rule_version: 1,
+        variant_key: "control",
+        surface: "homepage"
+      });
+    }
+    store.addClientEvent({
+      event_id: `evt-treatment-exposure-${index}`,
+      event_type: "exposure",
+      occurred_at: "2026-05-27T01:02:00.000Z",
+      decision_key: "hero_experiment",
+      profile_key: `treatment-${index}`,
+      rule_version: 1,
+      variant_key: "treatment",
+      surface: "homepage"
+    });
+    if (index < 30) {
+      store.addClientEvent({
+        event_id: `evt-treatment-conversion-${index}`,
+        event_type: "conversion",
+        occurred_at: "2026-05-27T01:03:00.000Z",
+        decision_key: "hero_experiment",
+        profile_key: `treatment-${index}`,
+        rule_version: 1,
+        variant_key: "treatment",
+        surface: "homepage"
+      });
+    }
+  }
+  const significantOps = store.getExperimentOperations();
+  const significantTreatment = significantOps.experiments[0].variants.find((variant) => variant.key === "treatment");
+  assert.equal(significantTreatment.significance.significant, true);
+  assert.equal(significantTreatment.significance.status, "significant_95");
+  assert.equal(significantOps.experiments[0].significant_winner_variant, "treatment");
 
   const table = store.replaceLookupTable("tiers", { key_column: "country", rows: [{ country: "CZ", tier: "A" }] }, "tester");
   assert.equal(table.version, 1);

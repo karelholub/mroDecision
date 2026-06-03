@@ -618,8 +618,10 @@ export class Store {
           variant.lift_vs_baseline = baseline && baseline.conversion_rate > 0
             ? (variant.conversion_rate - baseline.conversion_rate) / baseline.conversion_rate
             : null;
+          variant.significance = experimentSignificance(variant, baseline);
         }
         const winner = winnerVariant(variantMetrics);
+        const significantWinner = significantWinnerVariant(variantMetrics);
         return {
           name: rule.name,
           decision_key: rule.decision_key,
@@ -638,7 +640,9 @@ export class Store {
           conversion_rate: conversionRate(events),
           baseline_variant: baseline?.key || "",
           winner_variant: winner?.key || "",
-          winner_lift_vs_baseline: winner?.lift_vs_baseline ?? null
+          winner_lift_vs_baseline: winner?.lift_vs_baseline ?? null,
+          significant_winner_variant: significantWinner?.key || "",
+          significant_winner_confidence: significantWinner?.significance?.confidence || 0
         };
       });
     return {
@@ -1955,6 +1959,92 @@ function winnerVariant(variants = []) {
         Number(right.events?.conversion?.count || 0) - Number(left.events?.conversion?.count || 0) ||
         String(left.key || "").localeCompare(String(right.key || ""))
     )[0] || null;
+}
+
+function significantWinnerVariant(variants = []) {
+  return variants
+    .filter((variant) => !variant.baseline && variant.significance?.significant && Number(variant.lift_vs_baseline || 0) > 0)
+    .sort(
+      (left, right) =>
+        Number(right.significance.confidence || 0) - Number(left.significance.confidence || 0) ||
+        Number(right.lift_vs_baseline || 0) - Number(left.lift_vs_baseline || 0)
+    )[0] || null;
+}
+
+function experimentSignificance(variant = {}, baseline = null) {
+  const variantExposures = Number(variant.events?.exposure?.count || 0);
+  const variantConversions = Number(variant.events?.conversion?.count || 0);
+  const baselineExposures = Number(baseline?.events?.exposure?.count || 0);
+  const baselineConversions = Number(baseline?.events?.conversion?.count || 0);
+  const minimumExposuresPerVariant = 100;
+  const needsExposure = Math.max(0, minimumExposuresPerVariant - Math.min(variantExposures, baselineExposures));
+  if (!baseline || variant.baseline) {
+    return {
+      status: variant.baseline ? "baseline" : "not_comparable",
+      significant: false,
+      confidence: 0,
+      p_value: null,
+      minimum_exposures_per_variant: minimumExposuresPerVariant,
+      needs_more_exposures: Math.max(0, minimumExposuresPerVariant - variantExposures),
+      note: variant.baseline ? "Baseline variant" : "No baseline variant available"
+    };
+  }
+  if (!variantExposures || !baselineExposures) {
+    return {
+      status: "insufficient_data",
+      significant: false,
+      confidence: 0,
+      p_value: null,
+      minimum_exposures_per_variant: minimumExposuresPerVariant,
+      needs_more_exposures: needsExposure,
+      note: "Need exposures for both baseline and variant"
+    };
+  }
+  const p1 = variantConversions / variantExposures;
+  const p2 = baselineConversions / baselineExposures;
+  const pooled = (variantConversions + baselineConversions) / (variantExposures + baselineExposures);
+  const standardError = Math.sqrt(pooled * (1 - pooled) * ((1 / variantExposures) + (1 / baselineExposures)));
+  if (!standardError) {
+    return {
+      status: "no_variance",
+      significant: false,
+      confidence: 0,
+      p_value: null,
+      minimum_exposures_per_variant: minimumExposuresPerVariant,
+      needs_more_exposures: needsExposure,
+      note: "No conversion variance yet"
+    };
+  }
+  const z = (p1 - p2) / standardError;
+  const pValue = 2 * (1 - normalCdf(Math.abs(z)));
+  const confidence = Math.max(0, Math.min(1, 1 - pValue));
+  const significant = confidence >= 0.95 && needsExposure === 0;
+  return {
+    status: significant ? "significant_95" : needsExposure > 0 ? "needs_sample" : "not_significant",
+    significant,
+    confidence,
+    p_value: pValue,
+    z_score: z,
+    minimum_exposures_per_variant: minimumExposuresPerVariant,
+    needs_more_exposures: needsExposure,
+    note: significant
+      ? "Significant at 95% confidence"
+      : needsExposure > 0
+        ? `Need at least ${needsExposure} more exposures per compared variant before declaring significance`
+        : "Difference is not significant at 95% confidence"
+  };
+}
+
+function normalCdf(value) {
+  return 0.5 * (1 + erf(value / Math.SQRT2));
+}
+
+function erf(value) {
+  const sign = value < 0 ? -1 : 1;
+  const x = Math.abs(value);
+  const t = 1 / (1 + 0.3275911 * x);
+  const approximation = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return sign * approximation;
 }
 
 function isPlainObject(value) {

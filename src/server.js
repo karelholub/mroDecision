@@ -1411,6 +1411,10 @@ function experimentOperationsToCsv(operations) {
     "conversions",
     "conversion_rate",
     "lift_vs_baseline",
+    "confidence",
+    "p_value",
+    "significance_status",
+    "significance_note",
     "impressions",
     "last_event_at"
   ];
@@ -1437,6 +1441,10 @@ function experimentOperationsToCsv(operations) {
         conversions: conversion.count || 0,
         conversion_rate: decimalPercent(variant.conversion_rate),
         lift_vs_baseline: variant.lift_vs_baseline == null ? "" : decimalPercent(variant.lift_vs_baseline),
+        confidence: variant.significance?.confidence == null ? "" : decimalPercent(variant.significance.confidence),
+        p_value: variant.significance?.p_value == null ? "" : variant.significance.p_value,
+        significance_status: variant.significance?.status || "",
+        significance_note: variant.significance?.note || "",
         impressions: impression.count || 0,
         last_event_at: lastEventAt
       };
