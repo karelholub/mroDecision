@@ -1799,7 +1799,7 @@ header {
 .campaign-rollup-header,
 .campaign-rollup-item {
   display: grid;
-  grid-template-columns: minmax(180px, 1.25fr) minmax(170px, 1fr) 90px minmax(180px, 1fr) 86px minmax(130px, 0.8fr);
+  grid-template-columns: minmax(180px, 1.2fr) minmax(150px, 0.95fr) 82px minmax(150px, 0.95fr) 78px minmax(124px, 0.75fr) minmax(150px, 0.8fr);
   gap: 12px;
   align-items: center;
 }
@@ -1842,6 +1842,19 @@ header {
 
 .campaign-rollup-item mark {
   background: transparent;
+}
+
+.campaign-rollup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.campaign-rollup-actions button {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 12px;
 }
 
 .rule-usage-header,

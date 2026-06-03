@@ -732,6 +732,9 @@ function renderCampaignRollups(campaigns) {
   overviewCampaignRollups.innerHTML = campaigns.length
     ? `${campaignRollupHeader()}${campaigns.map(campaignRollupItem).join("")}`
     : `<div class="status-line">No campaigns configured yet.</div>`;
+  overviewCampaignRollups.querySelectorAll("[data-campaign-action]").forEach((button) => {
+    button.addEventListener("click", () => runCampaignBulkAction(button.dataset.campaign, button.dataset.campaignAction));
+  });
 }
 
 function campaignRollupHeader() {
@@ -743,6 +746,7 @@ function campaignRollupHeader() {
       <span>Feedback</span>
       <span>Conversion</span>
       <span>Last Activity</span>
+      <span>Actions</span>
     </div>
   `;
 }
@@ -770,8 +774,35 @@ function campaignRollupItem(item) {
       <span>${escapeHtml(feedbackSummary)}</span>
       <mark>${escapeHtml(formatPercent(item.conversion_rate || 0))}</mark>
       <small>${escapeHtml(item.last_activity_at ? formatTime(item.last_activity_at) : "-")}</small>
+      <div class="campaign-rollup-actions">
+        <button type="button" data-campaign-action="submit_review" data-campaign="${escapeHtml(item.campaign || "Unassigned")}">Review</button>
+        <button type="button" data-campaign-action="archive" data-campaign="${escapeHtml(item.campaign || "Unassigned")}">Archive</button>
+      </div>
     </div>
   `;
+}
+
+async function runCampaignBulkAction(campaign, action) {
+  try {
+    const preview = await api("/v1/campaigns/actions", {
+      method: "POST",
+      body: JSON.stringify({ campaign, action, dry_run: true })
+    });
+    const summary = preview.summary || {};
+    const label = action === "submit_review" ? "submit for review" : "archive";
+    const ok = window.confirm(`${label} ${summary.affected || 0} asset(s) in campaign "${campaign}"? ${summary.skipped || 0} item(s) will be skipped.`);
+    if (!ok) return;
+    const note = action === "submit_review" ? window.prompt("Submission comment", `Please review campaign ${campaign}.`) || "" : "";
+    const assignedTo = action === "submit_review" ? window.prompt("Assign review to", "") || "" : "";
+    const result = await api("/v1/campaigns/actions", {
+      method: "POST",
+      body: JSON.stringify({ campaign, action, dry_run: false, note, assigned_to: assignedTo })
+    });
+    overviewCampaignRollups.innerHTML = `<div class="status-line">Campaign action complete: ${escapeHtml(formatNumber(result.summary?.affected || 0))} affected, ${escapeHtml(formatNumber(result.summary?.skipped || 0))} skipped.</div>`;
+    await Promise.all([loadRules(), loadMessages(), loadMetrics()]);
+  } catch (error) {
+    overviewCampaignRollups.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
+  }
 }
 
 function renderChangeLog(changes) {

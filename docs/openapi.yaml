@@ -517,6 +517,23 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/CampaignOperation"
+  /v1/campaigns/actions:
+    post:
+      summary: Preview or apply a campaign bulk action
+      description: Supports dry-run previews and guarded execution for campaign-scoped review submission and archive actions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignActionRequest"
+      responses:
+        "200":
+          description: Campaign action preview or execution result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignActionResult"
   /v1/rule-sets/{key}:
     get:
       summary: Get a rule set with draft and latest published version
@@ -3094,6 +3111,54 @@ components:
           type: string
           format: date-time
           nullable: true
+    CampaignActionRequest:
+      type: object
+      required: [campaign, action]
+      properties:
+        campaign:
+          type: string
+        action:
+          type: string
+          enum: [submit_review, archive]
+        dry_run:
+          type: boolean
+          default: true
+        note:
+          type: string
+        assigned_to:
+          type: string
+    CampaignActionResult:
+      type: object
+      properties:
+        campaign:
+          type: string
+        action:
+          type: string
+        dry_run:
+          type: boolean
+        affected:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        skipped:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        summary:
+          type: object
+          properties:
+            affected:
+              type: integer
+            skipped:
+              type: integer
+            rules:
+              type: integer
+            experiments:
+              type: integer
+            messages:
+              type: integer
     Settings:
       type: object
       properties:

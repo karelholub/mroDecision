@@ -257,6 +257,16 @@ export class Store {
       .slice(0, Math.max(1, Math.min(50, Number(params.limit || 12))));
   }
 
+  listCampaignAssets(campaignName = "Unassigned") {
+    const target = campaignName || "Unassigned";
+    const belongsToCampaign = (metadata = {}) => (campaignLabel(metadata) || "Unassigned") === target;
+    return {
+      campaign: target,
+      rules: this.listRuleSets().filter((rule) => belongsToCampaign(rule.metadata)),
+      messages: this.listMessages().filter((message) => belongsToCampaign(message.metadata))
+    };
+  }
+
   createRuleSet(input, author) {
     const key = normalizeKey(input.decision_key || input.name);
     if (!key) badRequest("decision_key is required");

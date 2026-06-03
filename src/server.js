@@ -254,6 +254,15 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  if (req.method === "POST" && pathname === "/v1/campaigns/actions") {
+    requireScope(req, "editor");
+    const result = applyCampaignAction(await readJson(req, config.requestBodyLimitBytes), req.auth.name);
+    await store.save();
+    clientResultCache.clear();
+    sendJson(res, 200, result);
+    return;
+  }
+
   if (req.method === "POST" && pathname === "/v1/rule-sets") {
     requireScope(req, "editor");
     const body = await readJson(req, config.requestBodyLimitBytes);
@@ -1244,6 +1253,75 @@ function publicSettings(settings) {
   delete copy.meiro_api_token;
   delete copy.meiro_cli_token;
   return copy;
+}
+
+function applyCampaignAction(body = {}, author = "admin") {
+  const campaign = body.campaign || "Unassigned";
+  const action = body.action || "";
+  const dryRun = body.dry_run !== false;
+  if (!["submit_review", "archive"].includes(action)) badRequest("Unsupported campaign action");
+  const assets = store.listCampaignAssets(campaign);
+  const result = {
+    campaign: assets.campaign,
+    action,
+    dry_run: dryRun,
+    affected: [],
+    skipped: []
+  };
+  const affect = (item) => result.affected.push(item);
+  const skip = (item) => result.skipped.push(item);
+
+  if (action === "submit_review") {
+    for (const rule of assets.rules) {
+      if (rule.status === "archived") {
+        skip({ object_type: "rule", object_id: rule.decision_key, reason: "archived" });
+        continue;
+      }
+      affect({ object_type: rule.type === "experiment" ? "experiment" : "rule", object_id: rule.decision_key, action: "submit_review" });
+      if (!dryRun) {
+        const fullRule = store.getRuleSet(rule.decision_key);
+        store.setRuleApproval(rule.decision_key, {
+          status: "submitted",
+          note: body.note || `Bulk submitted from campaign ${assets.campaign}`,
+          assigned_to: body.assigned_to || "",
+          draft_hash: draftHash(fullRule.draft)
+        }, author);
+      }
+    }
+    for (const message of assets.messages) {
+      skip({ object_type: "message", object_id: message.id, reason: "messages_do_not_use_rule_review" });
+    }
+  }
+
+  if (action === "archive") {
+    for (const rule of assets.rules) {
+      if (rule.status === "archived") {
+        skip({ object_type: "rule", object_id: rule.decision_key, reason: "already_archived" });
+        continue;
+      }
+      affect({ object_type: rule.type === "experiment" ? "experiment" : "rule", object_id: rule.decision_key, action: "archive" });
+      if (!dryRun) store.archiveRuleSet(rule.decision_key, author);
+    }
+    for (const message of assets.messages) {
+      if (message.status === "archived") {
+        skip({ object_type: "message", object_id: message.id, reason: "already_archived" });
+        continue;
+      }
+      affect({ object_type: "message", object_id: message.id, action: "archive" });
+      if (!dryRun) store.upsertMessage(message.id, { ...message, status: "archived" }, author);
+    }
+  }
+
+  return {
+    ...result,
+    summary: {
+      affected: result.affected.length,
+      skipped: result.skipped.length,
+      rules: result.affected.filter((item) => item.object_type === "rule").length,
+      experiments: result.affected.filter((item) => item.object_type === "experiment").length,
+      messages: result.affected.filter((item) => item.object_type === "message").length
+    }
+  };
 }
 
 async function routeRuleSet(req, res, key, suffix) {
