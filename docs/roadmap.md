@@ -187,12 +187,12 @@ Goal: make DEE safer and easier for marketing practitioners to operate without e
 - Add approval workflow with submit-for-review and approver-only publish.
 - Add dashboard date range, alert/anomaly indicators, clearer metric labels, and quick-create shortcuts.
 
-Status: started with experiment significance calculations, confidence labels, minimum-sample guidance, CSV export fields, a visual experiment variant builder with allocation controls and output fields, plain-language branch condition summaries with schema-aware inline field hints, branch output message linking with compact content previews, message-to-rule backlink inventory in the message editor, real-time message preview health states for lifecycle, content completeness, CTA readiness, and mobile clipping risk, approval workflow with submit-for-review, approver approval, and approved-draft publish gating, experiment quick-create shortcuts, goal configuration, scheduling, and sample-size guidance. Reference Data search/filtering, column quality checks, editable validation rules with advisory/warn/block save policies, Audit default date ranges, auto-load, matched-rule/payload filters, client feedback event mode with event type/object/surface filters, Message catalog status/template/surface/search filters, message duplication, and Overview range selection with operational alerts are implemented. Remaining items are pending.
+Status: started with experiment significance calculations, confidence labels, minimum-sample guidance, CSV export fields, a visual experiment variant builder with allocation controls and output fields, plain-language branch condition summaries with schema-aware inline field hints, branch output message linking with compact content previews, message-to-rule backlink inventory in the message editor, real-time message preview health states for lifecycle, content completeness, CTA readiness, and mobile clipping risk, approval workflow with submit-for-review, approver approval, and approved-draft publish gating, experiment quick-create shortcuts, goal configuration, scheduling, and sample-size guidance. Reference Data search/filtering, column quality checks, editable validation rules with advisory/warn/block save policies, Audit default date ranges, auto-load, matched-rule/payload filters, client feedback event mode with event type/object/surface filters, Message catalog status/template/surface/search filters, message duplication, surface suggestions, preview thumbnails, and Overview range selection with operational alerts are implemented. Remaining items are pending.
 
 ## Recommended Next Sprint
 
 1. Add deeper feedback-delivery drilldowns for Meiro collector/webhook attempts.
-2. Add preview thumbnails and richer surface pickers for Messages.
-3. Add dashboard anomaly baselines and alert history beyond the current live alert strip.
-4. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.
-5. Add a managed-database adapter path for enterprise deployments.
+2. Add dashboard anomaly baselines and alert history beyond the current live alert strip.
+3. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.
+4. Add a managed-database adapter path for enterprise deployments.
+5. Add deeper message personalization helpers such as token suggestions and content-variant previews.

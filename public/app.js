@@ -510,6 +510,7 @@ async function loadRules() {
     renderRuleList();
     renderRuleInspector();
     renderMessageRuleLinks();
+    renderMessageSurfaceOptions();
   } catch (error) {
     const target = document.querySelector("#rule-list");
     target.innerHTML = header(["Name", "Decision key", "Status", "Version", "Actions"]);
@@ -2693,10 +2694,11 @@ function referenceColumnsFromRowsForTable(table) {
 
 async function loadMessages() {
   const target = document.querySelector("#message-list");
-  target.innerHTML = header(["Name", "ID", "Surface", "Status", "Updated", "Content"]);
+  target.innerHTML = header(["Preview", "Name", "Surface", "Status", "Updated", "Details"]);
   try {
     const body = await api("/v1/messages");
     cachedMessages = body.messages || [];
+    renderMessageSurfaceOptions();
     renderMessageOutputOptions();
     renderMessageList();
     renderBranchEditor();
@@ -2730,7 +2732,7 @@ function renderMessageList() {
       (!template || itemTemplate === template) &&
       (!surface || String(item.surface || "").toLowerCase().includes(surface));
   });
-  target.innerHTML = header(["Name", "ID", "Surface", "Status", "Updated", "Content"]);
+  target.innerHTML = header(["Preview", "Name", "Surface", "Status", "Updated", "Details"]);
   target.innerHTML += filtered.length
     ? filtered.map((item) => messageCatalogRow(item)).join("")
     : row(["No messages match the current filters", "", "", "", "", ""]);
@@ -2741,17 +2743,87 @@ function renderMessageList() {
 
 function messageCatalogRow(item) {
   const content = item.default_content || {};
-  const title = content.title || content.headline || "-";
-  const template = content.template_type || item.metadata?.template_type || "-";
-  const cta = content.ctas?.[0]?.label || content.cta_label;
-  return row([
-    item.name,
+  const title = content.title || content.headline || item.name || "-";
+  const template = messageTemplateType(content.template_type || item.metadata?.template_type || "banner");
+  const ctas = normalizeMessageCtas(content);
+  const lifecycle = item.metadata?.lifecycle || item.metadata?.delivery || {};
+  const expiresAt = lifecycle.expires_at || item.metadata?.expires_at;
+  const details = [
     item.id,
+    template,
+    ctas.length ? `${ctas.length} CTA${ctas.length === 1 ? "" : "s"}` : "No CTA",
+    expiresAt ? `Expires ${formatTime(expiresAt)}` : ""
+  ].filter(Boolean).join(" · ");
+  return row([
+    messageCatalogPreview(item),
+    item.name,
     item.surface || "-",
     item.status || "active",
     item.updated_at ? formatTime(item.updated_at) : "-",
-    `${template} · ${title}${cta ? ` · ${cta}` : ""}`
-  ], { messageId: item.id });
+    `${title} · ${details}`
+  ], { messageId: item.id, rawColumns: [0] });
+}
+
+function messageCatalogPreview(item) {
+  const content = item.default_content || {};
+  const template = messageTemplateType(content.template_type || item.metadata?.template_type || "banner");
+  const title = content.title || content.headline || item.name || "Untitled";
+  const body = content.body || content.text || content.description || "";
+  const imageUrl = content.image_url || content.image || "";
+  const cta = normalizeMessageCtas(content)[0];
+  const imageStyle = safeBackgroundImageStyle(imageUrl);
+  return `
+    <div class="message-thumb ${imageStyle ? "has-image" : ""}" data-template="${escapeHtml(template)}">
+      ${imageStyle ? `<div class="message-thumb-image"${imageStyle}></div>` : ""}
+      <div class="message-thumb-body">
+        <span>${escapeHtml(template)}</span>
+        <strong>${escapeHtml(title)}</strong>
+        ${body ? `<small>${escapeHtml(body)}</small>` : ""}
+        ${cta?.label ? `<em>${escapeHtml(cta.label)}</em>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function safeBackgroundImageStyle(value) {
+  if (!value) return "";
+  try {
+    const parsed = new URL(String(value), window.location.href);
+    if (!["http:", "https:", "data:"].includes(parsed.protocol)) return "";
+    const escaped = parsed.href.replace(/'/g, "%27").replace(/["\\\n\r]/g, "");
+    return ` style="background-image:url('${escapeHtml(escaped)}')"`;
+  } catch {
+    return "";
+  }
+}
+
+function renderMessageSurfaceOptions() {
+  const list = document.querySelector("#message-surface-options");
+  if (!list) return;
+  const defaults = [
+    "homepage_hero",
+    "homepage_banner",
+    "homepage_modal",
+    "product_detail",
+    "checkout",
+    "account_dashboard",
+    "inapp_alert",
+    "inapp_modal",
+    "inapp_toast",
+    "email",
+    "mobile_push"
+  ];
+  const surfaces = [
+    ...defaults,
+    ...cachedMessages.map((item) => item.surface),
+    ...cachedRuleSets.map((item) => item.surface),
+    ...cachedMessages.map((item) => item.default_content?.placement)
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  list.innerHTML = [...new Set(surfaces)].sort((a, b) => a.localeCompare(b))
+    .map((value) => `<option value="${escapeHtml(value)}"></option>`)
+    .join("");
 }
 
 function openMessageDetail() {

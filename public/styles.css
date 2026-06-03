@@ -2917,24 +2917,124 @@ header {
 
 .message-list .row {
   grid-template-columns:
-    minmax(180px, 1.2fr)
-    minmax(130px, 0.8fr)
-    minmax(140px, 0.8fr)
-    minmax(90px, 0.55fr)
-    minmax(140px, 0.8fr)
-    minmax(180px, 1.2fr);
-  gap: 10px;
-  align-items: start;
+    minmax(180px, 1.3fr)
+    minmax(130px, 0.95fr)
+    minmax(105px, 0.7fr)
+    minmax(76px, 0.45fr)
+    minmax(112px, 0.7fr)
+    minmax(145px, 1fr);
+  gap: 12px;
+  align-items: center;
 }
 
 .message-list .row > div:first-child {
-  font-weight: 700;
+  min-width: 0;
 }
 
 .message-list .row > div:nth-child(n+2),
 .message-list .row > div:nth-child(6) {
   color: var(--muted);
   overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.message-list .row > div:nth-child(2) {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.message-list .row > div:nth-child(4) {
+  align-self: center;
+  justify-self: start;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-soft);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.message-thumb {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 76px;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
+.message-thumb.has-image {
+  grid-template-columns: 58px minmax(0, 1fr);
+}
+
+.message-thumb[data-template="alert"] {
+  border-left: 4px solid #d99f08;
+  background: #fffbeb;
+}
+
+.message-thumb[data-template="modal"] {
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.11);
+}
+
+.message-thumb[data-template="toast"] {
+  border-radius: 10px;
+}
+
+.message-thumb-image {
+  min-width: 0;
+  background-color: #e5e7eb;
+  background-position: center;
+  background-size: cover;
+}
+
+.message-thumb-body {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.message-thumb-body span,
+.message-thumb-body small,
+.message-thumb-body em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-thumb-body span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.message-thumb-body strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-thumb-body small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.message-thumb-body em {
+  color: #047857;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
 }
 
 .message-detail-modal {
