@@ -194,7 +194,9 @@ document.querySelectorAll("[data-lookup-drawer-tab]").forEach((button) => {
 });
 
 document.querySelector("#refresh-metrics").addEventListener("click", loadMetrics);
+document.querySelector("#quick-create-experiment-overview")?.addEventListener("click", quickCreateExperiment);
 document.querySelector("#refresh-experiments")?.addEventListener("click", loadExperiments);
+document.querySelector("#quick-create-experiment")?.addEventListener("click", quickCreateExperiment);
 document.querySelector("#export-experiments-csv")?.addEventListener("click", exportExperimentsCsv);
 document.querySelector("#assistant-toggle")?.addEventListener("click", openAssistantPanel);
 document.querySelector("#assistant-fab")?.addEventListener("click", openAssistantPanel);
@@ -313,7 +315,7 @@ document.querySelector("#rule-type").addEventListener("change", () => {
   renderBranchEditor();
   syncJsonFromBuilder();
 });
-["#experiment-status", "#experiment-unit"].forEach((selector) => {
+["#experiment-status", "#experiment-unit", "#experiment-goal-event", "#experiment-goal-lift", "#experiment-baseline-rate", "#experiment-daily-traffic", "#experiment-starts-at", "#experiment-ends-at"].forEach((selector) => {
   document.querySelector(selector).addEventListener("input", renderRuleInspector);
   document.querySelector(selector).addEventListener("change", renderRuleInspector);
 });
@@ -1298,19 +1300,30 @@ function renderExperimentPanel() {
   const total = variants.reduce((sum, variant) => sum + Number(variant.weight || 0), 0);
   const status = experiment.status || "draft";
   const warnings = experimentMetadataWarnings(experiment);
+  const planning = experimentPlanningSummary(experiment);
   if (!document.querySelector("#experiment-variant-builder")?.innerHTML.trim()) renderExperimentVariantBuilder(variants);
   experimentSummary.innerHTML = [
     statusItem("Status", status),
     statusItem("Assignment", experiment.unit || "profile"),
+    statusItem("Goal", experiment.goal?.event || "conversion"),
     statusItem("Variants", variants.length),
     statusItem("Allocation", `${Number.isFinite(total) ? total : 0}%`),
+    statusItem("Sample target", planning.sampleSize ? formatNumber(planning.sampleSize) : "-"),
+    statusItem("Duration", planning.durationLabel),
     ...warnings.map((warning) => statusItem("Warning", warning))
   ].join("");
+  renderExperimentPlanningSummary(planning, warnings);
 }
 
 function setExperimentMetadata(experiment = {}) {
   document.querySelector("#experiment-status").value = experiment.status || "draft";
   document.querySelector("#experiment-unit").value = experiment.unit || "profile";
+  document.querySelector("#experiment-goal-event").value = experiment.goal?.event || "conversion";
+  document.querySelector("#experiment-goal-lift").value = Number(experiment.goal?.minimum_detectable_lift_pct || 10);
+  document.querySelector("#experiment-baseline-rate").value = Number(experiment.goal?.baseline_conversion_rate_pct || 5);
+  document.querySelector("#experiment-daily-traffic").value = Number(experiment.schedule?.daily_eligible_profiles || 0) || "";
+  document.querySelector("#experiment-starts-at").value = dateTimeLocalValue(experiment.schedule?.starts_at || "");
+  document.querySelector("#experiment-ends-at").value = dateTimeLocalValue(experiment.schedule?.ends_at || "");
   document.querySelector("#experiment-variants").value = JSON.stringify(
     Array.isArray(experiment.variants) && experiment.variants.length
       ? experiment.variants
@@ -1498,6 +1511,8 @@ function readExperimentMetadata({ tolerateInvalid = false } = {}) {
     return {
       status: document.querySelector("#experiment-status").value || "draft",
       unit: document.querySelector("#experiment-unit").value || "profile",
+      goal: readExperimentGoal(),
+      schedule: readExperimentSchedule(),
       variants
     };
   } catch (error) {
@@ -1505,9 +1520,27 @@ function readExperimentMetadata({ tolerateInvalid = false } = {}) {
     return {
       status: document.querySelector("#experiment-status").value || "draft",
       unit: document.querySelector("#experiment-unit").value || "profile",
+      goal: readExperimentGoal(),
+      schedule: readExperimentSchedule(),
       variants: []
     };
   }
+}
+
+function readExperimentGoal() {
+  return {
+    event: document.querySelector("#experiment-goal-event").value.trim() || "conversion",
+    minimum_detectable_lift_pct: Number(document.querySelector("#experiment-goal-lift").value || 0),
+    baseline_conversion_rate_pct: Number(document.querySelector("#experiment-baseline-rate").value || 0)
+  };
+}
+
+function readExperimentSchedule() {
+  return {
+    starts_at: isoFromDateTimeLocal(document.querySelector("#experiment-starts-at").value),
+    ends_at: isoFromDateTimeLocal(document.querySelector("#experiment-ends-at").value),
+    daily_eligible_profiles: Number(document.querySelector("#experiment-daily-traffic").value || 0)
+  };
 }
 
 function experimentMetadataWarnings(experiment = {}) {
@@ -1526,7 +1559,78 @@ function experimentMetadataWarnings(experiment = {}) {
   }
   if (variants.length && Math.round(total * 1000) !== 100000) warnings.push("Variant weights must sum to 100%.");
   if (experiment.status === "running" && variants.length < 2) warnings.push("Running experiments should have at least two variants.");
+  const goal = experiment.goal || {};
+  const schedule = experiment.schedule || {};
+  if (!goal.event) warnings.push("Goal event is not configured.");
+  if (!Number.isFinite(Number(goal.baseline_conversion_rate_pct)) || Number(goal.baseline_conversion_rate_pct) <= 0) warnings.push("Baseline conversion rate is required for sample guidance.");
+  if (!Number.isFinite(Number(goal.minimum_detectable_lift_pct)) || Number(goal.minimum_detectable_lift_pct) <= 0) warnings.push("Minimum detectable lift must be greater than 0.");
+  if (schedule.starts_at && schedule.ends_at && new Date(schedule.ends_at) <= new Date(schedule.starts_at)) warnings.push("Experiment end date must be after start date.");
   return [...new Set(warnings)];
+}
+
+function experimentPlanningSummary(experiment = {}) {
+  const variants = Array.isArray(experiment.variants) ? experiment.variants : [];
+  const comparableVariants = Math.max(2, variants.length || 2);
+  const baselineRate = Number(experiment.goal?.baseline_conversion_rate_pct || 0) / 100;
+  const lift = Number(experiment.goal?.minimum_detectable_lift_pct || 0) / 100;
+  const dailyTraffic = Number(experiment.schedule?.daily_eligible_profiles || 0);
+  const samplePerVariant = estimateSamplePerVariant(baselineRate, lift);
+  const sampleSize = samplePerVariant ? samplePerVariant * comparableVariants : 0;
+  const daysNeeded = sampleSize && dailyTraffic > 0 ? Math.ceil(sampleSize / dailyTraffic) : 0;
+  const scheduledDays = scheduledExperimentDays(experiment.schedule || {});
+  return {
+    samplePerVariant,
+    sampleSize,
+    daysNeeded,
+    scheduledDays,
+    durationLabel: daysNeeded ? `${daysNeeded}d target` : scheduledDays ? `${scheduledDays}d scheduled` : "Needs traffic",
+    enoughSchedule: Boolean(daysNeeded && scheduledDays && scheduledDays >= daysNeeded)
+  };
+}
+
+function estimateSamplePerVariant(baselineRate, lift) {
+  if (!Number.isFinite(baselineRate) || baselineRate <= 0 || baselineRate >= 1) return 0;
+  if (!Number.isFinite(lift) || lift <= 0) return 0;
+  const targetRate = Math.min(0.999, baselineRate * (1 + lift));
+  const diff = Math.abs(targetRate - baselineRate);
+  if (!diff) return 0;
+  const pooled = (baselineRate + targetRate) / 2;
+  const zAlpha = 1.96;
+  const zBeta = 0.84;
+  const numerator = zAlpha * Math.sqrt(2 * pooled * (1 - pooled)) + zBeta * Math.sqrt(baselineRate * (1 - baselineRate) + targetRate * (1 - targetRate));
+  return Math.ceil((numerator * numerator) / (diff * diff));
+}
+
+function scheduledExperimentDays(schedule = {}) {
+  if (!schedule.starts_at || !schedule.ends_at) return 0;
+  const start = new Date(schedule.starts_at).getTime();
+  const end = new Date(schedule.ends_at).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+  return Math.ceil((end - start) / 86400000);
+}
+
+function renderExperimentPlanningSummary(planning, warnings = []) {
+  const target = document.querySelector("#experiment-planning-summary");
+  if (!target) return;
+  target.innerHTML = `
+    <div class="experiment-planning-card">
+      <span>Sample guidance</span>
+      <strong>${escapeHtml(planning.samplePerVariant ? `${formatNumber(planning.samplePerVariant)} per variant` : "Add baseline and lift")}</strong>
+      <small>${escapeHtml(planning.daysNeeded ? `${formatNumber(planning.sampleSize)} total profiles · about ${planning.daysNeeded} day${planning.daysNeeded === 1 ? "" : "s"} at configured traffic` : "Daily traffic enables duration guidance.")}</small>
+    </div>
+    <div class="experiment-planning-card ${planning.enoughSchedule ? "ok" : planning.daysNeeded ? "warn" : ""}">
+      <span>Schedule fit</span>
+      <strong>${escapeHtml(planning.scheduledDays ? `${planning.scheduledDays} scheduled day${planning.scheduledDays === 1 ? "" : "s"}` : "No date window")}</strong>
+      <small>${escapeHtml(planning.enoughSchedule ? "Schedule meets sample guidance." : planning.daysNeeded ? "Schedule may be too short for the target lift." : "Set start/end dates for launch planning.")}</small>
+    </div>
+    ${warnings.slice(0, 2).map((warning) => `
+      <div class="experiment-planning-card warn">
+        <span>Review</span>
+        <strong>${escapeHtml(warning)}</strong>
+        <small>Resolve before launch where possible.</small>
+      </div>
+    `).join("")}
+  `;
 }
 
 function renderRuleList() {
@@ -1667,6 +1771,38 @@ function newRule(options = {}) {
   renderRuleInspector();
   editorOutput.textContent = "Ready for a new draft";
   if (!options.silent) openRuleDetail();
+}
+
+function quickCreateExperiment() {
+  switchView("rules");
+  newRule({ silent: true });
+  const suffix = new Date().toISOString().slice(0, 10).replaceAll("-", "_");
+  document.querySelector("#rule-name").value = "New Homepage Experiment";
+  document.querySelector("#rule-key").value = uniqueCopyKey(`homepage_experiment_${suffix}`);
+  document.querySelector("#rule-type").value = "experiment";
+  document.querySelector("#rule-surface").value = "homepage_hero";
+  document.querySelector("#rule-client-ttl").value = "300";
+  document.querySelector("#rule-cache-scope").value = "profile";
+  document.querySelector("#rule-description").value = "Experiment draft created from shortcut.";
+  setExperimentMetadata({
+    status: "draft",
+    unit: "profile",
+    goal: {
+      event: "conversion",
+      minimum_detectable_lift_pct: 10,
+      baseline_conversion_rate_pct: 5
+    },
+    schedule: {
+      starts_at: "",
+      ends_at: "",
+      daily_eligible_profiles: 1000
+    },
+    variants: defaultExperimentVariants()
+  });
+  renderRuleInspector();
+  syncJsonFromBuilder();
+  editorOutput.textContent = "Experiment draft ready. Review variants, goal, schedule, then save.";
+  openRuleDetail();
 }
 
 async function saveDraft(event) {

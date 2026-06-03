@@ -440,6 +440,62 @@ aside input {
   resize: vertical;
 }
 
+.experiment-planning-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.experiment-planning-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.experiment-planning-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+}
+
+.experiment-planning-card.ok {
+  border-color: rgba(20, 184, 166, 0.28);
+  background: rgba(20, 184, 166, 0.06);
+}
+
+.experiment-planning-card.warn {
+  border-color: rgba(180, 83, 9, 0.3);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.experiment-planning-card span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.experiment-planning-card strong,
+.experiment-planning-card small {
+  overflow-wrap: anywhere;
+}
+
+.experiment-planning-card strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.experiment-planning-card small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 .variant-builder-panel {
   display: grid;
   gap: 10px;
@@ -4471,6 +4527,8 @@ pre {
   .status-panel,
   .audit-insights,
   .detail-summary,
+  .experiment-planning-grid,
+  .experiment-planning-summary,
   .grid-two,
   .grid-three,
   .graph-stage,

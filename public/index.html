@@ -46,7 +46,10 @@
             <h2>Overview</h2>
             <p class="page-subtitle">Operational health, rule usage, and service utilization.</p>
           </div>
-          <button id="refresh-metrics">Refresh</button>
+          <div class="actions">
+            <button type="button" id="quick-create-experiment-overview">New Experiment</button>
+            <button id="refresh-metrics">Refresh</button>
+          </div>
         </header>
         <div class="overview-workbench">
           <div id="metric-cards" class="metric-grid overview-kpi-strip"></div>
@@ -241,6 +244,33 @@
                       </select>
                     </label>
                   </div>
+                  <div class="experiment-planning-grid">
+                    <label>
+                      Conversion event
+                      <input id="experiment-goal-event" placeholder="conversion" />
+                    </label>
+                    <label>
+                      Minimum detectable lift %
+                      <input id="experiment-goal-lift" type="number" min="1" step="1" value="10" />
+                    </label>
+                    <label>
+                      Baseline conversion rate %
+                      <input id="experiment-baseline-rate" type="number" min="0.1" step="0.1" value="5" />
+                    </label>
+                    <label>
+                      Daily eligible profiles
+                      <input id="experiment-daily-traffic" type="number" min="0" step="1" placeholder="1000" />
+                    </label>
+                    <label>
+                      Starts at
+                      <input id="experiment-starts-at" type="datetime-local" />
+                    </label>
+                    <label>
+                      Ends at
+                      <input id="experiment-ends-at" type="datetime-local" />
+                    </label>
+                  </div>
+                  <div id="experiment-planning-summary" class="experiment-planning-summary"></div>
                   <div class="variant-builder-panel">
                     <div class="variant-builder-head">
                       <div>
@@ -554,6 +584,7 @@
             <p class="page-subtitle">Monitor experiment status, allocation, and client feedback by variant.</p>
           </div>
           <div class="actions">
+            <button type="button" id="quick-create-experiment">New Experiment</button>
             <button id="refresh-experiments">Refresh</button>
             <button id="export-experiments-csv">Export CSV</button>
           </div>
