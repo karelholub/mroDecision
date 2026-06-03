@@ -33,10 +33,10 @@ Implemented:
 - Evaluate saved profile payloads, request-shape validation, and published-vs-draft comparison.
 - Shared server-side saved evaluation profiles for team QA payloads.
 - Message template controls for type, placement, media, footer, multiple CTAs, delivery lifecycle, priority, and TTL metadata.
-- Settings connection tests for Meiro Profile API, collector, and explicit feedback endpoints.
+- Settings connection tests for Meiro Profile API, collector, and explicit feedback endpoints, with filtered delivery drilldowns.
 - Schema import diagnostics for imported, skipped, and failed fields.
 - Meiro skill/mpcli metadata sync with a separate CLI/shared API token, plus Profile API fallback for condition-builder suggestions.
-- Meiro webhook and feedback delivery status history.
+- Meiro webhook and feedback delivery status history with summary, filters, and payload inspectors.
 - Embedded UI for rule sets, draft testing, evaluation, audit, lookups, settings, tokens, and Meiro request templates.
 - Settings UI for portable config export/import across rules, reference data, messages, condition blocks, and non-secret environment settings.
 - OpenAPI and Meiro Pipes integration templates.
@@ -191,8 +191,8 @@ Status: started with experiment significance calculations, confidence labels, mi
 
 ## Recommended Next Sprint
 
-1. Add deeper feedback-delivery drilldowns for Meiro collector/webhook attempts.
-2. Add dashboard anomaly baselines and alert history beyond the current live alert strip.
-3. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.
-4. Add a managed-database adapter path for enterprise deployments.
-5. Add deeper message personalization helpers such as token suggestions and content-variant previews.
+1. Add dashboard anomaly baselines and alert history beyond the current live alert strip.
+2. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.
+3. Add a managed-database adapter path for enterprise deployments.
+4. Add deeper message personalization helpers such as token suggestions and content-variant previews.
+5. Add expanded Meiro delivery retry guidance and failed-attempt replay tooling.

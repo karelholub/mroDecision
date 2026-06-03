@@ -11,6 +11,7 @@
   --nav-ink: #eef3f8;
   --accent: #0f766e;
   --accent-soft: #dff3ef;
+  --success-soft: #ecfdf3;
   --warning-soft: #fff4d6;
   --danger: #b42318;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
@@ -2760,6 +2761,130 @@ header {
 .delivery-status-table {
   max-height: 260px;
   overflow: auto;
+}
+
+.delivery-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.delivery-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.7fr) minmax(130px, 0.7fr) minmax(220px, 1.4fr) minmax(96px, 0.45fr);
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+
+.delivery-filter-bar label {
+  min-width: 0;
+}
+
+.delivery-status-table .row {
+  grid-template-columns:
+    minmax(104px, 0.72fr)
+    minmax(68px, 0.42fr)
+    minmax(78px, 0.48fr)
+    minmax(58px, 0.36fr)
+    minmax(125px, 1fr)
+    minmax(115px, 0.9fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.delivery-status-table .row > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.delivery-status-table .row > div:nth-child(5),
+.delivery-status-table .row > div:nth-child(6) {
+  display: -webkit-box;
+  max-height: 58px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.delivery-detail-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  min-width: 0;
+}
+
+.delivery-detail-panel:empty {
+  display: none;
+}
+
+.delivery-detail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel-soft);
+}
+
+.delivery-detail-head div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.delivery-detail-head span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.delivery-result-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.delivery-result-pill.ok {
+  background: var(--success-soft);
+  color: #047857;
+}
+
+.delivery-result-pill.error {
+  background: #fff5f5;
+  color: #b91c1c;
+}
+
+.delivery-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.delivery-detail-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.delivery-detail-columns > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.delivery-detail-columns pre {
+  max-height: 260px;
+  min-width: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .schema-diagnostics {

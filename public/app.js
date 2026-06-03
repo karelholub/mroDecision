@@ -49,6 +49,8 @@ const integrationTemplate = document.querySelector("#integration-template");
 const integrationResponse = document.querySelector("#integration-response");
 const meiroTestOutput = document.querySelector("#meiro-test-output");
 const meiroDeliveryStatus = document.querySelector("#meiro-delivery-status");
+const meiroDeliverySummary = document.querySelector("#meiro-delivery-summary");
+const meiroDeliveryDetail = document.querySelector("#meiro-delivery-detail");
 const schemaImportDiagnostics = document.querySelector("#schema-import-diagnostics");
 const conditionBlockList = document.querySelector("#condition-block-list");
 const conditionBlockOutput = document.querySelector("#condition-block-output");
@@ -96,6 +98,7 @@ let cachedRuleSets = [];
 let cachedLookupTables = [];
 let cachedMessages = [];
 let cachedExperiments = [];
+let cachedMeiroDeliveries = [];
 let cachedSettings = {};
 let cachedSchema = [];
 let cachedEvaluationProfiles = [];
@@ -242,6 +245,10 @@ document.querySelector("#test-meiro-profile").addEventListener("click", () => te
 document.querySelector("#test-meiro-collector").addEventListener("click", () => testMeiroConnection("collector"));
 document.querySelector("#test-meiro-feedback").addEventListener("click", () => testMeiroConnection("feedback"));
 document.querySelector("#refresh-meiro-deliveries").addEventListener("click", loadMeiroDeliveries);
+["#meiro-delivery-target", "#meiro-delivery-ok", "#meiro-delivery-limit"].forEach((selector) => {
+  document.querySelector(selector)?.addEventListener("change", loadMeiroDeliveries);
+});
+document.querySelector("#meiro-delivery-search")?.addEventListener("input", debounce(loadMeiroDeliveries, 250));
 document.querySelector("#refresh-integration").addEventListener("click", loadIntegration);
 document.querySelector("#export-audit-csv").addEventListener("click", exportAuditCsv);
 document.querySelector("#import-schema").addEventListener("click", importSchema);
@@ -3488,12 +3495,21 @@ function row(values, options = {}) {
     options.key ? `data-rule-key="${escapeHtml(options.key)}"` : "",
     options.lookupId ? `data-lookup-id="${escapeHtml(options.lookupId)}"` : "",
     options.messageId ? `data-message-id="${escapeHtml(options.messageId)}"` : "",
+    options.deliveryId ? `data-delivery-id="${escapeHtml(options.deliveryId)}"` : "",
     options.metricRuleKey ? `data-metric-rule-key="${escapeHtml(options.metricRuleKey)}"` : "",
     Number.isInteger(options.auditIndex) ? `data-audit-index="${options.auditIndex}"` : "",
     options.tokenId ? `data-token-id="${escapeHtml(options.tokenId)}"` : ""
   ].filter(Boolean).join(" ");
-  const className = options.key || options.lookupId || options.messageId || options.metricRuleKey || Number.isInteger(options.auditIndex) || options.tokenId ? "row actionable" : "row";
+  const className = options.key || options.lookupId || options.messageId || options.deliveryId || options.metricRuleKey || Number.isInteger(options.auditIndex) || options.tokenId ? "row actionable" : "row";
   return `<div class="${className}" ${attrs}>${values.map((value, index) => `<div>${options.rawColumns?.includes(index) ? String(value ?? "") : escapeHtml(String(value ?? ""))}</div>`).join("")}</div>`;
+}
+
+function debounce(callback, waitMs = 200) {
+  let timer = null;
+  return (...args) => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => callback(...args), waitMs);
+  };
 }
 
 function escapeHtml(value) {
@@ -6153,7 +6169,7 @@ async function loadSettings() {
     document.querySelector("#schema-sync-identifier-value").value = settings.schema_sync_identifier_value || "";
     renderSchemaSyncStatus(settings, body.runtime?.schema_sync || {});
     renderSettingsSummary(settings, body.runtime || {});
-    renderMeiroDeliveries(body.runtime?.meiro_deliveries || []);
+    await loadMeiroDeliveries();
     settingsOutput.textContent = JSON.stringify(body, null, 2);
     renderIntegration();
     await loadTokens();
@@ -6297,18 +6313,43 @@ function renderSchemaSyncStatus(settings, runtime) {
 
 async function loadMeiroDeliveries() {
   try {
-    const body = await api("/v1/meiro-deliveries?limit=10");
+    const params = new URLSearchParams();
+    const target = document.querySelector("#meiro-delivery-target")?.value || "";
+    const ok = document.querySelector("#meiro-delivery-ok")?.value || "";
+    const search = document.querySelector("#meiro-delivery-search")?.value.trim() || "";
+    const limit = document.querySelector("#meiro-delivery-limit")?.value || "25";
+    if (target) params.set("target", target);
+    if (ok) params.set("ok", ok);
+    if (search) params.set("search", search);
+    if (limit) params.set("limit", limit);
+    const body = await api(`/v1/meiro-deliveries?${params}`);
+    cachedMeiroDeliveries = body.deliveries || [];
+    renderMeiroDeliverySummary(body.summary || {});
     renderMeiroDeliveries(body.deliveries || []);
   } catch (error) {
     if (meiroDeliveryStatus) meiroDeliveryStatus.innerHTML = row([error.message, "", "", "", ""]);
+    if (meiroDeliverySummary) meiroDeliverySummary.innerHTML = "";
+    if (meiroDeliveryDetail) meiroDeliveryDetail.innerHTML = "";
   }
+}
+
+function renderMeiroDeliverySummary(summary = {}) {
+  if (!meiroDeliverySummary) return;
+  meiroDeliverySummary.innerHTML = [
+    statusItem("Attempts", formatNumber(summary.total || 0)),
+    statusItem("Success rate", formatPercent(summary.success_rate || 0)),
+    statusItem("Failed", formatNumber(summary.failed || 0)),
+    statusItem("Avg latency", `${formatNumber(summary.avg_duration_ms || 0)}ms`),
+    statusItem("Last attempt", summary.last_attempted_at ? formatTime(summary.last_attempted_at) : "-")
+  ].join("");
 }
 
 function renderMeiroDeliveries(deliveries = []) {
   if (!meiroDeliveryStatus) return;
-  meiroDeliveryStatus.innerHTML = header(["Time", "Target", "Status", "Endpoint", "Message"]);
+  meiroDeliveryStatus.innerHTML = header(["Time", "Target", "Result", "Latency", "Endpoint", "Message"]);
   if (!deliveries.length) {
-    meiroDeliveryStatus.innerHTML += row(["No delivery attempts yet", "", "", "", ""]);
+    meiroDeliveryStatus.innerHTML += row(["No delivery attempts match the current filters", "", "", "", "", ""]);
+    if (meiroDeliveryDetail) meiroDeliveryDetail.innerHTML = "";
     return;
   }
   meiroDeliveryStatus.innerHTML += deliveries
@@ -6316,10 +6357,49 @@ function renderMeiroDeliveries(deliveries = []) {
       item.attempted_at ? formatTime(item.attempted_at) : "-",
       item.target || "-",
       `${item.ok ? "OK" : "Failed"} · ${item.status || 0}`,
+      `${formatNumber(item.duration_ms || 0)}ms`,
       item.endpoint || "-",
       item.error || item.response_preview || "-"
-    ]))
+    ], { deliveryId: item.id }))
     .join("");
+  meiroDeliveryStatus.querySelectorAll("[data-delivery-id]").forEach((element) => {
+    element.addEventListener("click", () => renderMeiroDeliveryDetail(element.dataset.deliveryId));
+  });
+  renderMeiroDeliveryDetail(deliveries[0].id);
+}
+
+function renderMeiroDeliveryDetail(id) {
+  if (!meiroDeliveryDetail) return;
+  const item = cachedMeiroDeliveries.find((delivery) => delivery.id === id);
+  if (!item) {
+    meiroDeliveryDetail.innerHTML = "";
+    return;
+  }
+  meiroDeliveryDetail.innerHTML = `
+    <div class="delivery-detail-head">
+      <div>
+        <strong>${escapeHtml(item.target || "Delivery attempt")}</strong>
+        <span>${escapeHtml(item.endpoint || "-")}</span>
+      </div>
+      <span class="delivery-result-pill ${item.ok ? "ok" : "error"}">${escapeHtml(item.ok ? "OK" : "Failed")} · ${escapeHtml(item.status || 0)}</span>
+    </div>
+    <div class="delivery-detail-grid">
+      ${statusItem("Attempted", item.attempted_at ? formatTime(item.attempted_at) : "-")}
+      ${statusItem("Latency", `${formatNumber(item.duration_ms || 0)}ms`)}
+      ${statusItem("Delivery ID", item.id || "-")}
+      ${statusItem("Error", item.error || "-")}
+    </div>
+    <div class="delivery-detail-columns">
+      <div>
+        <strong>Request payload</strong>
+        <pre>${escapeHtml(JSON.stringify(item.payload || {}, null, 2))}</pre>
+      </div>
+      <div>
+        <strong>Response preview</strong>
+        <pre>${escapeHtml(item.response_preview || item.error || "-")}</pre>
+      </div>
+    </div>
+  `;
 }
 
 function renderSchemaDiagnostics(diagnostics = null) {

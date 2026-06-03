@@ -408,6 +408,22 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   });
   assert.equal(delivery.ok, true);
   assert.equal(store.listMeiroDeliveries()[0].target, "feedback");
+  store.recordMeiroDelivery({
+    target: "collector",
+    endpoint: "https://example.test/collect/source",
+    ok: false,
+    status: 400,
+    duration_ms: 8,
+    error: "bad request",
+    payload: { profile_key: "profile-1" }
+  });
+  assert.equal(store.listMeiroDeliveries({ target: "feedback" }).length, 1);
+  assert.equal(store.listMeiroDeliveries({ ok: "false" })[0].status, 400);
+  assert.equal(store.listMeiroDeliveries({ search: "profile-1" })[0].target, "collector");
+  const deliverySummary = store.getMeiroDeliverySummary();
+  assert.equal(deliverySummary.total, 2);
+  assert.equal(deliverySummary.failed, 1);
+  assert.equal(deliverySummary.targets.feedback, 1);
   assert.equal(store.getAuditRetentionDays(), 30);
   assert.equal(store.getClientEventRetentionDays(), 45);
   assert.equal(store.health().ok, true);

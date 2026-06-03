@@ -1304,8 +1304,47 @@
               </div>
               <pre id="meiro-test-output" class="settings-test-output"></pre>
               <div class="settings-card wide">
-                <div class="editor-title compact-title">Webhook & Feedback Delivery Status</div>
+                <div class="settings-section-head compact">
+                  <div>
+                    <div class="editor-title compact-title">Webhook & Feedback Delivery Status</div>
+                    <p>Filter recent delivery attempts and inspect the exact payload sent to Meiro.</p>
+                  </div>
+                </div>
+                <div id="meiro-delivery-summary" class="delivery-summary-grid"></div>
+                <div class="delivery-filter-bar">
+                  <label>
+                    Target
+                    <select id="meiro-delivery-target">
+                      <option value="">Any target</option>
+                      <option value="profile">Profile API</option>
+                      <option value="collector">Collector</option>
+                      <option value="feedback">Feedback</option>
+                    </select>
+                  </label>
+                  <label>
+                    Result
+                    <select id="meiro-delivery-ok">
+                      <option value="">Any result</option>
+                      <option value="true">Successful</option>
+                      <option value="false">Failed</option>
+                    </select>
+                  </label>
+                  <label>
+                    Search
+                    <input id="meiro-delivery-search" placeholder="Endpoint, error, response, payload" />
+                  </label>
+                  <label>
+                    Limit
+                    <select id="meiro-delivery-limit">
+                      <option value="10">10</option>
+                      <option value="25" selected>25</option>
+                      <option value="50">50</option>
+                      <option value="100">100</option>
+                    </select>
+                  </label>
+                </div>
                 <div id="meiro-delivery-status" class="table delivery-status-table"></div>
+                <div id="meiro-delivery-detail" class="delivery-detail-panel"></div>
               </div>
             </section>
             <section class="settings-tab-panel" data-settings-panel="schema">

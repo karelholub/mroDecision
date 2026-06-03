@@ -1089,6 +1089,23 @@ paths:
           schema:
             type: integer
             default: 20
+        - name: target
+          in: query
+          schema:
+            type: string
+            enum: [profile, collector, feedback]
+        - name: ok
+          in: query
+          schema:
+            type: boolean
+        - name: status
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: Recent Meiro delivery attempts
@@ -1101,6 +1118,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/MeiroDelivery"
+                  summary:
+                    $ref: "#/components/schemas/MeiroDeliverySummary"
   /v1/schema/sync:
     post:
       summary: Sync schema by sampling a Meiro profile
@@ -2297,6 +2316,30 @@ components:
           type: string
         payload:
           type: object
+    MeiroDeliverySummary:
+      type: object
+      properties:
+        total:
+          type: integer
+        success:
+          type: integer
+        failed:
+          type: integer
+        success_rate:
+          type: number
+        avg_duration_ms:
+          type: integer
+        targets:
+          type: object
+          additionalProperties:
+            type: integer
+        statuses:
+          type: object
+          additionalProperties:
+            type: integer
+        last_attempted_at:
+          type: string
+          format: date-time
     ConfigBundle:
       type: object
       required: [kind, rule_sets, lookup_tables]

@@ -1169,11 +1169,63 @@ export class Store {
   }
 
   listMeiroDeliveries(params = {}) {
-    const limit = Math.min(Number(params.limit || 20), 100);
+    const requestedLimit = Number(params.limit || 20);
+    const limit = Math.min(Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 20, 100);
+    const clauses = [];
+    const values = [];
+    if (params.target) {
+      clauses.push("target = ?");
+      values.push(String(params.target));
+    }
+    if (params.ok === "true" || params.ok === true) {
+      clauses.push("ok = 1");
+    }
+    if (params.ok === "false" || params.ok === false) {
+      clauses.push("ok = 0");
+    }
+    if (params.status) {
+      const status = Number(params.status);
+      if (Number.isFinite(status)) {
+        clauses.push("status = ?");
+        values.push(status);
+      }
+    }
+    if (params.search) {
+      clauses.push("(endpoint LIKE ? OR error LIKE ? OR response_preview LIKE ? OR payload_json LIKE ?)");
+      const search = `%${String(params.search)}%`;
+      values.push(search, search, search, search);
+    }
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     return this.db
-      .prepare("SELECT * FROM meiro_deliveries ORDER BY attempted_at DESC LIMIT ?")
-      .all(limit)
+      .prepare(`SELECT * FROM meiro_deliveries ${where} ORDER BY attempted_at DESC LIMIT ?`)
+      .all(...values, limit)
       .map(rowToMeiroDelivery);
+  }
+
+  getMeiroDeliverySummary(params = {}) {
+    const deliveries = this.listMeiroDeliveries({ ...params, limit: params.limit || 100 });
+    const targets = {};
+    const statuses = {};
+    let success = 0;
+    let failed = 0;
+    let durationTotal = 0;
+    for (const item of deliveries) {
+      if (item.ok) success += 1;
+      else failed += 1;
+      durationTotal += item.duration_ms || 0;
+      targets[item.target || "unknown"] = (targets[item.target || "unknown"] || 0) + 1;
+      statuses[item.status || 0] = (statuses[item.status || 0] || 0) + 1;
+    }
+    return {
+      total: deliveries.length,
+      success,
+      failed,
+      success_rate: deliveries.length ? success / deliveries.length : 0,
+      avg_duration_ms: deliveries.length ? Math.round(durationTotal / deliveries.length) : 0,
+      targets,
+      statuses,
+      last_attempted_at: deliveries[0]?.attempted_at || ""
+    };
   }
 
   recordMeiroDelivery(input) {

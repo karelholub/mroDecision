@@ -454,7 +454,11 @@ async function routeApi(req, res, url) {
 
   if (req.method === "GET" && pathname === "/v1/meiro-deliveries") {
     requireScope(req, "viewer");
-    sendJson(res, 200, { deliveries: store.listMeiroDeliveries(Object.fromEntries(url.searchParams)) });
+    const params = Object.fromEntries(url.searchParams);
+    sendJson(res, 200, {
+      deliveries: store.listMeiroDeliveries(params),
+      summary: store.getMeiroDeliverySummary(params)
+    });
     return;
   }
 
