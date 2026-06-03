@@ -1073,6 +1073,20 @@
                   </div>
                   <div class="inspector-section">
                     <h3>Column Quality</h3>
+                    <div class="lookup-validation-policy">
+                      <label>
+                        Save policy
+                        <select id="lookup-validation-policy">
+                          <option value="advisory">Advisory only</option>
+                          <option value="warn">Warn on save</option>
+                          <option value="block">Block save on issues</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div id="lookup-validation-rules" class="lookup-validation-rules"></div>
+                    <div class="actions left">
+                      <button type="button" id="add-lookup-validation-rule">Add Validation Rule</button>
+                    </div>
                     <div id="lookup-validation-summary" class="lookup-validation-summary"></div>
                   </div>
                 </div>

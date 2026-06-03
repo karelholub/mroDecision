@@ -27,6 +27,7 @@ const lookupHelpTable = document.querySelector("#lookup-help-table");
 const lookupHelpKey = document.querySelector("#lookup-help-key");
 const lookupHelpExpression = document.querySelector("#lookup-help-expression");
 const lookupValidationSummary = document.querySelector("#lookup-validation-summary");
+const lookupValidationRules = document.querySelector("#lookup-validation-rules");
 const referenceGrid = document.querySelector("#reference-grid");
 const auditDetail = document.querySelector("#audit-detail");
 const auditDetailSummary = document.querySelector("#audit-detail-summary");
@@ -101,6 +102,7 @@ let cachedEvaluationProfiles = [];
 let cachedConditionBlocks = [];
 let cachedConfigBundle = null;
 let cachedAssistantPlan = null;
+let selectedLookupMetadata = {};
 let conditionBlocksLoaded = false;
 let selectedConditionBlockId = null;
 const savedProfileStorageKey = "meiro-dee-evaluate-profiles";
@@ -378,9 +380,23 @@ document.querySelector("#message-content").addEventListener("change", syncMessag
 document.querySelector("#import-lookup-csv").addEventListener("click", importLookupCsv);
 document.querySelector("#add-reference-row").addEventListener("click", addReferenceRow);
 document.querySelector("#add-reference-column").addEventListener("click", addReferenceColumn);
+document.querySelector("#add-lookup-validation-rule").addEventListener("click", addLookupValidationRule);
 document.querySelector("#sync-reference-json").addEventListener("click", syncReferenceGridFromJson);
 document.querySelector("#lookup-rows").addEventListener("change", syncReferenceGridFromJson);
 document.querySelector("#lookup-rows").addEventListener("input", renderLookupInspector);
+document.querySelector("#lookup-validation-policy").addEventListener("change", () => {
+  syncLookupValidationMetadata();
+  renderLookupValidationFromCurrentRows();
+});
+document.querySelector("#lookup-validation-rules").addEventListener("input", () => {
+  syncLookupValidationMetadata();
+  renderLookupValidationFromCurrentRows();
+});
+document.querySelector("#lookup-validation-rules").addEventListener("change", () => {
+  syncLookupValidationMetadata();
+  renderLookupValidationFromCurrentRows();
+});
+document.querySelector("#lookup-validation-rules").addEventListener("click", handleLookupValidationRulesClick);
 document.querySelector("#lookup-key-column").addEventListener("change", () => {
   renderReferenceGrid();
   renderLookupInspector();
@@ -4815,6 +4831,7 @@ function closeLookupDetail() {
 
 function newLookup(options = {}) {
   selectedLookupId = null;
+  selectedLookupMetadata = defaultLookupMetadata();
   document.querySelector("#lookup-id").value = "reference_table";
   document.querySelector("#lookup-id").disabled = false;
   document.querySelector("#lookup-name").value = "Reference Table";
@@ -4827,6 +4844,7 @@ function newLookup(options = {}) {
     null,
     2
   );
+  renderLookupValidationRules();
   renderReferenceGrid();
   document.querySelector("#lookup-csv").value = "";
   loadLookupVersions(null);
@@ -4902,6 +4920,7 @@ function renderReferenceGrid() {
   referenceGrid.querySelectorAll("[data-remove-column]").forEach((button) => {
     button.addEventListener("click", () => removeReferenceColumn(button.dataset.removeColumn));
   });
+  renderLookupValidationRules(columns);
   renderLookupInspector(rows);
 }
 
@@ -4929,9 +4948,19 @@ function renderLookupInspector(rows = null) {
   renderLookupValidation(currentRows, columns, keyColumn);
 }
 
+function renderLookupValidationFromCurrentRows() {
+  let rows = [];
+  try {
+    rows = referenceRowsFromJson();
+  } catch {
+    rows = [];
+  }
+  renderLookupValidation(rows, referenceColumnsFromRows(rows), document.querySelector("#lookup-key-column").value.trim() || "key");
+}
+
 function renderLookupValidation(rows, columns, keyColumn) {
   if (!lookupValidationSummary) return;
-  const checks = validateLookupColumns(rows, columns, keyColumn);
+  const checks = validateLookupColumns(rows, columns, keyColumn, readLookupValidationMetadata());
   lookupValidationSummary.innerHTML = checks
     .map((check) => `
       <div class="lookup-validation-item ${escapeHtml(check.level)}">
@@ -4942,7 +4971,7 @@ function renderLookupValidation(rows, columns, keyColumn) {
     .join("");
 }
 
-function validateLookupColumns(rows, columns, keyColumn) {
+function validateLookupColumns(rows, columns, keyColumn, validation = defaultLookupValidation()) {
   if (!rows.length) return [{ level: "warn", title: "No rows", detail: "Add rows or import CSV before using this table in rules." }];
   const checks = [];
   const keyValues = rows.map((rowItem) => rowItem?.[keyColumn]).filter((value) => value !== "" && value != null);
@@ -4957,8 +4986,142 @@ function validateLookupColumns(rows, columns, keyColumn) {
     if (missing && column !== keyColumn) checks.push({ level: "info", title: `${column} missing values`, detail: `${formatNumber(missing)} row${missing === 1 ? "" : "s"} are blank.` });
     if (types.length > 1) checks.push({ level: "warn", title: `${column} mixed types`, detail: `Contains ${types.join(", ")} values.` });
   }
+  for (const rule of validation.rules || []) {
+    const column = rule.column;
+    if (!column || !columns.includes(column)) {
+      checks.push({ level: "warn", title: "Validation column missing", detail: column ? `${column} is not present in this table.` : "A validation rule has no target column." });
+      continue;
+    }
+    const values = rows.map((rowItem) => rowItem?.[column]).filter((value) => value !== "" && value != null);
+    const missing = rows.length - values.length;
+    const duplicates = rule.unique ? duplicateValues(values) : [];
+    const wrongTypes = values.filter((value) => !lookupValueMatchesType(value, rule.type));
+    if (rule.required && missing) checks.push({ level: "warn", title: `${column} required`, detail: `${formatNumber(missing)} row${missing === 1 ? "" : "s"} violate the required rule.` });
+    if (rule.unique && duplicates.length) checks.push({ level: "warn", title: `${column} unique`, detail: `Duplicate values: ${duplicates.slice(0, 4).join(", ")}.` });
+    if (rule.type && rule.type !== "any" && wrongTypes.length) checks.push({ level: "warn", title: `${column} type`, detail: `${formatNumber(wrongTypes.length)} value${wrongTypes.length === 1 ? "" : "s"} are not ${rule.type}.` });
+  }
   if (!checks.length) checks.push({ level: "ok", title: "Ready", detail: "Match keys are unique and populated, with consistent column value types." });
   return checks.slice(0, 8);
+}
+
+function defaultLookupMetadata() {
+  return { validation: defaultLookupValidation() };
+}
+
+function defaultLookupValidation() {
+  return { policy: "advisory", rules: [] };
+}
+
+function readLookupValidationMetadata() {
+  const validation = selectedLookupMetadata.validation || defaultLookupValidation();
+  return {
+    policy: ["advisory", "warn", "block"].includes(validation.policy) ? validation.policy : "advisory",
+    rules: Array.isArray(validation.rules) ? validation.rules.map(normalizeLookupValidationRule).filter((rule) => rule.column || rule.type !== "any" || rule.required || rule.unique) : []
+  };
+}
+
+function syncLookupValidationMetadata() {
+  const policy = document.querySelector("#lookup-validation-policy")?.value || "advisory";
+  const rules = lookupValidationRules
+    ? [...lookupValidationRules.querySelectorAll("[data-validation-rule-index]")].map((rowNode) => normalizeLookupValidationRule({
+        column: rowNode.querySelector("[data-validation-field='column']")?.value,
+        type: rowNode.querySelector("[data-validation-field='type']")?.value,
+        required: rowNode.querySelector("[data-validation-field='required']")?.checked,
+        unique: rowNode.querySelector("[data-validation-field='unique']")?.checked
+      }))
+    : [];
+  selectedLookupMetadata = {
+    ...(selectedLookupMetadata || {}),
+    validation: {
+      policy,
+      rules: rules.filter((rule) => rule.column)
+    }
+  };
+}
+
+function renderLookupValidationRules(columns = null) {
+  if (!lookupValidationRules) return;
+  const validation = readLookupValidationMetadata();
+  document.querySelector("#lookup-validation-policy").value = validation.policy;
+  const knownColumns = columns || safeReferenceColumns();
+  lookupValidationRules.innerHTML = validation.rules.length
+    ? validation.rules.map((rule, index) => lookupValidationRuleRow(rule, index, knownColumns)).join("")
+    : `<div class="status-line">No saved validation rules. Add a rule to require, type-check, or enforce uniqueness on a column.</div>`;
+}
+
+function lookupValidationRuleRow(rule, index, columns) {
+  const columnOptions = columns.map((column) => `<option value="${escapeHtml(column)}"${column === rule.column ? " selected" : ""}></option>`).join("");
+  return `
+    <div class="lookup-validation-rule-row" data-validation-rule-index="${index}">
+      <label>
+        Column
+        <input data-validation-field="column" list="lookup-validation-columns-${index}" value="${escapeHtml(rule.column || "")}" placeholder="column_name" />
+        <datalist id="lookup-validation-columns-${index}">${columnOptions}</datalist>
+      </label>
+      <label>
+        Type
+        <select data-validation-field="type">
+          ${["any", "text", "number", "boolean", "object", "array", "url", "email"].map((type) => `<option value="${type}"${type === rule.type ? " selected" : ""}>${type}</option>`).join("")}
+        </select>
+      </label>
+      <label class="checkbox-label"><input type="checkbox" data-validation-field="required"${rule.required ? " checked" : ""} /> Required</label>
+      <label class="checkbox-label"><input type="checkbox" data-validation-field="unique"${rule.unique ? " checked" : ""} /> Unique</label>
+      <button type="button" data-remove-validation-rule="${index}">Remove</button>
+    </div>
+  `;
+}
+
+function addLookupValidationRule() {
+  syncLookupValidationMetadata();
+  const columns = safeReferenceColumns();
+  selectedLookupMetadata.validation.rules.push({
+    column: columns[0] || document.querySelector("#lookup-key-column").value.trim() || "key",
+    type: "any",
+    required: true,
+    unique: false
+  });
+  renderLookupValidationRules(columns);
+  renderLookupInspector();
+}
+
+function handleLookupValidationRulesClick(event) {
+  const button = event.target.closest("[data-remove-validation-rule]");
+  if (!button) return;
+  syncLookupValidationMetadata();
+  selectedLookupMetadata.validation.rules.splice(Number(button.dataset.removeValidationRule), 1);
+  renderLookupValidationRules();
+  renderLookupInspector();
+}
+
+function normalizeLookupValidationRule(rule = {}) {
+  return {
+    column: String(rule.column || "").trim(),
+    type: ["any", "text", "number", "boolean", "object", "array", "url", "email"].includes(rule.type) ? rule.type : "any",
+    required: Boolean(rule.required),
+    unique: Boolean(rule.unique)
+  };
+}
+
+function safeReferenceColumns() {
+  try {
+    return referenceColumns(referenceRowsFromJson());
+  } catch {
+    return [];
+  }
+}
+
+function lookupValueMatchesType(value, type) {
+  if (!type || type === "any") return true;
+  if (type === "url") {
+    try {
+      const parsed = new URL(String(value));
+      return ["http:", "https:"].includes(parsed.protocol);
+    } catch {
+      return false;
+    }
+  }
+  if (type === "email") return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value));
+  return referenceValueType(value) === type;
 }
 
 function duplicateValues(values) {
@@ -5096,6 +5259,8 @@ function loadLookup(id, tables) {
   document.querySelector("#lookup-name").value = table.name;
   document.querySelector("#lookup-key-column").value = table.key_column;
   document.querySelector("#lookup-rows").value = JSON.stringify(table.rows || [], null, 2);
+  selectedLookupMetadata = table.metadata || defaultLookupMetadata();
+  renderLookupValidationRules();
   renderReferenceGrid();
   document.querySelector("#lookup-csv").value = "";
   loadLookupVersions(id);
@@ -5111,6 +5276,8 @@ async function loadLookupVersion(id, version) {
     document.querySelector("#lookup-name").value = table.name;
     document.querySelector("#lookup-key-column").value = table.key_column;
     document.querySelector("#lookup-rows").value = JSON.stringify(table.rows || [], null, 2);
+    selectedLookupMetadata = table.metadata || defaultLookupMetadata();
+    renderLookupValidationRules();
     renderReferenceGrid();
     renderLookupInspector();
     lookupOutput.textContent = `Loaded ${id} version ${version} into the editor. Save Reference Table to restore it as the current version.`;
@@ -5137,17 +5304,30 @@ async function saveLookup(event) {
         throw new Error("Every lookup row must be an object");
       }
     }
+    syncLookupValidationMetadata();
+    const columns = referenceColumnsFromRows(rows);
+    const validation = readLookupValidationMetadata();
+    const validationChecks = validateLookupColumns(rows, columns, document.querySelector("#lookup-key-column").value.trim() || "key", validation);
+    const blockingChecks = validationChecks.filter((item) => item.level === "warn" || item.level === "error");
+    if (blockingChecks.length && validation.policy === "block") {
+      renderLookupValidation(rows, columns, document.querySelector("#lookup-key-column").value.trim() || "key");
+      throw new Error(`Reference table validation blocked save: ${blockingChecks.map((item) => item.title).join(", ")}`);
+    }
     const body = await api(`/v1/lookup-tables/${encodeURIComponent(id)}`, {
       method: "PUT",
       body: JSON.stringify({
         name: document.querySelector("#lookup-name").value.trim() || id,
         key_column: document.querySelector("#lookup-key-column").value.trim() || "key",
-        rows
+        rows,
+        metadata: selectedLookupMetadata
       })
     });
     selectedLookupId = body.lookup_table.id;
+    selectedLookupMetadata = body.lookup_table.metadata || selectedLookupMetadata;
     document.querySelector("#lookup-id").disabled = true;
-    lookupOutput.textContent = JSON.stringify(body, null, 2);
+    lookupOutput.textContent = validation.policy === "warn" && blockingChecks.length
+      ? `Saved with validation warnings: ${blockingChecks.map((item) => item.title).join(", ")}\n\n${JSON.stringify(body, null, 2)}`
+      : JSON.stringify(body, null, 2);
     await loadLookups();
     await loadLookupVersions(selectedLookupId);
     renderLookupInspector(rows);

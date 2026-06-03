@@ -301,11 +301,17 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(significantTreatment.significance.status, "significant_95");
   assert.equal(significantOps.experiments[0].significant_winner_variant, "treatment");
 
-  const table = store.replaceLookupTable("tiers", { key_column: "country", rows: [{ country: "CZ", tier: "A" }] }, "tester");
+  const table = store.replaceLookupTable("tiers", {
+    key_column: "country",
+    rows: [{ country: "CZ", tier: "A" }],
+    metadata: { validation: { policy: "block", rules: [{ column: "country", required: true, unique: true, type: "text" }] } }
+  }, "tester");
   assert.equal(table.version, 1);
+  assert.equal(table.metadata.validation.policy, "block");
   assert.equal(store.listLookupTables()[0].rows[0].tier, "A");
   assert.equal(store.listLookupTableVersions("tiers").length, 1);
   assert.equal(store.getLookupTableVersion("tiers", 1).rows[0].tier, "A");
+  assert.equal(store.getLookupTableVersion("tiers", 1).metadata.validation.rules[0].column, "country");
   const updatedTable = store.replaceLookupTable("tiers", { key_column: "country", rows: [{ country: "CZ", tier: "B" }] }, "tester");
   assert.equal(updatedTable.version, 2);
   assert.equal(store.listLookupTableVersions("tiers").length, 2);

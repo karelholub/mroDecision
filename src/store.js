@@ -814,6 +814,7 @@ export class Store {
       name: input.name || existing?.name || id,
       key_column: input.key_column || existing?.key_column || "key",
       rows: Array.isArray(input.rows) ? input.rows : [],
+      metadata: isPlainObject(input.metadata) ? input.metadata : existing ? parse(existing.metadata_json || "{}") : {},
       updated_at: now,
       author,
       version: (existing?.version || 0) + 1
@@ -822,17 +823,18 @@ export class Store {
     this.transaction(() => {
       this.db
         .prepare(
-          `INSERT INTO lookup_tables (id, name, key_column, rows_json, updated_at, author, version)
-           VALUES (?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO lookup_tables (id, name, key_column, rows_json, metadata_json, updated_at, author, version)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              name = excluded.name,
              key_column = excluded.key_column,
              rows_json = excluded.rows_json,
+             metadata_json = excluded.metadata_json,
              updated_at = excluded.updated_at,
              author = excluded.author,
              version = excluded.version`
         )
-        .run(table.id, table.name, table.key_column, stringify(table.rows), table.updated_at, table.author, table.version);
+        .run(table.id, table.name, table.key_column, stringify(table.rows), stringify(table.metadata), table.updated_at, table.author, table.version);
       insertLookupVersion(this.db, table);
     });
     return table;
@@ -1319,6 +1321,7 @@ function migrate(db) {
       name TEXT NOT NULL,
       key_column TEXT NOT NULL DEFAULT 'key',
       rows_json TEXT NOT NULL DEFAULT '[]',
+      metadata_json TEXT NOT NULL DEFAULT '{}',
       updated_at TEXT NOT NULL,
       author TEXT NOT NULL,
       version INTEGER NOT NULL DEFAULT 1
@@ -1330,6 +1333,7 @@ function migrate(db) {
       name TEXT NOT NULL,
       key_column TEXT NOT NULL DEFAULT 'key',
       rows_json TEXT NOT NULL DEFAULT '[]',
+      metadata_json TEXT NOT NULL DEFAULT '{}',
       updated_at TEXT NOT NULL,
       author TEXT NOT NULL,
       PRIMARY KEY (id, version)
@@ -1463,6 +1467,8 @@ function migrate(db) {
   ensureColumn(db, "rule_sets", "cache_policy_json", "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn(db, "rule_sets", "metadata_json", "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn(db, "rule_versions", "metadata_json", "TEXT NOT NULL DEFAULT '{}'");
+  ensureColumn(db, "lookup_tables", "metadata_json", "TEXT NOT NULL DEFAULT '{}'");
+  ensureColumn(db, "lookup_table_versions", "metadata_json", "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn(db, "api_tokens", "decision_keys_json", "TEXT NOT NULL DEFAULT '[]'");
   seedLookupHistory(db);
   seedSettings(db);
@@ -1590,18 +1596,20 @@ async function seedIfEmpty(db) {
       name: table.name || table.id,
       key_column: table.key_column || "key",
       rows: table.rows || [],
+      metadata: isPlainObject(table.metadata) ? table.metadata : {},
       updated_at: table.updated_at || createdAtNow(),
       author: table.author || "system",
       version: table.version || 1
     };
     db.prepare(
-      `INSERT INTO lookup_tables (id, name, key_column, rows_json, updated_at, author, version)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO lookup_tables (id, name, key_column, rows_json, metadata_json, updated_at, author, version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       lookupTable.id,
       lookupTable.name,
       lookupTable.key_column,
       stringify(lookupTable.rows),
+      stringify(lookupTable.metadata),
       lookupTable.updated_at,
       lookupTable.author,
       lookupTable.version
@@ -1724,15 +1732,16 @@ function replaceVersions(db, decisionKey, versions) {
 
 function insertLookupVersion(db, table) {
   db.prepare(
-    `INSERT INTO lookup_table_versions (id, version, name, key_column, rows_json, updated_at, author)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO lookup_table_versions (id, version, name, key_column, rows_json, metadata_json, updated_at, author)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id, version) DO UPDATE SET
        name = excluded.name,
        key_column = excluded.key_column,
        rows_json = excluded.rows_json,
+       metadata_json = excluded.metadata_json,
        updated_at = excluded.updated_at,
        author = excluded.author`
-  ).run(table.id, table.version, table.name, table.key_column, stringify(table.rows || []), table.updated_at, table.author);
+  ).run(table.id, table.version, table.name, table.key_column, stringify(table.rows || []), stringify(table.metadata || {}), table.updated_at, table.author);
 }
 
 function seedLookupHistory(db) {
@@ -1806,6 +1815,7 @@ function rowToLookupTable(row) {
     name: row.name,
     key_column: row.key_column,
     rows: parse(row.rows_json),
+    metadata: parse(row.metadata_json || "{}"),
     updated_at: row.updated_at,
     author: row.author,
     version: row.version
@@ -1819,6 +1829,7 @@ function rowToLookupTableVersionSummary(row) {
     name: row.name,
     key_column: row.key_column,
     row_count: parse(row.rows_json).length,
+    metadata: parse(row.metadata_json || "{}"),
     updated_at: row.updated_at,
     author: row.author
   };

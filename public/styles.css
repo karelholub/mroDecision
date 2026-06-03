@@ -3703,6 +3703,47 @@ header {
   gap: 8px;
 }
 
+.lookup-validation-policy {
+  margin-bottom: 10px;
+  max-width: 320px;
+}
+
+.lookup-validation-rules {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.lookup-validation-rule-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(120px, 0.45fr) auto auto auto;
+  gap: 8px;
+  align-items: end;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel-soft);
+}
+
+.lookup-validation-rule-row label {
+  min-width: 0;
+}
+
+.lookup-validation-rule-row .checkbox-label {
+  align-self: center;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 38px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.lookup-validation-rule-row button {
+  min-height: 38px;
+}
+
 .lookup-validation-item {
   display: grid;
   gap: 4px;
@@ -4669,6 +4710,7 @@ pre {
     .message-rule-link-row,
     .lookup-workbench,
     .lookup-filter-bar,
+    .lookup-validation-rule-row,
     .lookup-editor-main,
     .filter-bar,
     .metric-grid,
