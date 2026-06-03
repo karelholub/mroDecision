@@ -241,10 +241,23 @@
                       </select>
                     </label>
                   </div>
-                  <label>
-                    Variants JSON
+                  <div class="variant-builder-panel">
+                    <div class="variant-builder-head">
+                      <div>
+                        <strong>Variants</strong>
+                        <span>Configure allocation and response fields without editing JSON.</span>
+                      </div>
+                      <div class="actions">
+                        <button type="button" id="add-experiment-variant">Add Variant</button>
+                        <button type="button" id="balance-experiment-variants">Balance Weights</button>
+                      </div>
+                    </div>
+                    <div id="experiment-variant-builder" class="variant-builder-list"></div>
+                  </div>
+                  <details class="output-helper">
+                    <summary>Advanced variants JSON</summary>
                     <textarea id="experiment-variants" spellcheck="false"></textarea>
-                  </label>
+                  </details>
                   <div id="experiment-summary" class="status-panel compact-status-panel"></div>
                 </div>
                 <div class="logic-summary-card">

@@ -303,10 +303,16 @@ document.querySelector("#rule-draft").addEventListener("change", syncBuilderFrom
   document.querySelector(selector).addEventListener("input", renderRuleInspector);
   document.querySelector(selector).addEventListener("change", renderRuleInspector);
 });
-["#experiment-status", "#experiment-unit", "#experiment-variants"].forEach((selector) => {
+["#experiment-status", "#experiment-unit"].forEach((selector) => {
   document.querySelector(selector).addEventListener("input", renderRuleInspector);
   document.querySelector(selector).addEventListener("change", renderRuleInspector);
 });
+document.querySelector("#experiment-variants").addEventListener("change", syncExperimentVariantBuilderFromJson);
+document.querySelector("#add-experiment-variant").addEventListener("click", addExperimentVariant);
+document.querySelector("#balance-experiment-variants").addEventListener("click", balanceExperimentVariants);
+document.querySelector("#experiment-variant-builder").addEventListener("input", syncExperimentVariantsFromBuilder);
+document.querySelector("#experiment-variant-builder").addEventListener("change", syncExperimentVariantsFromBuilder);
+document.querySelector("#experiment-variant-builder").addEventListener("click", handleExperimentVariantBuilderClick);
 document.querySelector("#experiment-launch").addEventListener("click", () => setExperimentStatus("running"));
 document.querySelector("#experiment-pause").addEventListener("click", () => setExperimentStatus("paused"));
 document.querySelector("#fallback-result").addEventListener("input", syncJsonFromBuilder);
@@ -1279,6 +1285,7 @@ function renderExperimentPanel() {
   const total = variants.reduce((sum, variant) => sum + Number(variant.weight || 0), 0);
   const status = experiment.status || "draft";
   const warnings = experimentMetadataWarnings(experiment);
+  if (!document.querySelector("#experiment-variant-builder")?.innerHTML.trim()) renderExperimentVariantBuilder(variants);
   experimentSummary.innerHTML = [
     statusItem("Status", status),
     statusItem("Assignment", experiment.unit || "profile"),
@@ -1298,6 +1305,7 @@ function setExperimentMetadata(experiment = {}) {
     null,
     2
   );
+  renderExperimentVariantBuilder(readExperimentMetadata({ tolerateInvalid: true }).variants);
   renderExperimentPanel();
 }
 
@@ -1311,6 +1319,164 @@ function defaultExperimentVariants() {
 function setExperimentStatus(status) {
   document.querySelector("#experiment-status").value = status;
   renderRuleInspector();
+}
+
+function syncExperimentVariantBuilderFromJson() {
+  const experiment = readExperimentMetadata({ tolerateInvalid: true });
+  renderExperimentVariantBuilder(experiment.variants || []);
+  renderRuleInspector();
+}
+
+function renderExperimentVariantBuilder(variants = []) {
+  const target = document.querySelector("#experiment-variant-builder");
+  if (!target) return;
+  target.innerHTML = (variants.length ? variants : defaultExperimentVariants()).map((variant, index) => `
+    <div class="variant-builder-row" data-variant-index="${index}">
+      <label>
+        Variant key
+        <input data-variant-field="key" value="${escapeHtml(variant.key || `variant_${index + 1}`)}" />
+      </label>
+      <label>
+        Weight
+        <div class="variant-weight-control">
+          <input data-variant-field="weight" type="range" min="0" max="100" step="1" value="${escapeHtml(Number(variant.weight || 0))}" />
+          <input data-variant-field="weight_number" type="number" min="0" max="100" step="1" value="${escapeHtml(Number(variant.weight || 0))}" />
+        </div>
+      </label>
+      <label>
+        Output fields
+        <div data-role="variant-output-fields" class="variant-output-fields">
+          ${variantOutputFields(variant.outputs || {}).map((field, fieldIndex) => variantOutputFieldRow(field, fieldIndex)).join("")}
+        </div>
+      </label>
+      <div class="variant-builder-actions">
+        <button type="button" data-variant-action="add-output">Add Output</button>
+        <button type="button" data-variant-action="remove-variant" ${variants.length <= 1 ? "disabled" : ""}>Remove</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function variantOutputFields(outputs = {}) {
+  const entries = Object.entries(outputs);
+  return entries.length ? entries.map(([key, value]) => ({ key, value })) : [{ key: "variant", value: "" }];
+}
+
+function variantOutputFieldRow(field = {}, index = 0) {
+  return `
+    <div class="variant-output-field" data-output-index="${index}">
+      <input data-output-field="key" placeholder="output_key" value="${escapeHtml(field.key || "")}" />
+      <input data-output-field="value" placeholder="value" value="${escapeHtml(stringifyOutputValue(field.value))}" />
+      <button type="button" data-variant-action="remove-output">Remove</button>
+    </div>
+  `;
+}
+
+function stringifyOutputValue(value) {
+  if (value == null) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function readExperimentVariantsFromBuilder() {
+  return [...document.querySelectorAll(".variant-builder-row")].map((row, index) => {
+    const key = row.querySelector('[data-variant-field="key"]').value.trim() || `variant_${index + 1}`;
+    const weightInput = row.querySelector('[data-variant-field="weight_number"]');
+    const outputs = {};
+    row.querySelectorAll(".variant-output-field").forEach((fieldRow) => {
+      const outputKey = fieldRow.querySelector('[data-output-field="key"]').value.trim();
+      if (!outputKey) return;
+      outputs[outputKey] = parseOutputFieldValue(fieldRow.querySelector('[data-output-field="value"]').value);
+    });
+    return {
+      key: slugForUi(key),
+      weight: Number(weightInput.value || 0),
+      outputs
+    };
+  });
+}
+
+function parseOutputFieldValue(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function syncExperimentVariantsFromBuilder(event) {
+  const field = event.target?.dataset?.variantField;
+  if (field === "weight") {
+    event.target.closest(".variant-weight-control")?.querySelector('[data-variant-field="weight_number"]')?.setAttribute("value", event.target.value);
+    event.target.closest(".variant-weight-control").querySelector('[data-variant-field="weight_number"]').value = event.target.value;
+  }
+  if (field === "weight_number") {
+    const value = Math.max(0, Math.min(100, Number(event.target.value || 0)));
+    event.target.value = value;
+    event.target.closest(".variant-weight-control")?.querySelector('[data-variant-field="weight"]')?.setAttribute("value", value);
+    event.target.closest(".variant-weight-control").querySelector('[data-variant-field="weight"]').value = value;
+  }
+  writeExperimentVariantsFromBuilder();
+}
+
+function writeExperimentVariantsFromBuilder() {
+  document.querySelector("#experiment-variants").value = JSON.stringify(readExperimentVariantsFromBuilder(), null, 2);
+  renderRuleInspector();
+}
+
+function addExperimentVariant() {
+  const variants = readExperimentVariantsFromBuilder();
+  variants.push({ key: uniqueVariantKey(variants), weight: 0, outputs: { variant: "" } });
+  document.querySelector("#experiment-variants").value = JSON.stringify(variants, null, 2);
+  syncExperimentVariantBuilderFromJson();
+}
+
+function balanceExperimentVariants() {
+  const variants = readExperimentVariantsFromBuilder();
+  if (!variants.length) return;
+  const base = Math.floor(100 / variants.length);
+  let remainder = 100 - (base * variants.length);
+  const balanced = variants.map((variant) => ({
+    ...variant,
+    weight: base + (remainder-- > 0 ? 1 : 0)
+  }));
+  document.querySelector("#experiment-variants").value = JSON.stringify(balanced, null, 2);
+  syncExperimentVariantBuilderFromJson();
+}
+
+function handleExperimentVariantBuilderClick(event) {
+  const button = event.target.closest("[data-variant-action]");
+  if (!button) return;
+  const action = button.dataset.variantAction;
+  const row = button.closest(".variant-builder-row");
+  if (action === "add-output") {
+    row.querySelector('[data-role="variant-output-fields"]').insertAdjacentHTML("beforeend", variantOutputFieldRow({}, row.querySelectorAll(".variant-output-field").length));
+    writeExperimentVariantsFromBuilder();
+  }
+  if (action === "remove-output") {
+    button.closest(".variant-output-field")?.remove();
+    writeExperimentVariantsFromBuilder();
+  }
+  if (action === "remove-variant") {
+    row?.remove();
+    writeExperimentVariantsFromBuilder();
+    syncExperimentVariantBuilderFromJson();
+  }
+}
+
+function uniqueVariantKey(variants = []) {
+  const existing = new Set(variants.map((variant) => variant.key));
+  for (let index = 1; index < 100; index += 1) {
+    const candidate = `variant_${index}`;
+    if (!existing.has(candidate)) return candidate;
+  }
+  return `variant_${Date.now()}`;
+}
+
+function slugForUi(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "variant";
 }
 
 function readExperimentMetadata({ tolerateInvalid = false } = {}) {
