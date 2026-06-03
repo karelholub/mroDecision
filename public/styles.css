@@ -3931,6 +3931,68 @@ button.graph-node:hover {
   grid-template-columns: minmax(120px, 0.8fr) minmax(110px, 0.55fr) minmax(180px, 1.2fr) auto;
   gap: 8px;
   align-items: end;
+  min-width: 0;
+}
+
+.message-output-row {
+  align-items: start;
+}
+
+.message-output-preview {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.message-output-preview.missing,
+.message-output-preview.empty {
+  border-color: rgba(180, 83, 9, 0.28);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.message-output-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.message-output-copy span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.message-output-copy strong {
+  color: var(--ink);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.message-output-copy small,
+.message-output-copy em {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.message-output-copy em {
+  font-style: normal;
+  font-weight: 700;
+}
+
+.message-output-preview button {
+  white-space: nowrap;
 }
 
 .publish-review-body {
@@ -4230,6 +4292,7 @@ pre {
   .condition-row,
   .condition-guidance,
   .output-field-row,
+  .message-output-preview,
   .lookup-output-grid,
   .ttl-helper-grid,
   .publish-summary-grid {

@@ -187,11 +187,11 @@ Goal: make DEE safer and easier for marketing practitioners to operate without e
 - Add approval workflow with submit-for-review and approver-only publish.
 - Add dashboard date range, alert/anomaly indicators, clearer metric labels, and quick-create shortcuts.
 
-Status: started with experiment significance calculations, confidence labels, minimum-sample guidance, CSV export fields, a visual experiment variant builder with allocation controls and output fields, and plain-language branch condition summaries with schema-aware inline field hints. Remaining items are pending.
+Status: started with experiment significance calculations, confidence labels, minimum-sample guidance, CSV export fields, a visual experiment variant builder with allocation controls and output fields, plain-language branch condition summaries with schema-aware inline field hints, and branch output message linking with compact content previews. Remaining items are pending.
 
 ## Recommended Next Sprint
 
-1. Add rule/message two-way linkage and real-time message preview improvements.
+1. Add message-to-rule backlink inventory and richer real-time message preview states.
 2. Add approval workflow with submit-for-review and approver-only publish.
 3. Add experiment creation shortcuts, goal configuration, scheduling, and sample-size guidance.
 4. Add Reference Data search/filtering and column validation rules.

@@ -303,6 +303,11 @@ document.querySelector("#rule-draft").addEventListener("change", syncBuilderFrom
   document.querySelector(selector).addEventListener("input", renderRuleInspector);
   document.querySelector(selector).addEventListener("change", renderRuleInspector);
 });
+document.querySelector("#rule-type").addEventListener("change", () => {
+  ensureInAppMessageOutputs();
+  renderBranchEditor();
+  syncJsonFromBuilder();
+});
 ["#experiment-status", "#experiment-unit"].forEach((selector) => {
   document.querySelector(selector).addEventListener("input", renderRuleInspector);
   document.querySelector(selector).addEventListener("change", renderRuleInspector);
@@ -2239,12 +2244,14 @@ async function loadMessages() {
   try {
     const body = await api("/v1/messages");
     cachedMessages = body.messages || [];
+    renderMessageOutputOptions();
     target.innerHTML += body.messages.length
       ? body.messages.map((item) => messageCatalogRow(item)).join("")
       : row(["No messages", "", "", "", "", ""]);
     document.querySelectorAll("[data-message-id]").forEach((element) => {
       element.addEventListener("click", () => loadMessage(element.dataset.messageId, body.messages));
     });
+    renderBranchEditor();
     if (document.querySelector("#builder-mode")?.value === "graph") renderGraphBuilder();
   } catch (error) {
     target.innerHTML += row([error.message, "", "", "", "", ""]);
@@ -2808,7 +2815,7 @@ function newBranch(index) {
   return {
     id: `branch_${index}`,
     result: "eligible",
-    outputs: "{}",
+    outputs: JSON.stringify(defaultBranchOutputs()),
     logic: "all",
     conditions: [
       {
@@ -2819,6 +2826,14 @@ function newBranch(index) {
       }
     ]
   };
+}
+
+function defaultBranchOutputs() {
+  if (document.querySelector("#rule-type")?.value === "inapp_message") {
+    const message = cachedMessages.find((item) => item.status !== "archived") || cachedMessages[0];
+    return message ? { message_id: message.id } : {};
+  }
+  return {};
 }
 
 function renderBranchEditor() {
@@ -2997,7 +3012,13 @@ function bindOutputFieldEditor(node, branchIndex) {
   });
   target.querySelectorAll("[data-output-value]").forEach((input) => {
     input.addEventListener("input", () => updateOutputField(branchIndex, input.dataset.outputValue, null, input.value));
-    input.addEventListener("change", syncJsonFromBuilder);
+    input.addEventListener("change", () => {
+      if (input.dataset.outputValue === "message_id") renderBranchEditor();
+      syncJsonFromBuilder();
+    });
+  });
+  target.querySelectorAll("[data-open-output-message]").forEach((button) => {
+    button.addEventListener("click", () => openLinkedMessage(button.dataset.openOutputMessage));
   });
   target.querySelectorAll("[data-remove-output]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -3011,9 +3032,10 @@ function bindOutputFieldEditor(node, branchIndex) {
 }
 
 function outputFieldRow(key, value) {
-  const type = outputValueType(value);
+  const type = outputValueType(value, key);
+  const message = type === "message" ? cachedMessages.find((item) => item.id === value) : null;
   return `
-    <div class="output-field-row">
+    <div class="output-field-row${type === "message" ? " message-output-row" : ""}">
       <label>
         Field
         <input data-output-key="${escapeHtml(key)}" value="${escapeHtml(key)}" />
@@ -3024,18 +3046,21 @@ function outputFieldRow(key, value) {
           <option value="static"${type === "static" ? " selected" : ""}>Static</option>
           <option value="reference"${type === "reference" ? " selected" : ""}>Reference</option>
           <option value="expression"${type === "expression" ? " selected" : ""}>Expression</option>
+          <option value="message"${type === "message" ? " selected" : ""}>Message</option>
         </select>
       </label>
       <label>
         Value
-        <input data-output-value="${escapeHtml(key)}" value="${escapeHtml(formatOutputValue(value))}" />
+        <input data-output-value="${escapeHtml(key)}" value="${escapeHtml(formatOutputValue(value))}" ${type === "message" ? `list="message-output-options"` : ""} />
       </label>
       <button type="button" data-remove-output="${escapeHtml(key)}">Remove</button>
+      ${type === "message" ? messageOutputPreview(key, value, message) : ""}
     </div>
   `;
 }
 
-function outputValueType(value) {
+function outputValueType(value, key = "") {
+  if (key === "message_id") return "message";
   if (typeof value === "string" && value.startsWith("=lookup(")) return "reference";
   if (typeof value === "string" && value.startsWith("=")) return "expression";
   return "static";
@@ -3061,7 +3086,10 @@ function updateOutputField(branchIndex, oldKey, nextKey, nextValue) {
 function updateOutputFieldType(branchIndex, key, type) {
   const outputs = parseJsonSafe(builderBranches[branchIndex].outputs || "{}");
   const current = outputs[key];
-  if (type === "reference" && !(typeof current === "string" && current.startsWith("=lookup("))) {
+  if (type === "message") {
+    if (key !== "message_id") delete outputs[key];
+    outputs.message_id = cachedMessages.find((item) => item.status !== "archived")?.id || cachedMessages[0]?.id || formatOutputValue(current) || "";
+  } else if (type === "reference" && !(typeof current === "string" && current.startsWith("=lookup("))) {
     const table = preferredLookupTable();
     const column = firstLookupValueColumn(table) || "field_name";
     outputs[key] = table ? `=lookup(${JSON.stringify(table.id)}, ${defaultLookupKeyExpression(table, outputs) || "\"\""}, ${JSON.stringify(column)})` : "=lookup(\"table_id\", \"key\", \"field\")";
@@ -3073,6 +3101,51 @@ function updateOutputFieldType(branchIndex, key, type) {
   builderBranches[branchIndex].outputs = JSON.stringify(outputs);
   renderBranchEditor();
   syncJsonFromBuilder();
+}
+
+function ensureInAppMessageOutputs() {
+  if (document.querySelector("#rule-type")?.value !== "inapp_message") return;
+  if (!cachedMessages.length) return;
+  const message = cachedMessages.find((item) => item.status !== "archived") || cachedMessages[0];
+  builderBranches.forEach((branch) => {
+    const outputs = parseJsonSafe(branch.outputs || "{}");
+    if (Object.keys(outputs).length || outputs.message_id) return;
+    outputs.message_id = message.id;
+    branch.outputs = JSON.stringify(outputs);
+  });
+}
+
+function messageOutputPreview(key, value, message) {
+  const content = message?.default_content || {};
+  const title = content.title || content.headline || message?.name || value || "No message selected";
+  const template = messageTemplateType(content.template_type || content.type || message?.metadata?.template_type || "banner");
+  const ctas = normalizeMessageCtas(content);
+  const state = message ? "linked" : value ? "missing" : "empty";
+  return `
+    <div class="message-output-preview ${state}">
+      <div class="message-output-copy">
+        <span>${escapeHtml(message ? [template, message.surface || content.placement].filter(Boolean).join(" · ") : "Message link")}</span>
+        <strong>${escapeHtml(title)}</strong>
+        <small>${escapeHtml(message ? (content.body || "No body text") : (value ? `No saved message found for ${value}` : "Choose a message to return from this branch"))}</small>
+        ${ctas.length ? `<em>${escapeHtml(ctas.map((cta) => cta.label || cta.url).filter(Boolean).join(" + "))}</em>` : ""}
+      </div>
+      <button type="button" data-open-output-message="${escapeHtml(value || "")}" ${message ? "" : "disabled"}>Open Message</button>
+    </div>
+  `;
+}
+
+function openLinkedMessage(id) {
+  const message = cachedMessages.find((item) => item.id === id);
+  if (!message) return;
+  loadMessage(message.id, cachedMessages);
+}
+
+function renderMessageOutputOptions() {
+  const list = document.querySelector("#message-output-options");
+  if (!list) return;
+  list.innerHTML = cachedMessages
+    .map((item) => `<option value="${escapeHtml(item.id)}" label="${escapeHtml([item.name, item.surface, item.status].filter(Boolean).join(" / "))}"></option>`)
+    .join("");
 }
 
 function parseOutputInputValue(raw, previousValue) {
