@@ -194,9 +194,18 @@ document.querySelectorAll("[data-lookup-drawer-tab]").forEach((button) => {
 document.querySelector("#refresh-metrics").addEventListener("click", loadMetrics);
 document.querySelector("#refresh-experiments")?.addEventListener("click", loadExperiments);
 document.querySelector("#export-experiments-csv")?.addEventListener("click", exportExperimentsCsv);
+document.querySelector("#assistant-toggle")?.addEventListener("click", openAssistantPanel);
+document.querySelector("#assistant-fab")?.addEventListener("click", openAssistantPanel);
+document.querySelector("#assistant-close")?.addEventListener("click", closeAssistantPanel);
 document.querySelector("#assistant-plan")?.addEventListener("click", planAssistantRequest);
 document.querySelector("#assistant-apply")?.addEventListener("click", applyAssistantPlan);
 document.querySelector("#assistant-handoff")?.addEventListener("click", handleAssistantHandoffAction);
+document.querySelectorAll("[data-assistant-suggestion]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelector("#assistant-prompt").value = button.dataset.assistantSuggestion || "";
+    openAssistantPanel();
+  });
+});
 document.querySelector("#refresh-rules").addEventListener("click", loadRules);
 document.querySelector("#rule-filter-search").addEventListener("input", renderRuleList);
 document.querySelector("#rule-filter-status").addEventListener("change", renderRuleList);
@@ -353,6 +362,7 @@ document.querySelector("#token-form").addEventListener("submit", createToken);
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !ruleBuilderModal.hidden) closeRuleBuilder();
   else if (event.key === "Escape" && ruleDetailModal && !ruleDetailModal.hidden) closeRuleDetail();
+  if (event.key === "Escape" && document.body.classList.contains("assistant-open")) closeAssistantPanel();
   if (event.key === "Escape" && lookupDetailModal && !lookupDetailModal.hidden) closeLookupDetail();
   if (event.key === "Escape" && messageDetailModal && !messageDetailModal.hidden) closeMessageDetail();
   if (event.key === "Escape" && overviewRuleDetailModal && !overviewRuleDetailModal.hidden) closeOverviewRuleDetail();
@@ -391,6 +401,35 @@ async function api(path, options = {}) {
   const body = await response.json();
   if (!response.ok) throw new Error(body.message || response.statusText);
   return body;
+}
+
+function openAssistantPanel() {
+  const panel = document.querySelector("#assistant-panel");
+  if (!panel) return;
+  panel.hidden = false;
+  document.body.classList.add("assistant-open");
+  document.querySelector("#assistant-toggle")?.setAttribute("aria-expanded", "true");
+}
+
+function closeAssistantPanel() {
+  const panel = document.querySelector("#assistant-panel");
+  if (!panel) return;
+  document.body.classList.remove("assistant-open");
+  document.querySelector("#assistant-toggle")?.setAttribute("aria-expanded", "false");
+  panel.hidden = true;
+}
+
+function appendAssistantMessage(kind, title, detail = "") {
+  const target = document.querySelector("#assistant-conversation");
+  if (!target) return;
+  const element = document.createElement("div");
+  element.className = `assistant-message assistant-message-${kind}`;
+  element.innerHTML = `
+    <strong>${escapeHtml(title)}</strong>
+    ${detail ? `<span>${escapeHtml(detail)}</span>` : ""}
+  `;
+  target.appendChild(element);
+  target.scrollTop = target.scrollHeight;
 }
 
 function updateTopbarForView(view) {
@@ -529,14 +568,18 @@ async function planAssistantRequest() {
       ttl_seconds: Number(document.querySelector("#assistant-ttl").value || 0)
     };
     if (!body.prompt) throw new Error("Describe what the assistant should configure.");
+    openAssistantPanel();
+    appendAssistantMessage("user", body.prompt);
     const response = await api("/v1/assistant/plan", {
       method: "POST",
       body: JSON.stringify(body)
     });
     cachedAssistantPlan = response.plan;
     renderAssistantPlan(cachedAssistantPlan);
+    appendAssistantMessage("assistant", "Draft plan ready", cachedAssistantPlan.summary || "Review the generated draft before applying.");
   } catch (error) {
     cachedAssistantPlan = null;
+    appendAssistantMessage("assistant", "Could not create a plan", error.message);
     if (guardrails) guardrails.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
     if (output) output.textContent = "{}";
     if (handoff) handoff.hidden = true;
@@ -558,10 +601,12 @@ async function applyAssistantPlan() {
       statusItem("Mode", "Draft only"),
       statusItem("Publish", "Manual review required")
     ].join("");
+    appendAssistantMessage("assistant", "Draft saved", "I saved the assistant changes as drafts. Use the review buttons before publishing.");
     await Promise.all([loadRules(), loadMessages()]);
     renderAssistantHandoff(cachedAssistantPlan, response.applied || [], { applied: true });
   } catch (error) {
     document.querySelector("#assistant-guardrails").innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
+    appendAssistantMessage("assistant", "Could not apply draft", error.message);
     applyButton.disabled = false;
   }
 }

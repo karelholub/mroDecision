@@ -31,6 +31,10 @@ body {
   background: var(--page);
 }
 
+body.assistant-open .app-frame {
+  margin-right: clamp(380px, 30vw, 480px);
+}
+
 aside {
   height: 100vh;
   overflow: auto;
@@ -119,6 +123,13 @@ button {
 
 button:hover {
   border-color: var(--line-strong);
+}
+
+.assistant-toggle {
+  min-height: 34px;
+  border-color: transparent;
+  background: var(--accent);
+  color: #ffffff;
 }
 
 nav button {
@@ -433,19 +444,6 @@ aside input {
   display: grid;
   gap: 16px;
   min-width: 0;
-}
-
-.assistant-workbench {
-  display: grid;
-  grid-template-columns: minmax(360px, 0.75fr) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-  min-width: 0;
-}
-
-.assistant-workbench textarea {
-  min-height: 190px;
-  resize: vertical;
 }
 
 #assistant-plan-output {
@@ -980,6 +978,167 @@ body[data-current-view="overview"] .topbar {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+}
+
+.assistant-fab {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 70;
+  min-height: 42px;
+  border-color: transparent;
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 118, 110, 0.26);
+}
+
+body.assistant-open .assistant-fab {
+  display: none;
+}
+
+.assistant-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 80;
+  width: clamp(380px, 30vw, 480px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+  background: linear-gradient(180deg, #ffffff 0%, #fbf8ff 100%);
+  border-left: 1px solid var(--line);
+  box-shadow: -18px 0 40px rgba(16, 24, 40, 0.14);
+  min-width: 0;
+}
+
+.assistant-panel[hidden] {
+  display: none;
+}
+
+.assistant-panel-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 18px 18px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.assistant-panel-header div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.assistant-panel-header strong {
+  font-size: 18px;
+}
+
+.assistant-panel-header span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.assistant-conversation {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 14px 16px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.assistant-message {
+  display: grid;
+  gap: 5px;
+  max-width: 92%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  overflow-wrap: anywhere;
+}
+
+.assistant-message span {
+  color: var(--muted);
+  line-height: 1.42;
+}
+
+.assistant-message-user {
+  justify-self: end;
+  background: #efe3ff;
+  border-color: #e0ccff;
+}
+
+.assistant-message-assistant,
+.assistant-message-system {
+  justify-self: start;
+}
+
+.assistant-suggestions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.assistant-suggestions button {
+  min-height: 32px;
+  background: #efe3ff;
+  border-color: #e0ccff;
+}
+
+.assistant-composer {
+  display: grid;
+  gap: 10px;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.assistant-composer textarea {
+  min-height: 92px;
+  max-height: 180px;
+  resize: vertical;
+}
+
+.assistant-composer-options summary,
+.assistant-json-drawer summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.assistant-options-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.assistant-composer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.assistant-composer-actions #assistant-plan {
+  border-color: transparent;
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.assistant-result {
+  max-height: 42vh;
+  overflow: auto;
+  padding: 0 16px 16px;
+}
+
+.assistant-json-drawer {
+  margin-top: 12px;
 }
 
 main {
@@ -3712,6 +3871,10 @@ pre {
     overflow: auto;
   }
 
+  body.assistant-open .app-frame {
+    margin-right: 0;
+  }
+
   aside {
     min-height: auto;
     height: auto;
@@ -3785,7 +3948,6 @@ pre {
 
   .overview-workbench,
   .overview-primary-pane,
-  .assistant-workbench,
   .assistant-preview-grid,
   .experiment-ops-grid,
   .overview-service-footer {
@@ -3825,6 +3987,11 @@ pre {
   .rule-usage-card {
     grid-template-columns: minmax(180px, 1.4fr) 84px 70px minmax(110px, 0.8fr) minmax(120px, 1fr) 48px;
   }
+
+  .assistant-panel {
+    left: 0;
+    width: 100vw;
+  }
 }
 
 @media (max-width: 760px) {
@@ -3847,7 +4014,6 @@ pre {
     .metric-grid,
     .overview-workbench,
     .overview-primary-pane,
-    .assistant-workbench,
     .assistant-preview-grid,
     .experiment-ops-grid,
     .overview-service-footer,

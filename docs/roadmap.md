@@ -159,7 +159,7 @@ Status: readiness, request IDs, request logs, runtime request telemetry, guarded
 
 Goal: let business users ask DEE to create rules, messages, and experiments while keeping all mutations inside draft, validation, diff, and publish guardrails.
 
-- Add Assistant UI for natural-language configuration requests.
+- Add conversational Assistant panel for natural-language configuration requests.
 - Add `POST /v1/assistant/plan` to convert a request into a structured draft-only plan.
 - Add `POST /v1/assistant/apply` to create or update drafts only.
 - Reuse existing rule validation, schema warnings, publish review, and experiment allocation guardrails.
@@ -168,7 +168,7 @@ Goal: let business users ask DEE to create rules, messages, and experiments whil
 - Keep publish as a separate explicit user action.
 - Add optional LLM provider integration behind the deterministic planner contract.
 
-Status: first-pass deterministic assistant planner, draft-only apply endpoint, Assistant UI, message/rule/experiment draft generation, allocation checks, shared rule validation, schema-aware field matching, schema diagnostics, generated draft evaluation previews, affected-draft summaries, publish-review handoff, and non-blocking prompt disambiguation are implemented. LLM-backed planning remains.
+Status: first-pass deterministic assistant planner, draft-only apply endpoint, conversational Assistant panel, message/rule/experiment draft generation, allocation checks, shared rule validation, schema-aware field matching, schema diagnostics, generated draft evaluation previews, affected-draft summaries, publish-review handoff, and non-blocking prompt disambiguation are implemented. LLM-backed planning remains.
 
 ## Recommended Next Sprint
 
