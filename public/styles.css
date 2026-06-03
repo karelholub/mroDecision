@@ -1712,6 +1712,7 @@ header {
   grid-column: 1 / -1;
 }
 
+.overview-campaign-card,
 .overview-change-card {
   grid-column: 1 / -1;
 }
@@ -1785,6 +1786,62 @@ header {
 .change-log-item em {
   color: var(--muted);
   font-size: 12px;
+}
+
+.campaign-rollup-list {
+  display: grid;
+  gap: 0;
+  max-height: 360px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+}
+
+.campaign-rollup-header,
+.campaign-rollup-item {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.25fr) minmax(170px, 1fr) 90px minmax(180px, 1fr) 86px minmax(130px, 0.8fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.campaign-rollup-header {
+  padding: 9px 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.campaign-rollup-item {
+  min-width: 0;
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.campaign-rollup-item div,
+.campaign-rollup-item span,
+.campaign-rollup-item strong,
+.campaign-rollup-item small,
+.campaign-rollup-item mark {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.campaign-rollup-item div strong,
+.campaign-rollup-item div small {
+  display: block;
+}
+
+.campaign-rollup-item small,
+.campaign-rollup-item span,
+.campaign-rollup-item mark {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.campaign-rollup-item mark {
+  background: transparent;
 }
 
 .rule-usage-header,

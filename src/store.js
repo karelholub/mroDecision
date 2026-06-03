@@ -158,6 +158,105 @@ export class Store {
       .slice(0, limit);
   }
 
+  listCampaignOperations(params = {}) {
+    const windowHours = normalizeMetricsWindowHours(params.window_hours);
+    const since = new Date(Date.now() - windowHours * 60 * 60 * 1000).toISOString();
+    const campaigns = new Map();
+    const decisionCampaigns = new Map();
+    const ensure = (label) => {
+      const campaign = label || "Unassigned";
+      if (!campaigns.has(campaign)) {
+        campaigns.set(campaign, {
+          campaign,
+          window_hours: windowHours,
+          rules: 0,
+          experiments: 0,
+          messages: 0,
+          published_rules: 0,
+          draft_rules: 0,
+          archived_rules: 0,
+          requests: 0,
+          unique_profiles: 0,
+          client_events: { exposure: 0, impression: 0, conversion: 0 },
+          decision_keys: [],
+          surfaces: [],
+          last_activity_at: null
+        });
+      }
+      return campaigns.get(campaign);
+    };
+    const touch = (campaign, at) => {
+      if (at && (!campaign.last_activity_at || String(at) > String(campaign.last_activity_at))) campaign.last_activity_at = at;
+    };
+    for (const rule of this.listRuleSets()) {
+      const campaign = ensure(campaignLabel(rule.metadata) || "Unassigned");
+      campaign.rules += 1;
+      if (rule.type === "experiment") campaign.experiments += 1;
+      if (rule.status === "published") campaign.published_rules += 1;
+      if (rule.status === "draft" || rule.status === "submitted") campaign.draft_rules += 1;
+      if (rule.status === "archived") campaign.archived_rules += 1;
+      campaign.decision_keys.push(rule.decision_key);
+      decisionCampaigns.set(rule.decision_key, campaign.campaign);
+      touch(campaign, rule.updated_at);
+    }
+    for (const message of this.listMessages()) {
+      const campaign = ensure(campaignLabel(message.metadata) || "Unassigned");
+      campaign.messages += 1;
+      if (message.surface && !campaign.surfaces.includes(message.surface)) campaign.surfaces.push(message.surface);
+      touch(campaign, message.updated_at);
+    }
+    const requestRows = this.db
+      .prepare(
+        `SELECT decision_key, COUNT(*) AS requests, COUNT(DISTINCT profile_key) AS unique_profiles, MAX(evaluated_at) AS last_seen_at
+         FROM audit_log
+         WHERE evaluated_at >= ?
+         GROUP BY decision_key`
+      )
+      .all(since);
+    for (const row of requestRows) {
+      const campaign = ensure(decisionCampaigns.get(row.decision_key) || "Unassigned");
+      campaign.requests += Number(row.requests || 0);
+      campaign.unique_profiles += Number(row.unique_profiles || 0);
+      if (!campaign.decision_keys.includes(row.decision_key)) campaign.decision_keys.push(row.decision_key);
+      touch(campaign, row.last_seen_at);
+    }
+    const eventRows = this.db
+      .prepare(
+        `SELECT decision_key, event_type, COUNT(*) AS count, MAX(occurred_at) AS last_seen_at
+         FROM client_events
+         WHERE occurred_at >= ?
+         GROUP BY decision_key, event_type`
+      )
+      .all(since);
+    for (const row of eventRows) {
+      const campaign = ensure(decisionCampaigns.get(row.decision_key) || "Unassigned");
+      if (campaign.client_events[row.event_type] !== undefined) {
+        campaign.client_events[row.event_type] += Number(row.count || 0);
+      }
+      if (!campaign.decision_keys.includes(row.decision_key)) campaign.decision_keys.push(row.decision_key);
+      touch(campaign, row.last_seen_at);
+    }
+    return [...campaigns.values()]
+      .map((campaign) => {
+        const exposures = Number(campaign.client_events.exposure || 0);
+        const conversions = Number(campaign.client_events.conversion || 0);
+        return {
+          ...campaign,
+          client_event_total: Object.values(campaign.client_events).reduce((sum, value) => sum + Number(value || 0), 0),
+          conversion_rate: exposures > 0 ? conversions / exposures : 0,
+          decision_keys: campaign.decision_keys.slice(0, 12),
+          surfaces: campaign.surfaces.slice(0, 8)
+        };
+      })
+      .sort((left, right) =>
+        Number(right.requests || 0) - Number(left.requests || 0) ||
+        Number(right.client_event_total || 0) - Number(left.client_event_total || 0) ||
+        Number(right.rules + right.messages) - Number(left.rules + left.messages) ||
+        left.campaign.localeCompare(right.campaign)
+      )
+      .slice(0, Math.max(1, Math.min(50, Number(params.limit || 12))));
+  }
+
   createRuleSet(input, author) {
     const key = normalizeKey(input.decision_key || input.name);
     if (!key) badRequest("decision_key is required");

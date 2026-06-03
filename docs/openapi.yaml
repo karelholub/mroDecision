@@ -491,6 +491,32 @@ paths:
             text/csv:
               schema:
                 type: string
+  /v1/campaigns:
+    get:
+      summary: Get campaign-level operational rollups
+      parameters:
+        - name: window_hours
+          in: query
+          schema:
+            type: integer
+            default: 24
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 12
+      responses:
+        "200":
+          description: Campaign-level rule, message, traffic, and feedback rollups
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  campaigns:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CampaignOperation"
   /v1/rule-sets/{key}:
     get:
       summary: Get a rule set with draft and latest published version
@@ -2947,6 +2973,54 @@ components:
           nullable: true
         configured:
           type: boolean
+    CampaignOperation:
+      type: object
+      properties:
+        campaign:
+          type: string
+        window_hours:
+          type: integer
+        rules:
+          type: integer
+        experiments:
+          type: integer
+        messages:
+          type: integer
+        published_rules:
+          type: integer
+        draft_rules:
+          type: integer
+        archived_rules:
+          type: integer
+        requests:
+          type: integer
+        unique_profiles:
+          type: integer
+        client_events:
+          type: object
+          properties:
+            exposure:
+              type: integer
+            impression:
+              type: integer
+            conversion:
+              type: integer
+        client_event_total:
+          type: integer
+        conversion_rate:
+          type: number
+        decision_keys:
+          type: array
+          items:
+            type: string
+        surfaces:
+          type: array
+          items:
+            type: string
+        last_activity_at:
+          type: string
+          format: date-time
+          nullable: true
     Settings:
       type: object
       properties:

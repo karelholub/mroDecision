@@ -197,12 +197,12 @@ Status: started with experiment significance calculations, confidence labels, mi
 3. Improve experiment operations: validate allocation weights to 100%, explain significance methodology, and add a Declare Winner flow that prepares a 100% allocation draft. Implemented.
 4. Improve governance: capture review assignee, submission comment, approval comment, approval history, and a compact rule governance timeline. Implemented; notifications and task assignment integrations remain pending.
 5. Improve information architecture: typed rule creation, sortable rule list, raw audit payload collapsed by default, optional full-screen rule editing, and campaign/folder grouping for rules, messages, experiments, audit, and overview. Implemented; page-mode editing remains pending.
-6. Improve marketer setup flows: add form-based profile builders for Evaluate, reusable frequency-cap blocks, campaign folders, and clearer campaign-level change logs. Evaluate Profile Builder, Frequency Cap Helper, campaign/folder fields, and an Overview platform change log are implemented.
+6. Improve marketer setup flows: add form-based profile builders for Evaluate, reusable frequency-cap blocks, campaign folders, and clearer campaign-level change logs. Evaluate Profile Builder, Frequency Cap Helper, campaign/folder fields, an Overview platform change log, and campaign-level operational rollups are implemented.
 
 ## Recommended Next Sprint
 
 1. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.
 2. Add a managed-database adapter path for enterprise deployments.
 3. Add persistent message asset storage and deeper personalization helpers such as token suggestions and content-variant previews.
-4. Add campaign-level reporting rollups and bulk actions across rules, messages, and experiments.
-5. Add durable message-version history for before/after diffs, complementing the current timestamp-based platform change log.
+4. Add durable message-version history for before/after diffs, complementing the current timestamp-based platform change log.
+5. Add campaign bulk actions across rules, messages, and experiments, such as archive, duplicate, and submit for review.

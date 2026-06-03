@@ -62,6 +62,7 @@ const overviewAlerts = document.querySelector("#overview-alerts");
 const overviewAnomalyHistory = document.querySelector("#overview-anomaly-history");
 const overviewServiceFooter = document.querySelector("#overview-service-footer");
 const overviewChangeLog = document.querySelector("#overview-change-log");
+const overviewCampaignRollups = document.querySelector("#overview-campaign-rollups");
 const overviewRuleDetailModal = document.querySelector("#overview-rule-detail-modal");
 const experimentKpis = document.querySelector("#experiment-kpis");
 const experimentList = document.querySelector("#experiment-list");
@@ -604,6 +605,7 @@ function renderMetrics(metrics) {
   renderRuleUsage(metrics.rule_usage || []);
   loadClientEventMetrics();
   loadChangeLog();
+  loadCampaignRollups(metrics.window_hours);
   renderRequestTrend(metrics);
   renderResultDistribution(metrics);
   renderRulesInventory(rules);
@@ -711,6 +713,64 @@ async function loadChangeLog() {
   } catch (error) {
     overviewChangeLog.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
   }
+}
+
+async function loadCampaignRollups(windowHours) {
+  if (!overviewCampaignRollups) return;
+  try {
+    const hours = windowHours || document.querySelector("#overview-window")?.value || "24";
+    const body = await api(`/v1/campaigns?window_hours=${encodeURIComponent(hours)}&limit=10`);
+    renderCampaignRollups(body.campaigns || []);
+  } catch (error) {
+    overviewCampaignRollups.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderCampaignRollups(campaigns) {
+  if (!overviewCampaignRollups) return;
+  overviewCampaignRollups.innerHTML = campaigns.length
+    ? `${campaignRollupHeader()}${campaigns.map(campaignRollupItem).join("")}`
+    : `<div class="status-line">No campaigns configured yet.</div>`;
+}
+
+function campaignRollupHeader() {
+  return `
+    <div class="campaign-rollup-header">
+      <span>Campaign</span>
+      <span>Assets</span>
+      <span>Requests</span>
+      <span>Feedback</span>
+      <span>Conversion</span>
+      <span>Last Activity</span>
+    </div>
+  `;
+}
+
+function campaignRollupItem(item) {
+  const feedback = item.client_events || {};
+  const assetSummary = [
+    `${formatNumber(item.rules || 0)} rules`,
+    `${formatNumber(item.experiments || 0)} experiments`,
+    `${formatNumber(item.messages || 0)} messages`
+  ].join(" · ");
+  const feedbackSummary = [
+    `${formatNumber(feedback.exposure || 0)} exp`,
+    `${formatNumber(feedback.impression || 0)} imp`,
+    `${formatNumber(feedback.conversion || 0)} conv`
+  ].join(" · ");
+  return `
+    <div class="campaign-rollup-item">
+      <div>
+        <strong>${escapeHtml(item.campaign || "Unassigned")}</strong>
+        <small>${escapeHtml((item.decision_keys || []).join(", ") || "No decisions linked")}</small>
+      </div>
+      <span>${escapeHtml(assetSummary)}</span>
+      <strong>${escapeHtml(formatNumber(item.requests || 0))}</strong>
+      <span>${escapeHtml(feedbackSummary)}</span>
+      <mark>${escapeHtml(formatPercent(item.conversion_rate || 0))}</mark>
+      <small>${escapeHtml(item.last_activity_at ? formatTime(item.last_activity_at) : "-")}</small>
+    </div>
+  `;
 }
 
 function renderChangeLog(changes) {
