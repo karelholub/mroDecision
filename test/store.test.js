@@ -99,11 +99,20 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(store.queryAudit({ matched_rule: "risk_segment" })[0].profile_key, "p-1");
   assert.equal(store.queryAudit({ search: "high_risk" })[0].matched_rules[0], "risk_segment");
   assert.equal(store.queryAudit({ from: "2026-05-28T00:00:00.000Z" }).length, 0);
-  const metrics = store.getMetrics();
-  assert.equal(metrics.requests.total, 1);
-  assert.equal(metrics.rules.total, 2);
-  assert.equal(metrics.result_distribution[0].result, "suppressed");
-  assert.equal(metrics.rule_usage[0].decision_key, "campaign_suppression");
+  const originalDateNow = Date.now;
+  Date.now = () => Date.parse("2026-05-28T00:00:00.000Z");
+  try {
+    const metrics = store.getMetrics({ window_hours: 72 });
+    assert.equal(metrics.requests.total, 1);
+    assert.equal(metrics.requests.window, 1);
+    assert.equal(metrics.window.label, "Last 3 days");
+    assert.equal(metrics.rules.total, 2);
+    assert.equal(metrics.result_distribution[0].result, "suppressed");
+    assert.equal(metrics.rule_usage[0].decision_key, "campaign_suppression");
+    assert.equal(store.getMetrics({ window_hours: 1 }).requests.window, 0);
+  } finally {
+    Date.now = originalDateNow;
+  }
   const ruleMetrics = store.getRuleMetrics("campaign_suppression");
   assert.equal(ruleMetrics.requests, 1);
   assert.equal(ruleMetrics.matched_branch_distribution[0].branch, "risk_segment");
@@ -136,9 +145,15 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(duplicateClientEvent.accepted, false);
   assert.equal(duplicateClientEvent.duplicate, true);
   assert.equal(duplicateClientEvent.context.channel, "web");
-  const eventMetrics = store.getMetrics().client_events;
-  assert.equal(eventMetrics.total, 1);
-  assert.equal(eventMetrics.by_type[0].event_type, "exposure");
+  const originalEventMetricsDateNow = Date.now;
+  Date.now = () => Date.parse("2026-05-28T00:00:00.000Z");
+  try {
+    const eventMetrics = store.getMetrics().client_events;
+    assert.equal(eventMetrics.total, 1);
+    assert.equal(eventMetrics.by_type[0].event_type, "exposure");
+  } finally {
+    Date.now = originalEventMetricsDateNow;
+  }
   assert.equal(store.countClientEvents({ event_type: "exposure", decision_key: "campaign_suppression", profile_key: "p-1" }), 1);
   assert.equal(store.countClientEvents({ event_type: "impression", decision_key: "campaign_suppression", profile_key: "p-1" }), 0);
   const eventReport = store.getClientEventMetrics({ decision_key: "campaign_suppression" });

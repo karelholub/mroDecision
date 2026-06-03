@@ -433,8 +433,10 @@ export class Store {
       .map((row) => parse(row.entry_json));
   }
 
-  getMetrics() {
+  getMetrics(options = {}) {
     const now = Date.now();
+    const windowHours = normalizeMetricsWindowHours(options.window_hours);
+    const sinceWindow = new Date(now - windowHours * 60 * 60 * 1000).toISOString();
     const since24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
     const since7d = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
     const rules = this.listRuleSets();
@@ -443,15 +445,17 @@ export class Store {
       .prepare(
         `SELECT
           COUNT(*) AS total_requests,
+          SUM(CASE WHEN evaluated_at >= ? THEN 1 ELSE 0 END) AS requests_window,
           SUM(CASE WHEN evaluated_at >= ? THEN 1 ELSE 0 END) AS requests_24h,
           SUM(CASE WHEN evaluated_at >= ? THEN 1 ELSE 0 END) AS requests_7d,
-          COUNT(DISTINCT profile_key) AS unique_profiles
+          COUNT(DISTINCT profile_key) AS unique_profiles,
+          COUNT(DISTINCT CASE WHEN evaluated_at >= ? THEN profile_key END) AS unique_profiles_window
          FROM audit_log`
       )
-      .get(since24h, since7d);
+      .get(sinceWindow, since24h, since7d, sinceWindow);
     const resultDistribution = this.db
-      .prepare("SELECT result, COUNT(*) AS count FROM audit_log GROUP BY result ORDER BY count DESC, result ASC LIMIT 8")
-      .all();
+      .prepare("SELECT result, COUNT(*) AS count FROM audit_log WHERE evaluated_at >= ? GROUP BY result ORDER BY count DESC, result ASC LIMIT 8")
+      .all(sinceWindow);
     const ruleUsage = this.db
       .prepare(
         `SELECT
@@ -461,30 +465,41 @@ export class Store {
           MAX(evaluated_at) AS last_evaluated_at,
           COUNT(DISTINCT profile_key) AS unique_profiles
          FROM audit_log
+         WHERE evaluated_at >= ?
          GROUP BY decision_key
          ORDER BY requests DESC, decision_key ASC
          LIMIT 10`
       )
-      .all(since24h);
+      .all(since24h, sinceWindow);
     const clientEventSummary = this.db
       .prepare(
         `SELECT
           event_type,
           COUNT(*) AS count,
+          SUM(CASE WHEN occurred_at >= ? THEN 1 ELSE 0 END) AS count_window,
           SUM(CASE WHEN occurred_at >= ? THEN 1 ELSE 0 END) AS count_24h,
-          COUNT(DISTINCT profile_key) AS unique_profiles
+          COUNT(DISTINCT profile_key) AS unique_profiles,
+          COUNT(DISTINCT CASE WHEN occurred_at >= ? THEN profile_key END) AS unique_profiles_window
          FROM client_events
          GROUP BY event_type
          ORDER BY event_type ASC`
       )
-      .all(since24h);
+      .all(sinceWindow, since24h, sinceWindow);
     return {
       generated_at: createdAtNow(),
+      window: {
+        hours: windowHours,
+        from: sinceWindow,
+        to: new Date(now).toISOString(),
+        label: metricsWindowLabel(windowHours)
+      },
       requests: {
         total: Number(auditSummary.total_requests || 0),
+        window: Number(auditSummary.requests_window || 0),
         last_24h: Number(auditSummary.requests_24h || 0),
         last_7d: Number(auditSummary.requests_7d || 0),
-        unique_profiles: Number(auditSummary.unique_profiles || 0)
+        unique_profiles: Number(auditSummary.unique_profiles || 0),
+        unique_profiles_window: Number(auditSummary.unique_profiles_window || 0)
       },
       rules: {
         total: rules.length,
@@ -507,17 +522,21 @@ export class Store {
       client_events: {
         total: clientEventSummary.reduce((sum, row) => sum + Number(row.count || 0), 0),
         last_24h: clientEventSummary.reduce((sum, row) => sum + Number(row.count_24h || 0), 0),
+        window: clientEventSummary.reduce((sum, row) => sum + Number(row.count_window || 0), 0),
         by_type: clientEventSummary.map((row) => ({
           event_type: row.event_type,
-          count: Number(row.count || 0),
+          count: Number(row.count_window || 0),
+          total_count: Number(row.count || 0),
           count_24h: Number(row.count_24h || 0),
-          unique_profiles: Number(row.unique_profiles || 0)
+          unique_profiles: Number(row.unique_profiles_window || 0),
+          total_unique_profiles: Number(row.unique_profiles || 0)
         }))
       },
       result_distribution: resultDistribution.map((row) => ({ result: row.result, count: Number(row.count || 0) })),
       rule_usage: ruleUsage.map((row) => ({
         decision_key: row.decision_key,
         requests: Number(row.requests || 0),
+        requests_window: Number(row.requests || 0),
         requests_24h: Number(row.requests_24h || 0),
         unique_profiles: Number(row.unique_profiles || 0),
         last_evaluated_at: row.last_evaluated_at || null
@@ -2006,6 +2025,22 @@ function conversionRate(events = {}) {
   const exposures = Number(events.exposure?.count || 0);
   if (!exposures) return 0;
   return Number(events.conversion?.count || 0) / exposures;
+}
+
+function normalizeMetricsWindowHours(value) {
+  const parsed = Number(value || 24);
+  const allowed = [1, 6, 24, 72, 168, 720];
+  return allowed.includes(parsed) ? parsed : 24;
+}
+
+function metricsWindowLabel(hours) {
+  if (hours === 1) return "Last hour";
+  if (hours < 24) return `Last ${hours} hours`;
+  if (hours === 24) return "Last 24 hours";
+  if (hours === 72) return "Last 3 days";
+  if (hours === 168) return "Last 7 days";
+  if (hours === 720) return "Last 30 days";
+  return `Last ${hours} hours`;
 }
 
 function baselineVariant(variants = []) {

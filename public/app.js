@@ -55,6 +55,7 @@ const metricCards = document.querySelector("#metric-cards");
 const ruleDetailPanel = document.querySelector("#metrics-rule-detail");
 const clientEventsPanel = document.querySelector("#metrics-client-events");
 const requestTrendPanel = document.querySelector("#metrics-request-trend");
+const overviewAlerts = document.querySelector("#overview-alerts");
 const overviewServiceFooter = document.querySelector("#overview-service-footer");
 const overviewRuleDetailModal = document.querySelector("#overview-rule-detail-modal");
 const experimentKpis = document.querySelector("#experiment-kpis");
@@ -196,6 +197,7 @@ document.querySelectorAll("[data-lookup-drawer-tab]").forEach((button) => {
 });
 
 document.querySelector("#refresh-metrics").addEventListener("click", loadMetrics);
+document.querySelector("#overview-window")?.addEventListener("change", loadMetrics);
 document.querySelector("#quick-create-experiment-overview")?.addEventListener("click", quickCreateExperiment);
 document.querySelector("#refresh-experiments")?.addEventListener("click", loadExperiments);
 document.querySelector("#quick-create-experiment")?.addEventListener("click", quickCreateExperiment);
@@ -497,7 +499,8 @@ async function loadRules() {
 
 async function loadMetrics() {
   try {
-    const body = await api("/v1/metrics");
+    const windowHours = document.querySelector("#overview-window")?.value || "24";
+    const body = await api(`/v1/metrics?window_hours=${encodeURIComponent(windowHours)}`);
     renderMetrics(body.metrics);
   } catch (error) {
     metricCards.innerHTML = `<div class="metric-card"><span>Metrics unavailable</span><strong>${escapeHtml(error.message)}</strong></div>`;
@@ -513,17 +516,19 @@ function renderMetrics(metrics) {
   const events = metrics.client_events || {};
   const runtime = metrics.runtime_requests || {};
   const rateLimit = metrics.client_rate_limit || {};
+  const windowLabel = metrics.window?.label || "Selected window";
   metricCards.innerHTML = [
-    metricCard("Requests 24h", formatNumber(requests.last_24h), `${formatNumber(requests.total)} total`, "RQ", "teal"),
+    metricCard("Requests", formatNumber(requests.window ?? requests.last_24h), windowLabel, "RQ", "teal"),
     metricCard("P95 Latency", `${formatNumber(runtime.p95_ms || 0)}ms`, `${formatNumber(runtime.sample_size || 0)} recent samples`, "P95", "blue"),
-    metricCard("Unique Profiles", formatNumber(requests.unique_profiles), "Seen in audit log", "UP", "blue"),
+    metricCard("Unique Profiles", formatNumber(requests.unique_profiles_window ?? requests.unique_profiles), windowLabel, "UP", "blue"),
     metricCard("Published Rules", formatNumber(rules.published), `${formatNumber(rules.draft)} drafts`, "PR", "purple"),
     metricCard("Schema Items", formatNumber(schema.total), `${schema.last_sync_status || "never"} sync`, "SC", "teal"),
     metricCard("Client Cache", `${Math.round((cache.hit_rate || 0) * 100)}%`, `${formatNumber(cache.entries || 0)} decision entries`, "CC", "blue"),
     metricCard("Profile Cache", `${Math.round((profileCache.hit_rate || 0) * 100)}%`, `${formatNumber(profileCache.entries || 0)} Meiro profiles`, "PC", "teal"),
-    metricCard("Client Events", formatNumber(events.last_24h || 0), `${formatNumber(events.total || 0)} total`, "CE", "blue")
+    metricCard("Client Events", formatNumber(events.window ?? events.last_24h ?? 0), windowLabel, "CE", "blue")
   ].join("");
 
+  renderOverviewAlerts(metrics);
   renderRuleUsage(metrics.rule_usage || []);
   loadClientEventMetrics();
   renderRequestTrend(metrics);
@@ -549,6 +554,50 @@ function renderMetrics(metrics) {
   if (ruleDetailPanel && !ruleDetailPanel.textContent.trim()) {
     ruleDetailPanel.innerHTML = `<div class="status-line">Select a rule in Rule Usage to inspect recent decisions, fallback rate, and matched branch frequency.</div>`;
   }
+}
+
+function renderOverviewAlerts(metrics) {
+  if (!overviewAlerts) return;
+  const alerts = overviewAlertItems(metrics);
+  overviewAlerts.innerHTML = alerts.map((item) => `
+    <div class="overview-alert ${escapeHtml(item.level)}">
+      <span>${escapeHtml(item.label)}</span>
+      <strong>${escapeHtml(item.title)}</strong>
+      <small>${escapeHtml(item.detail)}</small>
+    </div>
+  `).join("");
+}
+
+function overviewAlertItems(metrics) {
+  const requests = metrics.requests || {};
+  const events = metrics.client_events || {};
+  const runtime = metrics.runtime_requests || {};
+  const rateLimit = metrics.client_rate_limit || {};
+  const profileCache = metrics.profile_cache || {};
+  const schema = metrics.schema || {};
+  const items = [];
+  if (Number(runtime.error_rate || 0) >= 0.05) {
+    items.push({ level: "error", label: "Runtime", title: "High error rate", detail: `${formatPercent(runtime.error_rate)} across recent API samples.` });
+  }
+  if (Number(runtime.p95_ms || 0) >= 750) {
+    items.push({ level: "warn", label: "Latency", title: "P95 latency elevated", detail: `${formatNumber(runtime.p95_ms)}ms p95 across ${formatNumber(runtime.sample_size || 0)} samples.` });
+  }
+  if (Number(rateLimit.blocked || 0) > 0) {
+    items.push({ level: "warn", label: "Traffic", title: "Rate limits triggered", detail: `${formatNumber(rateLimit.blocked)} client requests blocked.` });
+  }
+  if (schema.last_sync_status && !["ok", "success", "never"].includes(String(schema.last_sync_status).toLowerCase())) {
+    items.push({ level: "warn", label: "Schema", title: "Schema sync needs attention", detail: `Last status: ${schema.last_sync_status}.` });
+  }
+  if (Number(profileCache.errors || 0) > 0) {
+    items.push({ level: "warn", label: "Profile API", title: "Profile enrichment errors", detail: `${formatNumber(profileCache.errors)} cache/profile lookup errors recorded.` });
+  }
+  if (Number(requests.window ?? requests.last_24h ?? 0) > 0 && Number(events.window ?? events.last_24h ?? 0) === 0) {
+    items.push({ level: "info", label: "Feedback", title: "No client events in window", detail: "Evaluations are running, but exposure/impression/conversion feedback is absent." });
+  }
+  if (!items.length) {
+    items.push({ level: "ok", label: "Health", title: "No active alerts", detail: "Runtime, traffic, schema, and feedback signals look normal." });
+  }
+  return items.slice(0, 4);
 }
 
 async function loadExperiments() {
@@ -1034,8 +1083,8 @@ function ruleUsageCard(item, total) {
     <button type="button" class="rule-usage-card" data-metric-rule-key="${escapeHtml(item.decision_key)}">
       <span>${escapeHtml(item.decision_key)}</span>
       <strong>${escapeHtml(formatNumber(item.requests))}</strong>
-      <em>${escapeHtml(formatNumber(item.requests_24h))}</em>
-      <small>${escapeHtml(`${formatNumber(item.unique_profiles)} profiles`)}</small>
+      <em>${escapeHtml(`${formatNumber(item.unique_profiles)} profiles`)}</em>
+      <small>${escapeHtml(item.last_evaluated_at ? formatTime(item.last_evaluated_at) : "No recent traffic")}</small>
       <i><b style="width:${share}%"></b></i>
       <mark>${share}%</mark>
     </button>
@@ -1140,14 +1189,15 @@ function renderRequestTrend(metrics) {
   const requests = metrics.requests || {};
   const cache = metrics.client_cache || {};
   const rules = metrics.rules || {};
-  const points = trendPoints(Number(requests.last_7d || requests.total || 0), Number(requests.last_24h || 0));
+  const windowRequests = Number(requests.window ?? requests.last_24h ?? 0);
+  const points = trendPoints(Number(requests.last_7d || requests.total || 0), windowRequests);
   requestTrendPanel.innerHTML = `
     <div class="trend-chart" aria-label="Request activity">
       ${points.map((point, index) => `<span style="height:${point}%" title="Day ${index + 1}: ${point}%"></span>`).join("")}
     </div>
     <div class="trend-stats">
-      ${statusItem("7 day requests", formatNumber(requests.last_7d || requests.total || 0))}
-      ${statusItem("24h requests", formatNumber(requests.last_24h || 0))}
+      ${statusItem("Window", metrics.window?.label || "Selected")}
+      ${statusItem("Requests", formatNumber(windowRequests))}
       ${statusItem("Cache hit rate", `${Math.round((cache.hit_rate || 0) * 100)}%`)}
       ${statusItem("Active rules", formatNumber(rules.published || 0))}
     </div>

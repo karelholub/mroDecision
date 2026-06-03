@@ -1296,6 +1296,20 @@ header {
   flex-wrap: wrap;
 }
 
+.overview-window-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.overview-window-control select {
+  min-height: 34px;
+  padding: 6px 28px 6px 10px;
+}
+
 .actions.left {
   justify-content: flex-start;
   margin: 8px 0 14px;
@@ -1343,6 +1357,88 @@ header {
   padding: 18px;
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 10px 24px rgba(16, 24, 40, 0.08);
+}
+
+.overview-alerts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.overview-alert {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: start;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.overview-alert span {
+  grid-row: 1 / span 2;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.overview-alert strong,
+.overview-alert small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.overview-alert small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.overview-alert.ok {
+  border-color: rgba(16, 185, 129, 0.32);
+  background: rgba(16, 185, 129, 0.07);
+}
+
+.overview-alert.ok span {
+  background: rgba(16, 185, 129, 0.13);
+  color: #047857;
+}
+
+.overview-alert.info {
+  border-color: rgba(59, 130, 246, 0.28);
+  background: rgba(59, 130, 246, 0.07);
+}
+
+.overview-alert.info span {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+}
+
+.overview-alert.warn {
+  border-color: rgba(245, 158, 11, 0.42);
+  background: rgba(245, 158, 11, 0.09);
+}
+
+.overview-alert.warn span {
+  background: rgba(245, 158, 11, 0.16);
+  color: #92400e;
+}
+
+.overview-alert.error {
+  border-color: rgba(180, 35, 24, 0.36);
+  background: rgba(180, 35, 24, 0.07);
+}
+
+.overview-alert.error span {
+  background: rgba(180, 35, 24, 0.12);
+  color: var(--danger);
 }
 
 .metric-card {

@@ -47,12 +47,24 @@
             <p class="page-subtitle">Operational health, rule usage, and service utilization.</p>
           </div>
           <div class="actions">
+            <label class="overview-window-control">
+              Window
+              <select id="overview-window">
+                <option value="1">1h</option>
+                <option value="6">6h</option>
+                <option value="24" selected>24h</option>
+                <option value="72">3d</option>
+                <option value="168">7d</option>
+                <option value="720">30d</option>
+              </select>
+            </label>
             <button type="button" id="quick-create-experiment-overview">New Experiment</button>
             <button id="refresh-metrics">Refresh</button>
           </div>
         </header>
         <div class="overview-workbench">
           <div id="metric-cards" class="metric-grid overview-kpi-strip"></div>
+          <div id="overview-alerts" class="overview-alerts"></div>
           <div class="overview-primary-pane">
             <div class="editor overview-card overview-rule-card">
               <div class="overview-card-head">

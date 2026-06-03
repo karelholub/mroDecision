@@ -187,12 +187,12 @@ Goal: make DEE safer and easier for marketing practitioners to operate without e
 - Add approval workflow with submit-for-review and approver-only publish.
 - Add dashboard date range, alert/anomaly indicators, clearer metric labels, and quick-create shortcuts.
 
-Status: started with experiment significance calculations, confidence labels, minimum-sample guidance, CSV export fields, a visual experiment variant builder with allocation controls and output fields, plain-language branch condition summaries with schema-aware inline field hints, branch output message linking with compact content previews, message-to-rule backlink inventory in the message editor, real-time message preview health states for lifecycle, content completeness, CTA readiness, and mobile clipping risk, approval workflow with submit-for-review, approver approval, and approved-draft publish gating, plus experiment quick-create shortcuts, goal configuration, scheduling, and sample-size guidance. Remaining items are pending.
+Status: started with experiment significance calculations, confidence labels, minimum-sample guidance, CSV export fields, a visual experiment variant builder with allocation controls and output fields, plain-language branch condition summaries with schema-aware inline field hints, branch output message linking with compact content previews, message-to-rule backlink inventory in the message editor, real-time message preview health states for lifecycle, content completeness, CTA readiness, and mobile clipping risk, approval workflow with submit-for-review, approver approval, and approved-draft publish gating, experiment quick-create shortcuts, goal configuration, scheduling, and sample-size guidance. Reference Data search/filtering, read-only column quality checks, Audit default date ranges, auto-load, matched-rule/payload filters, Message catalog status/template/surface/search filters, message duplication, and Overview range selection with operational alerts are implemented. Remaining items are pending.
 
 ## Recommended Next Sprint
 
-1. Add Reference Data search/filtering and column validation rules.
-2. Add Audit default date ranges, auto-load, and event type filters.
-3. Add dashboard date range, alert/anomaly indicators, clearer metric labels, and quick-create shortcuts.
-4. Add status filters, duplicate actions, surface pickers, and preview thumbnails for Messages.
+1. Add editable Reference Data validation rules and optional save-time validation policies.
+2. Add client-event type filters to Audit and deeper feedback-delivery drilldowns.
+3. Add preview thumbnails and richer surface pickers for Messages.
+4. Add dashboard anomaly baselines and alert history beyond the current live alert strip.
 5. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.
