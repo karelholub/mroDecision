@@ -23,6 +23,7 @@ const messageInspectorSummary = document.querySelector("#message-inspector-summa
 const messageRuleLinks = document.querySelector("#message-rule-links");
 const messagePreviewHealth = document.querySelector("#message-preview-health");
 const messageVersionList = document.querySelector("#message-version-list");
+const messageVersionPreview = document.querySelector("#message-version-preview");
 const lookupInspectorSummary = document.querySelector("#lookup-inspector-summary");
 const lookupHelpTable = document.querySelector("#lookup-help-table");
 const lookupHelpKey = document.querySelector("#lookup-help-key");
@@ -3400,6 +3401,7 @@ function newMessage(options = {}) {
   syncMessagePreviewFromJson();
   messageOutput.textContent = "Ready for a new message";
   if (messageVersionList) messageVersionList.innerHTML = row(["Save the message to start version history", "", "", ""]);
+  if (messageVersionPreview) messageVersionPreview.innerHTML = "";
   if (!options.silent) openMessageDetail();
 }
 
@@ -3423,6 +3425,7 @@ function loadMessage(id, messages) {
   syncMessageDeliveryFromMetadata(message.metadata || {});
   syncMessagePreviewFromJson();
   messageOutput.textContent = `Loaded ${id}`;
+  if (messageVersionPreview) messageVersionPreview.innerHTML = "";
   loadMessageVersions(id);
   openMessageDetail();
 }
@@ -3495,12 +3498,78 @@ async function loadMessageVersionDetail(id, version) {
 
 async function loadMessageVersionDiff(id, version) {
   try {
-    const body = await api(`/v1/messages/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}/diff?compare_to=current`);
-    messageOutput.textContent = formatMessageVersionDiff(body);
-    document.querySelector('[data-message-drawer-tab="output"]')?.click();
+    const [diffBody, versionBody] = await Promise.all([
+      api(`/v1/messages/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}/diff?compare_to=current`),
+      api(`/v1/messages/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}`)
+    ]);
+    const currentMessage = cachedMessages.find((item) => item.id === id) || null;
+    renderMessageVersionVisualDiff(versionBody.message, currentMessage, diffBody.diff || []);
+    messageOutput.textContent = formatMessageVersionDiff(diffBody);
   } catch (error) {
     messageOutput.textContent = error.message;
   }
+}
+
+function renderMessageVersionVisualDiff(beforeMessage, currentMessage, diff = []) {
+  if (!messageVersionPreview) return;
+  const before = messagePreviewPayloadFromMessage(beforeMessage);
+  const current = messagePreviewPayloadFromMessage(currentMessage || beforeMessage);
+  const changedPaths = new Set(diff.map((item) => item.path));
+  messageVersionPreview.innerHTML = `
+    <div class="message-version-preview-head">
+      <strong>Visual comparison</strong>
+      <span>${escapeHtml(formatNumber(diff.length))} changed path${diff.length === 1 ? "" : "s"}</span>
+    </div>
+    <div class="message-version-preview-grid">
+      ${messageVersionPreviewCard("Before", beforeMessage, before, changedPaths)}
+      ${messageVersionPreviewCard("Current", currentMessage, current, changedPaths)}
+    </div>
+  `;
+}
+
+function messageVersionPreviewCard(label, message, payload, changedPaths) {
+  const changedBadges = [
+    changedPaths.has("$.default_content.title") ? "Title" : "",
+    changedPaths.has("$.default_content.body") ? "Body" : "",
+    changedPaths.has("$.default_content.footer") ? "Footer" : "",
+    changedPaths.has("$.default_content.image_url") ? "Image" : "",
+    [...changedPaths].some((path) => path.startsWith("$.default_content.ctas")) ? "CTA" : "",
+    changedPaths.has("$.status") ? "Status" : "",
+    changedPaths.has("$.surface") ? "Surface" : "",
+    [...changedPaths].some((path) => path.startsWith("$.metadata")) ? "Metadata" : ""
+  ].filter(Boolean);
+  return `
+    <div class="message-version-preview-card">
+      <div class="message-version-preview-label">
+        <strong>${escapeHtml(label)}</strong>
+        <span>${escapeHtml(message?.version ? `v${message.version}` : "current")} · ${escapeHtml(message?.updated_at ? formatTime(message.updated_at) : "-")}</span>
+      </div>
+      <div class="message-preview-card"
+        data-template="${escapeHtml(payload.templateType)}"
+        data-archived="${message?.status === "archived" ? "true" : "false"}"
+        data-has-cta="${payload.ctas.length ? "true" : "false"}">
+        ${messagePreviewCardInnerHtml(payload)}
+      </div>
+      <div class="message-version-badges">
+        ${changedBadges.length ? changedBadges.map((badge) => `<span>${escapeHtml(badge)}</span>`).join("") : `<span>No visual changes</span>`}
+      </div>
+    </div>
+  `;
+}
+
+function messagePreviewPayloadFromMessage(message = {}) {
+  const content = message?.default_content || {};
+  const ctas = normalizeMessageCtas(content);
+  return {
+    templateType: messageTemplateType(content.template_type || content.type || "banner"),
+    placement: content.placement || message?.metadata?.placement || "",
+    surface: message?.surface || "-",
+    title: content.title || message?.name || "Untitled message",
+    body: content.body || "No message body yet.",
+    footer: content.footer || "",
+    imageUrl: content.image_url || "",
+    ctas
+  };
 }
 
 function formatMessageVersionDiff(body = {}) {
@@ -3732,16 +3801,7 @@ function renderMessagePreview() {
   messagePreview.dataset.hasCta = ctas.length ? "true" : "false";
   messagePreview.dataset.archived = status === "archived" ? "true" : "false";
   messagePreview.dataset.template = templateType;
-  messagePreview.innerHTML = `
-    ${imageUrl ? `<div class="message-preview-image" style="background-image:url('${escapeHtml(imageUrl)}')"></div>` : ""}
-    <div class="message-preview-body">
-      <span>${escapeHtml([templateType, placement || surface].filter(Boolean).join(" · "))}</span>
-      <strong>${escapeHtml(title)}</strong>
-      <p>${escapeHtml(body)}</p>
-      ${ctas.length ? `<div class="message-preview-actions">${ctas.map((cta) => `<a class="${cta.style === "secondary" ? "secondary" : "primary"}" href="${escapeHtml(cta.url || "#")}" target="_blank" rel="noopener">${escapeHtml(cta.label || cta.url)}</a>`).join("")}</div>` : ""}
-      ${footer ? `<small>${escapeHtml(footer)}</small>` : ""}
-    </div>
-  `;
+  messagePreview.innerHTML = messagePreviewCardInnerHtml({ templateType, placement, surface, title, body, footer, imageUrl, ctas });
   messageInspectorSummary.innerHTML = [
     statusItem("Status", status),
     statusItem("Preview health", messagePreviewHealthLabel(health)),
@@ -3756,6 +3816,19 @@ function renderMessagePreview() {
   ].join("");
   renderMessagePreviewHealth(health);
   renderMessageRuleLinks();
+}
+
+function messagePreviewCardInnerHtml({ templateType = "banner", placement = "", surface = "", title = "Untitled message", body = "No message body yet.", footer = "", imageUrl = "", ctas = [] } = {}) {
+  return `
+    ${imageUrl ? `<div class="message-preview-image" style="background-image:url('${escapeHtml(imageUrl)}')"></div>` : ""}
+    <div class="message-preview-body">
+      <span>${escapeHtml([templateType, placement || surface].filter(Boolean).join(" · "))}</span>
+      <strong>${escapeHtml(title)}</strong>
+      <p>${escapeHtml(body)}</p>
+      ${ctas.length ? `<div class="message-preview-actions">${ctas.map((cta) => `<a class="${cta.style === "secondary" ? "secondary" : "primary"}" href="${escapeHtml(cta.url || "#")}" target="_blank" rel="noopener">${escapeHtml(cta.label || cta.url)}</a>`).join("")}</div>` : ""}
+      ${footer ? `<small>${escapeHtml(footer)}</small>` : ""}
+    </div>
+  `;
 }
 
 function renderMessageImageGuidance(templateType) {

@@ -193,7 +193,7 @@ Status: started with experiment significance calculations, confidence labels, mi
 ## Second-Pass User Feedback Roadmap
 
 1. Lock integration-critical identifiers: keep Decision Key editable only before first save; saved and published rule keys are immutable and must be duplicated for a new client-facing key. Implemented.
-2. Improve message authoring: support non-URL image assets, live preview syncing, richer CTA/footer content, "used by rules" backlinks, and durable version history. Initial upload/drop, live sync, richer content, backlinks, message version snapshots, and message version diffs are implemented; persistent asset storage is pending.
+2. Improve message authoring: support non-URL image assets, live preview syncing, richer CTA/footer content, "used by rules" backlinks, and durable version history. Initial upload/drop, live sync, richer content, backlinks, message version snapshots, path diffs, and visual version comparisons are implemented; persistent asset storage is pending.
 3. Improve experiment operations: validate allocation weights to 100%, explain significance methodology, and add a Declare Winner flow that prepares a 100% allocation draft. Implemented.
 4. Improve governance: capture review assignee, submission comment, approval comment, approval history, and a compact rule governance timeline. Implemented; notifications and task assignment integrations remain pending.
 5. Improve information architecture: typed rule creation, sortable rule list, raw audit payload collapsed by default, optional full-screen rule editing, and campaign/folder grouping for rules, messages, experiments, audit, and overview. Implemented; page-mode editing remains pending.
@@ -204,5 +204,5 @@ Status: started with experiment significance calculations, confidence labels, mi
 1. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.
 2. Add a managed-database adapter path for enterprise deployments.
 3. Add persistent message asset storage and deeper personalization helpers such as token suggestions and content-variant previews.
-4. Add richer visual preview comparison for message versions, building on the path-based diff endpoint.
-5. Add optional LLM provider settings and a disabled-by-default provider adapter behind the deterministic assistant contract.
+4. Add optional LLM provider settings and a disabled-by-default provider adapter behind the deterministic assistant contract.
+5. Add persistent message asset storage and cleanup controls for uploaded image data URLs.
