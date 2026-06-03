@@ -3672,7 +3672,7 @@ header {
   height: auto;
   max-height: none;
   min-height: 240px;
-  overflow: visible;
+  overflow: auto;
 }
 
 .lookup-inspector-pane .compact-status-panel {
@@ -3693,8 +3693,21 @@ header {
   gap: 6px;
 }
 
+.lookup-inspector-pane .inspector-section,
+.lookup-inspector-pane .inspector-lines,
+.lookup-inspector-pane .inspector-lines div {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .lookup-inspector-pane .inspector-lines strong {
+  display: block;
+  max-width: 100%;
   font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .lookup-validation-summary {
