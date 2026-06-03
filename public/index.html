@@ -1096,6 +1096,23 @@
                       Footer
                       <textarea id="message-preview-footer" spellcheck="false" placeholder="Optional fine print, disclaimer, or secondary context"></textarea>
                     </label>
+                    <div class="message-personalization-panel">
+                      <div class="message-personalization-head">
+                        <div>
+                          <strong>Personalization</strong>
+                          <span>Insert profile, segment, or context tokens and preview sample values.</span>
+                        </div>
+                        <label class="message-personalization-toggle">
+                          <input id="message-render-tokens" type="checkbox" checked />
+                          Render sample
+                        </label>
+                      </div>
+                      <div id="message-token-suggestions" class="message-token-suggestions"></div>
+                      <label>
+                        Sample data
+                        <textarea id="message-token-sample" spellcheck="false"></textarea>
+                      </label>
+                    </div>
                   </div>
                   <div class="message-editor-section">
                     <div class="editor-title">Actions</div>

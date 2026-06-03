@@ -24,6 +24,9 @@ const messageRuleLinks = document.querySelector("#message-rule-links");
 const messagePreviewHealth = document.querySelector("#message-preview-health");
 const messageVersionList = document.querySelector("#message-version-list");
 const messageVersionPreview = document.querySelector("#message-version-preview");
+const messageTokenSuggestions = document.querySelector("#message-token-suggestions");
+const messageTokenSample = document.querySelector("#message-token-sample");
+const messageRenderTokens = document.querySelector("#message-render-tokens");
 const lookupInspectorSummary = document.querySelector("#lookup-inspector-summary");
 const lookupHelpTable = document.querySelector("#lookup-help-table");
 const lookupHelpKey = document.querySelector("#lookup-help-key");
@@ -117,6 +120,7 @@ let cachedAssistantPlan = null;
 let selectedLookupMetadata = {};
 let conditionBlocksLoaded = false;
 let selectedConditionBlockId = null;
+let selectedMessageTokenField = "#message-preview-body";
 let ruleSort = { key: "updated_at", direction: "desc" };
 const savedProfileStorageKey = "meiro-dee-evaluate-profiles";
 const defaultConditionBlockTemplates = [
@@ -428,6 +432,22 @@ document.querySelector("#message-image-dropzone")?.addEventListener("drop", hand
   document.querySelector(selector)?.addEventListener("input", syncMessageJsonFromPreviewLive);
   document.querySelector(selector)?.addEventListener("change", syncMessageJsonFromPreviewLive);
 });
+[
+  "#message-preview-title",
+  "#message-preview-body",
+  "#message-preview-footer",
+  "#message-primary-cta-label",
+  "#message-primary-cta-url",
+  "#message-secondary-cta-label",
+  "#message-secondary-cta-url"
+].forEach((selector) => {
+  document.querySelector(selector)?.addEventListener("focus", () => {
+    selectedMessageTokenField = selector;
+  });
+});
+messageRenderTokens?.addEventListener("change", renderMessagePreview);
+messageTokenSample?.addEventListener("input", renderMessagePreview);
+messageTokenSuggestions?.addEventListener("click", handleMessageTokenClick);
 document.querySelectorAll("[data-message-preview-device]").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll("[data-message-preview-device]").forEach((item) => item.classList.remove("active"));
@@ -3219,6 +3239,7 @@ async function loadMessages() {
     renderMessageOutputOptions();
     renderMessageList();
     renderMessageAssetList();
+    renderMessageTokenSuggestions();
     renderBranchEditor();
     if (document.querySelector("#builder-mode")?.value === "graph") renderGraphBuilder();
   } catch (error) {
@@ -3443,6 +3464,7 @@ function newMessage(options = {}) {
     },
     priority: 0
   }, null, 2);
+  resetMessageTokenSample();
   syncMessagePreviewFromJson();
   renderMessageAssetList();
   messageOutput.textContent = "Ready for a new message";
@@ -3468,6 +3490,7 @@ function loadMessage(id, messages) {
   document.querySelector("#message-content").value = JSON.stringify(message.default_content || {}, null, 2);
   document.querySelector("#message-schema").value = JSON.stringify(message.content_schema || {}, null, 2);
   document.querySelector("#message-metadata").value = JSON.stringify(message.metadata || {}, null, 2);
+  resetMessageTokenSample(message.metadata?.personalization_sample);
   syncMessageDeliveryFromMetadata(message.metadata || {});
   syncMessagePreviewFromJson();
   renderMessageAssetList();
@@ -3498,6 +3521,7 @@ function duplicateSelectedMessage() {
   document.querySelector("#message-content").value = JSON.stringify(source.default_content || {}, null, 2);
   document.querySelector("#message-schema").value = JSON.stringify(source.content_schema || {}, null, 2);
   document.querySelector("#message-metadata").value = JSON.stringify(metadata, null, 2);
+  resetMessageTokenSample(metadata.personalization_sample);
   syncMessageDeliveryFromMetadata(metadata);
   syncMessagePreviewFromJson();
   renderMessageAssetList();
@@ -3770,6 +3794,9 @@ function syncMessageMetadataFromDelivery() {
     document.querySelector("#message-folder")?.value.trim()
   );
   if (!metadata.campaign.name && !metadata.campaign.folder) delete metadata.campaign;
+  const sample = parseJsonSafe(messageTokenSample?.value || "{}");
+  if (sample && Object.keys(sample).length) metadata.personalization_sample = sample;
+  else delete metadata.personalization_sample;
   document.querySelector("#message-metadata").value = JSON.stringify(metadata, null, 2);
 }
 
@@ -3803,15 +3830,147 @@ function formatActiveMessageJson() {
   }
 }
 
+function resetMessageTokenSample(sample = null) {
+  if (!messageTokenSample) return;
+  messageTokenSample.value = JSON.stringify(sample || defaultMessageTokenSample(), null, 2);
+  renderMessageTokenSuggestions();
+}
+
+function defaultMessageTokenSample() {
+  const sample = {
+    profile_key: document.querySelector("#message-id")?.value || "visitor@example.com",
+    attributes: {},
+    segments: {},
+    context: {
+      channel: "web",
+      surface: document.querySelector("#message-surface")?.value || "homepage"
+    }
+  };
+  for (const item of cachedSchema.slice(0, 60)) {
+    if (item.kind === "attribute") sample.attributes[item.name] = sampleValueForSchemaItem(item);
+    if (item.kind === "segment") sample.segments[item.name] = true;
+    if (item.kind === "context") sample.context[item.name] = sampleValueForSchemaItem(item);
+  }
+  if (!Object.keys(sample.attributes).length) {
+    sample.attributes.first_name = "Karel";
+    sample.attributes.lead_score = 82;
+    sample.attributes.customer_lifetime_value = 4200;
+  }
+  if (!Object.keys(sample.segments).length) sample.segments.high_intent = true;
+  return sample;
+}
+
+function sampleValueForSchemaItem(item = {}) {
+  const name = String(item.name || "").toLowerCase();
+  const type = String(item.type || item.raw?.type || "").toLowerCase();
+  if (type.includes("bool")) return true;
+  if (type.includes("number") || type.includes("integer") || type.includes("float") || /score|count|amount|value|monetary|balance|age/.test(name)) return 42;
+  if (/date|time/.test(type) || /date|time|at$/.test(name)) return new Date().toISOString();
+  if (/name/.test(name)) return "Karel";
+  if (/email/.test(name)) return "karel.holub@meiro.io";
+  if (/tier/.test(name)) return "gold";
+  if (/channel/.test(name)) return "web";
+  return "sample";
+}
+
+function renderMessageTokenSuggestions() {
+  if (!messageTokenSuggestions) return;
+  const tokens = messagePersonalizationTokens();
+  messageTokenSuggestions.innerHTML = tokens.length
+    ? tokens.map((item) => `<button type="button" data-message-token="${escapeHtml(item.token)}" title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</button>`).join("")
+    : `<span>No schema tokens synced yet.</span>`;
+}
+
+function messagePersonalizationTokens() {
+  const schemaTokens = cachedSchema
+    .filter((item) => ["attribute", "segment", "context"].includes(item.kind))
+    .slice(0, 36)
+    .map((item) => {
+      const prefix = item.kind === "attribute" ? "attributes" : item.kind === "segment" ? "segments" : "context";
+      return {
+        label: `${item.kind}: ${item.name}`,
+        token: `{{${prefix}.${item.name}}}`
+      };
+    });
+  return [
+    { label: "profile key", token: "{{profile_key}}" },
+    { label: "email", token: "{{identifiers.email}}" },
+    ...schemaTokens
+  ];
+}
+
+function handleMessageTokenClick(event) {
+  const button = event.target.closest("[data-message-token]");
+  if (!button) return;
+  const target = document.querySelector(selectedMessageTokenField) || document.querySelector("#message-preview-body");
+  if (!target) return;
+  insertTextAtCursor(target, button.dataset.messageToken);
+  target.focus();
+  syncMessageJsonFromPreviewLive();
+  messageOutput.textContent = `Inserted ${button.dataset.messageToken}`;
+}
+
+function insertTextAtCursor(element, text) {
+  const start = element.selectionStart ?? element.value.length;
+  const end = element.selectionEnd ?? element.value.length;
+  const before = element.value.slice(0, start);
+  const after = element.value.slice(end);
+  const spacer = before && !before.endsWith(" ") && !String(text).startsWith(" ") ? " " : "";
+  element.value = `${before}${spacer}${text}${after}`;
+  const cursor = before.length + spacer.length + String(text).length;
+  element.setSelectionRange?.(cursor, cursor);
+}
+
+function renderPersonalizedText(value, sample) {
+  if (!messageRenderTokens?.checked) return value;
+  return String(value || "").replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (match, path) => {
+    const resolved = resolveSamplePath(sample, path);
+    return resolved === undefined || resolved === null || resolved === "" ? match : String(resolved);
+  });
+}
+
+function resolveSamplePath(sample, path) {
+  const parts = String(path || "").split(".").filter(Boolean);
+  let current = sample || {};
+  for (const part of parts) {
+    if (Array.isArray(current)) current = current[0];
+    if (current && typeof current === "object" && "value" in current && !Object.prototype.hasOwnProperty.call(current, part)) current = current.value;
+    if (!current || typeof current !== "object" || !Object.prototype.hasOwnProperty.call(current, part)) return undefined;
+    current = current[part];
+  }
+  if (Array.isArray(current)) current = current[0];
+  if (current && typeof current === "object" && "value" in current) return current.value;
+  return current;
+}
+
+function messageTokenStats() {
+  const content = [
+    document.querySelector("#message-preview-title")?.value || "",
+    document.querySelector("#message-preview-body")?.value || "",
+    document.querySelector("#message-preview-footer")?.value || "",
+    document.querySelector("#message-primary-cta-label")?.value || "",
+    document.querySelector("#message-primary-cta-url")?.value || "",
+    document.querySelector("#message-secondary-cta-label")?.value || "",
+    document.querySelector("#message-secondary-cta-url")?.value || ""
+  ].join("\n");
+  const tokens = [...content.matchAll(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g)].map((match) => match[1]);
+  const sample = parseJsonSafe(messageTokenSample?.value || "{}");
+  return {
+    tokens,
+    missing: tokens.filter((token) => resolveSamplePath(sample, token) === undefined)
+  };
+}
+
 function renderMessagePreview() {
   if (!messagePreview) return;
   const templateType = messageTemplateType(document.querySelector("#message-template-type").value);
   const placement = document.querySelector("#message-placement").value.trim();
   const rawTitle = document.querySelector("#message-preview-title").value.trim();
   const rawBody = document.querySelector("#message-preview-body").value.trim();
-  const title = rawTitle || document.querySelector("#message-name").value.trim() || "Untitled message";
-  const body = rawBody || "No message body yet.";
-  const footer = document.querySelector("#message-preview-footer").value.trim();
+  const sample = parseJsonSafe(messageTokenSample?.value || "{}");
+  const title = renderPersonalizedText(rawTitle || document.querySelector("#message-name").value.trim() || "Untitled message", sample);
+  const body = renderPersonalizedText(rawBody || "No message body yet.", sample);
+  const footer = renderPersonalizedText(document.querySelector("#message-preview-footer").value.trim(), sample);
   const imageUrl = document.querySelector("#message-preview-image").value.trim();
   const surface = document.querySelector("#message-surface").value.trim() || "-";
   const status = document.querySelector("#message-status").value || "active";
@@ -3820,13 +3979,13 @@ function renderMessagePreview() {
   const startsAt = document.querySelector("#message-starts-at").value;
   const ctas = [
     {
-      label: document.querySelector("#message-primary-cta-label").value.trim(),
-      url: document.querySelector("#message-primary-cta-url").value.trim(),
+      label: renderPersonalizedText(document.querySelector("#message-primary-cta-label").value.trim(), sample),
+      url: renderPersonalizedText(document.querySelector("#message-primary-cta-url").value.trim(), sample),
       style: "primary"
     },
     {
-      label: document.querySelector("#message-secondary-cta-label").value.trim(),
-      url: document.querySelector("#message-secondary-cta-url").value.trim(),
+      label: renderPersonalizedText(document.querySelector("#message-secondary-cta-label").value.trim(), sample),
+      url: renderPersonalizedText(document.querySelector("#message-secondary-cta-url").value.trim(), sample),
       style: "secondary"
     }
   ].filter((cta) => cta.label || cta.url);
@@ -3843,7 +4002,8 @@ function renderMessagePreview() {
     body: rawBody,
     footer,
     imageUrl,
-    ctas
+    ctas,
+    tokens: messageTokenStats()
   });
   messagePreview.dataset.health = health.level;
   messagePreview.dataset.hasCta = ctas.length ? "true" : "false";
@@ -3860,7 +4020,8 @@ function renderMessagePreview() {
     statusItem("Starts", startsAt ? formatTime(new Date(startsAt).toISOString()) : "Now"),
     statusItem("Expires", expiresAt ? formatTime(new Date(expiresAt).toISOString()) : "-"),
     statusItem("Message ID", document.querySelector("#message-id").value.trim() || "-"),
-    statusItem("Schema fields", Object.keys(parseJsonSafe(document.querySelector("#message-schema").value || "{}")).length)
+    statusItem("Schema fields", Object.keys(parseJsonSafe(document.querySelector("#message-schema").value || "{}")).length),
+    statusItem("Tokens", messageTokenStats().tokens.length ? `${messageTokenStats().tokens.length} used` : "None")
   ].join("");
   renderMessagePreviewHealth(health);
   renderMessageRuleLinks();
@@ -3958,7 +4119,7 @@ async function cleanupMessageAssets() {
   }
 }
 
-function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, placement, surface, title, body, footer, imageUrl, ctas }) {
+function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, placement, surface, title, body, footer, imageUrl, ctas, tokens }) {
   const checks = [];
   const now = Date.now();
   const starts = startsAt ? new Date(startsAt).getTime() : 0;
@@ -3979,6 +4140,8 @@ function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, 
   if (body.length > 320 || footer.length > 180 || title.length > 70) checks.push({ level: "warn", title: "Mobile clipping risk", detail: "Preview on mobile and shorten content if it pushes below the fold." });
   if (templateType === "banner" && !imageUrl) checks.push({ level: "info", title: "No image", detail: "Banners can work without media, but a visual may improve recognition." });
   if (!placement || surface === "-") checks.push({ level: "info", title: "Placement not fully defined", detail: "Surface and placement help client apps render this consistently." });
+  if (tokens?.missing?.length) checks.push({ level: "warn", title: "Token sample missing", detail: `No sample value for ${tokens.missing.slice(0, 3).join(", ")}${tokens.missing.length > 3 ? "..." : ""}.` });
+  if (tokens?.tokens?.length) checks.push({ level: "info", title: "Personalized content", detail: `${tokens.tokens.length} token${tokens.tokens.length === 1 ? "" : "s"} used in this message.` });
   const level = checks.some((item) => item.level === "error") ? "error" : checks.some((item) => item.level === "warn") ? "warn" : "ok";
   return {
     level,
@@ -7293,6 +7456,7 @@ async function syncSchemaFromMeiro() {
       ...(body.imported?.context || [])
     ];
     await loadSettings();
+    renderMessageTokenSuggestions();
     renderBranchEditor();
     schemaOutput.textContent = JSON.stringify(body, null, 2);
     renderSchemaDiagnostics(body.diagnostics);
@@ -7323,6 +7487,7 @@ async function syncMeiroMetadata() {
       ...(body.imported?.context || [])
     ];
     await loadSettings();
+    renderMessageTokenSuggestions();
     renderBranchEditor();
     schemaOutput.textContent = JSON.stringify(body, null, 2);
     renderSchemaDiagnostics(body.diagnostics?.profile_api?.diagnostics || body.diagnostics);
@@ -7555,6 +7720,7 @@ async function importSchema() {
       ...(body.imported?.segments || []),
       ...(body.imported?.context || [])
     ];
+    renderMessageTokenSuggestions();
     renderBranchEditor();
     schemaOutput.textContent = JSON.stringify(body, null, 2);
     renderSchemaDiagnostics(body.diagnostics);
@@ -7567,6 +7733,7 @@ async function loadSchema({ silent = false } = {}) {
   try {
     const body = await api("/v1/schema");
     cachedSchema = body.schema || [];
+    renderMessageTokenSuggestions();
     renderBranchEditor();
     if (!silent) schemaOutput.textContent = JSON.stringify(body, null, 2);
   } catch (error) {
