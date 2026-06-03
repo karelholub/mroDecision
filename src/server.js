@@ -1275,8 +1275,9 @@ function applyCampaignAction(body = {}, author = "admin") {
   const campaign = body.campaign || "Unassigned";
   const action = body.action || "";
   const dryRun = body.dry_run !== false;
-  if (!["submit_review", "archive"].includes(action)) badRequest("Unsupported campaign action");
+  if (!["submit_review", "archive", "duplicate"].includes(action)) badRequest("Unsupported campaign action");
   const assets = store.listCampaignAssets(campaign);
+  const duplicateSuffix = normalizeCampaignDuplicateSuffix(body.suffix || "copy");
   const result = {
     campaign: assets.campaign,
     action,
@@ -1328,6 +1329,38 @@ function applyCampaignAction(body = {}, author = "admin") {
     }
   }
 
+  if (action === "duplicate") {
+    for (const rule of assets.rules) {
+      const targetId = normalizeCampaignDuplicateId(rule.decision_key, duplicateSuffix);
+      if (!targetId || store.getRuleSet(targetId)) {
+        skip({ object_type: rule.type === "experiment" ? "experiment" : "rule", object_id: rule.decision_key, target_id: targetId, reason: "target_exists" });
+        continue;
+      }
+      affect({ object_type: rule.type === "experiment" ? "experiment" : "rule", object_id: rule.decision_key, target_id: targetId, action: "duplicate" });
+      if (!dryRun) {
+        store.duplicateRuleSet(rule.decision_key, {
+          decision_key: targetId,
+          name: `${rule.name || rule.decision_key} Copy`
+        }, author);
+      }
+    }
+    for (const message of assets.messages) {
+      const targetId = normalizeCampaignDuplicateId(message.id, duplicateSuffix);
+      if (!targetId || store.getMessage(targetId)) {
+        skip({ object_type: "message", object_id: message.id, target_id: targetId, reason: "target_exists" });
+        continue;
+      }
+      affect({ object_type: "message", object_id: message.id, target_id: targetId, action: "duplicate" });
+      if (!dryRun) {
+        store.upsertMessage(targetId, {
+          ...message,
+          name: `${message.name || message.id} Copy`,
+          status: "active"
+        }, author);
+      }
+    }
+  }
+
   return {
     ...result,
     summary: {
@@ -1338,6 +1371,18 @@ function applyCampaignAction(body = {}, author = "admin") {
       messages: result.affected.filter((item) => item.object_type === "message").length
     }
   };
+}
+
+function normalizeCampaignDuplicateSuffix(value) {
+  return normalizeCampaignDuplicateId(value || "copy", "").replace(/^_+|_+$/g, "") || "copy";
+}
+
+function normalizeCampaignDuplicateId(base, suffix) {
+  return String([base, suffix].filter(Boolean).join("_"))
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 async function routeRuleSet(req, res, key, suffix) {

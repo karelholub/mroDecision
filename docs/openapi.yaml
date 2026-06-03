@@ -3169,7 +3169,7 @@ components:
           type: string
         action:
           type: string
-          enum: [submit_review, archive]
+          enum: [submit_review, archive, duplicate]
         dry_run:
           type: boolean
           default: true
@@ -3177,6 +3177,9 @@ components:
           type: string
         assigned_to:
           type: string
+        suffix:
+          type: string
+          description: Deterministic suffix used for campaign duplicate target IDs.
     CampaignActionResult:
       type: object
       properties:
