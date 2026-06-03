@@ -16,6 +16,7 @@ const elements = {
   leadScore: document.querySelector("#lead-score"),
   sessionId: document.querySelector("#session-id"),
   autoExposure: document.querySelector("#auto-exposure"),
+  localProfilePayload: document.querySelector("#local-profile-payload"),
   newProfile: document.querySelector("#new-profile"),
   sendExposure: document.querySelector("#send-exposure"),
   sendImpression: document.querySelector("#send-impression"),
@@ -130,27 +131,34 @@ async function sendClientEvent(type) {
 function buildEvaluateRequest() {
   const forceVariant = elements.forceVariant.value.trim();
   const forceHoldout = forceVariant === "__holdout";
-  return {
+  const request = {
     decision_key: elements.decisionKey.value.trim(),
     profile_key: elements.profileKey.value.trim(),
     identifiers: [
       { typeId: "email", value: `${elements.profileKey.value.trim()}@example.test` }
     ],
-    attributes: {
-      lead_score: [{ value: Number(elements.leadScore.value || 0) }],
-      customer_lifetime_value: [{ value: 12500 }]
-    },
-    segments: {
-      demo_site_visitor: true
-    },
+    attributes: {},
+    segments: {},
     context: {
       surface: elements.surface.value.trim(),
       channel: "web",
       session_id: elements.sessionId.value.trim(),
+      profile_enrichment: "always",
       request_source: "experiment_mock_site",
       ...(forceHoldout ? { force_holdout: true } : forceVariant ? { force_variant: forceVariant } : {})
     }
   };
+  if (elements.localProfilePayload.checked) {
+    request.attributes = {
+      lead_score: [{ value: Number(elements.leadScore.value || 0) }],
+      customer_lifetime_value: [{ value: 12500 }]
+    };
+    request.segments = {
+      demo_site_visitor: true
+    };
+    request.context.profile_enrichment = "off";
+  }
+  return request;
 }
 
 function renderDecision(decision, request) {

@@ -155,6 +155,25 @@ Rule sets with `"type": "experiment"` can define deterministic variant allocatio
 
 `POST /v1/client/evaluate` returns the selected variant and merges the variant outputs into the decision outputs. For QA, pass `context.force_variant` to force a configured variant key. Pass `context.force_holdout: true` or `context.forced_holdouts[decision_key]: true` to force a no-variant holdout response; the response includes `experiment.holdout: true`.
 
+For production website calls, prefer sending a stable identifier plus request context instead of sending every profile attribute from the browser. When Meiro Profile API settings are configured, sparse client requests are enriched before evaluation:
+
+```json
+{
+  "decision_key": "homepage_hero",
+  "profile_key": "karel.holub@meiro.io",
+  "identifiers": [{ "typeId": "email", "value": "karel.holub@meiro.io" }],
+  "attributes": {},
+  "segments": {},
+  "context": {
+    "channel": "web",
+    "surface": "homepage_hero",
+    "profile_enrichment": "always"
+  }
+}
+```
+
+Normal request context such as `channel`, `surface`, `page_url`, and `session_id` is merged with the fetched Meiro profile and does not suppress enrichment. If you intentionally want to evaluate only a local payload, set `context.profile_enrichment` or `context.enrich_profile` to `"off"` or `false`.
+
 `cache_policy.client_ttl` enables in-process caching for client responses. Supported scopes are `profile`, `session`, `global`, and `request`. `session` uses `context.session_id` when present, while `request` includes the full request payload in the cache key.
 
 After rendering a message, exposing an experiment variant, or recording an outcome, clients can send feedback events to `POST /v1/client/impression`, `POST /v1/client/exposure`, and `POST /v1/client/conversion`. Include `decision_key`, `profile_key`, and any available `rule_version`, `variant_key`, `message_id`, `surface`, `context`, or conversion `event` details.

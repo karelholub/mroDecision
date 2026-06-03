@@ -145,7 +145,7 @@ paths:
   /v1/client/evaluate:
     post:
       summary: Evaluate an app-facing decision, in-app message, or experiment
-      description: Requires a token with the `client` scope. Tokens can optionally restrict the allowed `decision_key` values. When the request does not include profile attributes, the engine can hydrate the profile from the configured Meiro Profile API using the supplied identifier and profile cache TTL.
+      description: Requires a token with the `client` scope. Tokens can optionally restrict the allowed `decision_key` values. Sparse website requests should send identifiers plus request context; when attributes/segments are omitted, the engine hydrates the profile from the configured Meiro Profile API using the supplied identifier and profile cache TTL. Use `context.profile_enrichment = "always"` to force lookup even when local attributes are present, or `"off"` to disable lookup for a request.
       security:
         - bearerAuth: []
       requestBody:
@@ -166,6 +166,8 @@ paths:
                   segments: {}
                   context:
                     channel: web
+                    surface: homepage_hero
+                    profile_enrichment: always
       responses:
         "200":
           description: Client-safe decision response with cache hints
@@ -1922,6 +1924,7 @@ components:
             type: boolean
         context:
           type: object
+          description: Request context supplied by the website or app. Normal context such as channel, surface, page, or session does not suppress Meiro Profile API enrichment. Set profile_enrichment/enrich_profile to "always" or true to force enrichment, or "off" or false to disable it.
           additionalProperties: true
     ClientEvaluateResponse:
       type: object

@@ -1929,8 +1929,7 @@ async function hydrateClientProfile(request) {
 function hasProfilePayload(request) {
   return Boolean(
     Object.keys(request.attributes || {}).length ||
-    Object.keys(request.segments || {}).length ||
-    Object.keys(request.context || {}).filter((key) => !["surface", "session_id", "sessionId", "profile_enrichment", "enrich_profile", "force_variant", "forced_variants"].includes(key)).length
+    Object.keys(request.segments || {}).length
   );
 }
 
