@@ -160,6 +160,7 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(eventReport.by_rule[0].key, "campaign_suppression");
   assert.equal(eventReport.by_variant[0].key, "control");
   assert.equal(eventReport.recent_events[0].event_id, "evt-test-1");
+  assert.equal(store.getClientEventMetrics({ event_object: "control" }).recent_events[0].event_id, "evt-test-1");
 
   store.createRuleSet(
     {

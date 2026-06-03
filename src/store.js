@@ -553,6 +553,10 @@ export class Store {
         values.push(params[key]);
       }
     }
+    if (params.event_object) {
+      conditions.push("(variant_key = ? OR message_id = ?)");
+      values.push(params.event_object, params.event_object);
+    }
     if (params.from) {
       conditions.push("occurred_at >= ?");
       values.push(params.from);

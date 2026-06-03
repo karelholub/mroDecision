@@ -223,6 +223,10 @@ document.querySelector("#rule-filter-type").addEventListener("change", renderRul
 document.querySelector("#rule-filter-tag").addEventListener("input", renderRuleList);
 document.querySelector("#refresh-audit").addEventListener("click", loadAudit);
 document.querySelector("#clear-audit-filters").addEventListener("click", clearAuditFilters);
+document.querySelector("#audit-mode").addEventListener("change", () => {
+  renderAuditModeFields();
+  loadAudit();
+});
 document.querySelector("#refresh-lookups").addEventListener("click", loadLookups);
 document.querySelector("#lookup-filter-search")?.addEventListener("input", renderLookupList);
 document.querySelector("#lookup-filter-column")?.addEventListener("input", renderLookupList);
@@ -2367,6 +2371,12 @@ function bundleSummaryText(bundle) {
 }
 
 async function loadAudit() {
+  renderAuditModeFields();
+  if (document.querySelector("#audit-mode")?.value === "client_events") return loadClientEventAudit();
+  return loadDecisionAudit();
+}
+
+async function loadDecisionAudit() {
   const target = document.querySelector("#audit-list");
   target.innerHTML = header(["Time", "Decision", "Profile", "Result", "Matched"]);
   try {
@@ -2386,6 +2396,36 @@ async function loadAudit() {
   } catch (error) {
     target.innerHTML += row([error.message, "", "", "", ""]);
     renderAuditSummary([]);
+    auditDetail.textContent = error.message;
+  }
+}
+
+async function loadClientEventAudit() {
+  const target = document.querySelector("#audit-list");
+  target.innerHTML = header(["Time", "Type", "Rule", "Profile", "Object"]);
+  try {
+    const params = auditParams();
+    params.set("limit", document.querySelector("#audit-limit").value || "100");
+    params.set("recent_limit", document.querySelector("#audit-limit").value || "100");
+    const body = await api(`/v1/metrics/client-events${params.toString() ? `?${params}` : ""}`);
+    const events = body.metrics?.recent_events || [];
+    target.innerHTML += events.length
+      ? events.map((item, index) => row([
+          formatTime(item.occurred_at),
+          item.event_type,
+          item.decision_key,
+          item.profile_key,
+          item.variant_key || item.message_id || item.surface || "-"
+        ], { auditIndex: index })).join("")
+      : row(["No client feedback events match the current filters", "", "", "", ""]);
+    renderClientEventAuditSummary(events, body.metrics || {});
+    target.querySelectorAll("[data-audit-index]").forEach((element) => {
+      element.addEventListener("click", () => renderClientEventAuditDetail(events[Number(element.dataset.auditIndex)]));
+    });
+    renderClientEventAuditDetail(events[0]);
+  } catch (error) {
+    target.innerHTML += row([error.message, "", "", "", ""]);
+    renderClientEventAuditSummary([], {});
     auditDetail.textContent = error.message;
   }
 }
@@ -2422,6 +2462,23 @@ function renderAuditInsights(audit) {
   ].join("");
 }
 
+function renderClientEventAuditSummary(events, metrics = {}) {
+  const count = events.length;
+  auditCount.textContent = `${formatNumber(count)} feedback event${count === 1 ? "" : "s"}`;
+  const first = events[0]?.occurred_at ? formatTime(events[0].occurred_at) : "Latest first";
+  const last = events.at(-1)?.occurred_at ? formatTime(events.at(-1).occurred_at) : "";
+  auditRange.textContent = last ? `${first} to ${last}` : first;
+  const topType = topCount(events.map((item) => item.event_type || "-"));
+  const topRule = topCount(events.map((item) => item.decision_key || "-"));
+  const profiles = new Set(events.map((item) => item.profile_key).filter(Boolean)).size;
+  auditInsights.innerHTML = [
+    statusItem("Top type", `${topType.key} (${formatNumber(topType.count)})`),
+    statusItem("Top rule", `${topRule.key} (${formatNumber(topRule.count)})`),
+    statusItem("Profiles", formatNumber(profiles)),
+    statusItem("Grouped rows", formatNumber((metrics.by_rule || []).length + (metrics.by_variant || []).length + (metrics.by_message || []).length))
+  ].join("");
+}
+
 function topCount(values) {
   const counts = new Map();
   for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
@@ -2450,8 +2507,28 @@ function renderAuditDetail(entry) {
   auditDetail.textContent = JSON.stringify(entry, null, 2);
 }
 
+function renderClientEventAuditDetail(entry) {
+  if (!entry) {
+    auditDetailSummary.innerHTML = [
+      statusItem("Type", "-"),
+      statusItem("Rule", "-"),
+      statusItem("Profile", "-"),
+      statusItem("Object", "-")
+    ].join("");
+    auditDetail.textContent = "No client feedback events match the current filters";
+    return;
+  }
+  auditDetailSummary.innerHTML = [
+    statusItem("Type", entry.event_type || "-"),
+    statusItem("Rule", entry.decision_key || "-"),
+    statusItem("Profile", entry.profile_key || "-"),
+    statusItem("Object", entry.variant_key || entry.message_id || entry.surface || "-")
+  ].join("");
+  auditDetail.textContent = JSON.stringify(entry, null, 2);
+}
+
 function clearAuditFilters() {
-  ["audit-decision-key", "audit-profile-key", "audit-result", "audit-matched-rule", "audit-search", "audit-from", "audit-to"].forEach((id) => {
+  ["audit-decision-key", "audit-profile-key", "audit-result", "audit-event-type", "audit-event-object", "audit-surface", "audit-matched-rule", "audit-search", "audit-from", "audit-to"].forEach((id) => {
     document.querySelector(`#${id}`).value = "";
   });
   document.querySelector("#audit-limit").value = "100";
@@ -2461,12 +2538,19 @@ function clearAuditFilters() {
 
 function auditParams() {
   const params = new URLSearchParams();
+  const mode = document.querySelector("#audit-mode")?.value || "decisions";
+  const eventObject = document.querySelector("#audit-event-object")?.value.trim();
   for (const [id, key] of [
     ["audit-decision-key", "decision_key"],
     ["audit-profile-key", "profile_key"],
-    ["audit-result", "result"],
-    ["audit-matched-rule", "matched_rule"],
-    ["audit-search", "search"],
+    ...(mode === "client_events" ? [
+      ["audit-event-type", "event_type"],
+      ["audit-surface", "surface"]
+    ] : [
+      ["audit-result", "result"],
+      ["audit-matched-rule", "matched_rule"],
+      ["audit-search", "search"]
+    ]),
     ["audit-from", "from"],
     ["audit-to", "to"],
     ["audit-limit", "limit"]
@@ -2475,7 +2559,20 @@ function auditParams() {
     if (!value) continue;
     params.set(key, id === "audit-from" || id === "audit-to" ? new Date(value).toISOString() : value);
   }
+  if (mode === "client_events" && eventObject) {
+    params.set("event_object", eventObject);
+  }
   return params;
+}
+
+function renderAuditModeFields() {
+  const clientMode = document.querySelector("#audit-mode")?.value === "client_events";
+  document.querySelector("#audit-result")?.closest("label")?.toggleAttribute("hidden", clientMode);
+  document.querySelector("#audit-matched-rule")?.closest("label")?.toggleAttribute("hidden", clientMode);
+  document.querySelector("#audit-search")?.closest("label")?.toggleAttribute("hidden", clientMode);
+  document.querySelectorAll("[data-audit-client-field]").forEach((element) => {
+    element.hidden = !clientMode;
+  });
 }
 
 function initializeAuditDefaults() {
@@ -2496,6 +2593,12 @@ function toLocalDateTimeInputValue(date) {
 async function exportAuditCsv() {
   try {
     const params = auditParams();
+    if (document.querySelector("#audit-mode")?.value === "client_events") {
+      params.set("recent_limit", document.querySelector("#audit-limit").value || "100");
+      const body = await api(`/v1/metrics/client-events${params.toString() ? `?${params}` : ""}`);
+      auditDetail.textContent = clientEventsToCsv(body.metrics?.recent_events || []);
+      return;
+    }
     params.set("format", "csv");
     const response = await fetch(`/v1/audit?${params}`, {
       headers: { authorization: `Bearer ${tokenInput.value}` }
@@ -2506,6 +2609,20 @@ async function exportAuditCsv() {
   } catch (error) {
     auditDetail.textContent = error.message;
   }
+}
+
+function clientEventsToCsv(events) {
+  const columns = ["occurred_at", "event_type", "decision_key", "profile_key", "rule_version", "variant_key", "message_id", "surface", "event_id"];
+  const lines = [columns.join(",")];
+  for (const event of events) {
+    lines.push(columns.map((column) => csvCell(event[column] ?? "")).join(","));
+  }
+  return lines.join("\n");
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 async function loadLookups() {

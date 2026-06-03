@@ -721,6 +721,13 @@
             <div class="editor-title">Filters</div>
             <div class="audit-filter-grid">
               <label>
+                Audit mode
+                <select id="audit-mode">
+                  <option value="decisions">Decision audit</option>
+                  <option value="client_events">Client feedback</option>
+                </select>
+              </label>
+              <label>
                 Decision key
                 <input id="audit-decision-key" placeholder="next_best_offer" />
               </label>
@@ -731,6 +738,23 @@
               <label>
                 Result
                 <input id="audit-result" placeholder="eligible" />
+              </label>
+              <label data-audit-client-field>
+                Event type
+                <select id="audit-event-type">
+                  <option value="">Any event</option>
+                  <option value="exposure">Exposure</option>
+                  <option value="impression">Impression</option>
+                  <option value="conversion">Conversion</option>
+                </select>
+              </label>
+              <label data-audit-client-field>
+                Variant / message
+                <input id="audit-event-object" placeholder="variant or message id" />
+              </label>
+              <label data-audit-client-field>
+                Surface
+                <input id="audit-surface" placeholder="homepage" />
               </label>
               <label>
                 Matched rule
