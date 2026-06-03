@@ -1280,10 +1280,45 @@ async function routeRuleSet(req, res, key, suffix) {
     const ruleSet = store.getRuleSet(key);
     if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
     validateRuleDefinition(ruleSet.draft, ruleSet.input_schema || {});
+    requireApprovedDraft(ruleSet);
     const version = store.publish(key, req.auth.name);
     await store.save();
     clientResultCache.clear();
     sendJson(res, 200, { version });
+    return;
+  }
+
+  if (req.method === "POST" && suffix === "submit-review") {
+    requireScope(req, "editor");
+    const body = await readJson(req, config.requestBodyLimitBytes);
+    const ruleSet = store.getRuleSet(key);
+    if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
+    validateRuleDefinition(ruleSet.draft, ruleSet.input_schema || {});
+    const updated = store.setRuleApproval(key, {
+      status: "submitted",
+      note: body.note || "",
+      draft_hash: draftHash(ruleSet.draft)
+    }, req.auth.name);
+    await store.save();
+    sendJson(res, 200, { rule_set: publicRuleSet(updated), approval: updated.metadata.approval });
+    return;
+  }
+
+  if (req.method === "POST" && suffix === "approve") {
+    requireScope(req, "publisher");
+    const body = await readJson(req, config.requestBodyLimitBytes);
+    const ruleSet = store.getRuleSet(key);
+    if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
+    validateRuleDefinition(ruleSet.draft, ruleSet.input_schema || {});
+    const approval = ruleSet.metadata?.approval || {};
+    if (approval.status !== "submitted" && !body.force) badRequest("Draft must be submitted for review before approval");
+    const updated = store.setRuleApproval(key, {
+      status: "approved",
+      note: body.note || approval.note || "",
+      draft_hash: draftHash(ruleSet.draft)
+    }, req.auth.name);
+    await store.save();
+    sendJson(res, 200, { rule_set: publicRuleSet(updated), approval: updated.metadata.approval });
     return;
   }
 
@@ -2031,6 +2066,21 @@ function publicRuleSet(ruleSet) {
     updated_at: ruleSet.updated_at,
     last_published_at: latest?.published_at || null
   };
+}
+
+function draftHash(draft) {
+  return createHash("sha256").update(JSON.stringify(draft || {})).digest("hex");
+}
+
+function requireApprovedDraft(ruleSet) {
+  const approval = ruleSet.metadata?.approval || {};
+  const currentHash = draftHash(ruleSet.draft);
+  if (approval.status !== "approved") {
+    badRequest("Draft must be approved before publishing");
+  }
+  if (approval.draft_hash !== currentHash) {
+    badRequest("Approval is stale. Submit and approve the current draft before publishing");
+  }
 }
 
 function badRequest(message) {

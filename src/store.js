@@ -161,12 +161,44 @@ export class Store {
       priority: Number(input.priority ?? ruleSet.priority ?? 0),
       surface: input.surface ?? ruleSet.surface ?? "",
       cache_policy: normalizeCachePolicy(input.cache_policy ?? ruleSet.cache_policy),
-      metadata: isPlainObject(input.metadata) ? input.metadata : ruleSet.metadata,
+      metadata: mergeApprovalMetadata(ruleSet.metadata, input.metadata),
       tags: Array.isArray(input.tags) ? input.tags : ruleSet.tags,
       draft: input.draft || input.definition || ruleSet.draft,
       author,
       status: ruleSet.status === "archived" ? "archived" : "draft",
       updated_at: createdAtNow()
+    };
+    updated.metadata = resetApprovalForDraftEdit(updated.metadata, author);
+    updateRuleSet(this.db, updated);
+    return updated;
+  }
+
+  setRuleApproval(key, input, author) {
+    const ruleSet = this.getRuleSet(key);
+    if (!ruleSet) notFound(`Rule set not found: ${key}`);
+    if (ruleSet.status === "archived") badRequest("Archived rule sets cannot be reviewed");
+    const status = input.status;
+    if (!["submitted", "approved"].includes(status)) badRequest("Approval status must be submitted or approved");
+    const now = createdAtNow();
+    const existing = ruleSet.metadata?.approval || {};
+    const approval = {
+      ...existing,
+      status,
+      draft_hash: input.draft_hash || existing.draft_hash || "",
+      note: input.note || "",
+      requested_by: status === "submitted" ? author : existing.requested_by || "",
+      requested_at: status === "submitted" ? now : existing.requested_at || "",
+      approved_by: status === "approved" ? author : "",
+      approved_at: status === "approved" ? now : ""
+    };
+    const updated = {
+      ...ruleSet,
+      metadata: {
+        ...(ruleSet.metadata || {}),
+        approval
+      },
+      author,
+      updated_at: now
     };
     updateRuleSet(this.db, updated);
     return updated;
@@ -1917,6 +1949,28 @@ function normalizeRuleSetType(type) {
 
 function normalizeCachePolicy(policy) {
   return isPlainObject(policy) ? policy : {};
+}
+
+function mergeApprovalMetadata(existing = {}, next) {
+  if (!isPlainObject(next)) return existing;
+  if (Object.hasOwn(next, "approval")) return next;
+  return existing.approval ? { ...next, approval: existing.approval } : next;
+}
+
+function resetApprovalForDraftEdit(metadata = {}, author = "") {
+  const approval = metadata.approval;
+  if (!approval || approval.status === "draft") return metadata;
+  return {
+    ...metadata,
+    approval: {
+      ...approval,
+      status: "draft",
+      invalidated_by: author,
+      invalidated_at: createdAtNow(),
+      approved_by: "",
+      approved_at: ""
+    }
+  };
 }
 
 function countBy(items, fn) {

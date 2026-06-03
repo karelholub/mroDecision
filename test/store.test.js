@@ -44,6 +44,13 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(store.getVersion("campaign_suppression").definition.branches[0].id, "risk_segment");
   assert.equal(store.getVersion("campaign_suppression").metadata.owner, "growth");
 
+  const submitted = store.setRuleApproval("campaign_suppression", { status: "submitted", draft_hash: "hash-1", note: "ready" }, "editor");
+  assert.equal(submitted.metadata.approval.status, "submitted");
+  assert.equal(submitted.metadata.approval.requested_by, "editor");
+  const approved = store.setRuleApproval("campaign_suppression", { status: "approved", draft_hash: "hash-1" }, "publisher");
+  assert.equal(approved.metadata.approval.status, "approved");
+  assert.equal(approved.metadata.approval.approved_by, "publisher");
+
   store.updateDraft(
     "campaign_suppression",
     {
@@ -64,6 +71,7 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   );
   assert.equal(store.getRuleSet("campaign_suppression").draft.branches[0].id, "new_risk_segment");
   assert.equal(store.getRuleSet("campaign_suppression").metadata.owner, "retention");
+  assert.equal(store.getRuleSet("campaign_suppression").metadata.approval.status, "draft");
   const rolledBack = store.rollbackDraftToVersion("campaign_suppression", 1, "tester");
   assert.equal(rolledBack.status, "draft");
   assert.equal(rolledBack.draft.branches[0].id, "risk_segment");

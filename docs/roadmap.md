@@ -187,12 +187,12 @@ Goal: make DEE safer and easier for marketing practitioners to operate without e
 - Add approval workflow with submit-for-review and approver-only publish.
 - Add dashboard date range, alert/anomaly indicators, clearer metric labels, and quick-create shortcuts.
 
-Status: started with experiment significance calculations, confidence labels, minimum-sample guidance, CSV export fields, a visual experiment variant builder with allocation controls and output fields, plain-language branch condition summaries with schema-aware inline field hints, branch output message linking with compact content previews, message-to-rule backlink inventory in the message editor, and real-time message preview health states for lifecycle, content completeness, CTA readiness, and mobile clipping risk. Remaining items are pending.
+Status: started with experiment significance calculations, confidence labels, minimum-sample guidance, CSV export fields, a visual experiment variant builder with allocation controls and output fields, plain-language branch condition summaries with schema-aware inline field hints, branch output message linking with compact content previews, message-to-rule backlink inventory in the message editor, real-time message preview health states for lifecycle, content completeness, CTA readiness, and mobile clipping risk, and approval workflow with submit-for-review, approver approval, and approved-draft publish gating. Remaining items are pending.
 
 ## Recommended Next Sprint
 
-1. Add approval workflow with submit-for-review and approver-only publish.
-2. Add experiment creation shortcuts, goal configuration, scheduling, and sample-size guidance.
-3. Add Reference Data search/filtering and column validation rules.
-4. Add Audit default date ranges, auto-load, and event type filters.
+1. Add experiment creation shortcuts, goal configuration, scheduling, and sample-size guidance.
+2. Add Reference Data search/filtering and column validation rules.
+3. Add Audit default date ranges, auto-load, and event type filters.
+4. Add dashboard date range, alert/anomaly indicators, clearer metric labels, and quick-create shortcuts.
 5. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.

@@ -297,6 +297,9 @@ document.querySelector("#graph-entry").addEventListener("input", () => {
   syncJsonFromBuilder();
 });
 document.querySelector("#publish-rule").addEventListener("click", publishSelectedRule);
+document.querySelector("#submit-rule-review").addEventListener("click", submitSelectedRuleForReview);
+document.querySelector("#approve-rule-draft").addEventListener("click", approveSelectedRuleDraft);
+document.querySelector("#approve-publish-rule").addEventListener("click", approveSelectedRuleDraft);
 document.querySelector("#cancel-publish-rule").addEventListener("click", closePublishConfirm);
 document.querySelector("#confirm-publish-rule").addEventListener("click", confirmPublishSelectedRule);
 document.querySelector("#rule-editor").addEventListener("submit", saveDraft);
@@ -1262,8 +1265,10 @@ function renderRuleInspector() {
   const ttl = Number(document.querySelector("#rule-client-ttl").value || 0);
   const scope = document.querySelector("#rule-cache-scope").value;
   const fallback = mode === "graph" ? "graph output" : (document.querySelector("#fallback-result").value.trim() || "deferred");
+  const approval = selected?.metadata?.approval || {};
   ruleInspectorSummary.innerHTML = [
     statusItem("Status", selected?.status || (selectedRuleKey ? "draft" : "new")),
+    statusItem("Approval", approvalLabel(approval)),
     statusItem("Version", selected?.version ?? "-"),
     statusItem("Type", type),
     statusItem("Priority", priority)
@@ -1686,6 +1691,56 @@ async function saveDraft(event) {
   }
 }
 
+async function submitSelectedRuleForReview() {
+  if (!selectedRuleKey) {
+    editorOutput.textContent = "Save the draft before submitting for review";
+    return;
+  }
+  try {
+    syncJsonFromBuilder();
+    const payload = readEditorPayload();
+    validateDraft(payload.draft);
+    const warnings = schemaReferenceWarnings(payload.draft);
+    if (warnings.length) throw new Error(`Cannot submit with broken schema references:\n${warnings.map((item) => `- ${item}`).join("\n")}`);
+    await api(`/v1/rule-sets/${encodeURIComponent(selectedRuleKey)}/draft`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+    const body = await api(`/v1/rule-sets/${encodeURIComponent(selectedRuleKey)}/submit-review`, {
+      method: "POST",
+      body: JSON.stringify({ note: "Submitted from Rule Builder" })
+    });
+    editorOutput.textContent = JSON.stringify(body, null, 2);
+    await loadRules();
+    renderRuleInspector();
+  } catch (error) {
+    editorOutput.textContent = error.message;
+  }
+}
+
+async function approveSelectedRuleDraft() {
+  if (!selectedRuleKey) {
+    editorOutput.textContent = "Save the draft before approval";
+    return;
+  }
+  try {
+    const body = await api(`/v1/rule-sets/${encodeURIComponent(selectedRuleKey)}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ note: "Approved from Rule Builder" })
+    });
+    editorOutput.textContent = JSON.stringify(body, null, 2);
+    await loadRules();
+    renderRuleInspector();
+    if (!publishConfirmModal.hidden) {
+      const payload = readEditorPayload();
+      renderPublishReview(payload, schemaReferenceWarnings(payload.draft));
+    }
+  } catch (error) {
+    editorOutput.textContent = error.message;
+    if (!publishConfirmModal.hidden) renderPublishReviewError(error);
+  }
+}
+
 async function publishSelectedRule() {
   if (!selectedRuleKey) {
     editorOutput.textContent = "Save the draft before publishing";
@@ -1713,10 +1768,6 @@ async function confirmPublishSelectedRule() {
     validateDraft(payload.draft);
     const warnings = schemaReferenceWarnings(payload.draft);
     if (warnings.length) throw new Error(`Cannot publish with broken schema references:\n${warnings.map((item) => `- ${item}`).join("\n")}`);
-    await api(`/v1/rule-sets/${encodeURIComponent(selectedRuleKey)}/draft`, {
-      method: "PUT",
-      body: JSON.stringify(payload)
-    });
     const body = await api(`/v1/rule-sets/${encodeURIComponent(selectedRuleKey)}/publish`, { method: "POST", body: "{}" });
     editorOutput.textContent = JSON.stringify(body, null, 2);
     selectedPublishedDefinition = payload.draft;
@@ -1743,8 +1794,11 @@ function renderPublishReview(payload, schemaWarnings = []) {
   }));
   const changes = [...definitionChanges, ...metadataChanges].slice(0, 40);
   const validations = publishValidationItems(payload, schemaWarnings);
+  const selected = cachedRuleSets.find((item) => item.decision_key === selectedRuleKey);
+  const approval = selected?.metadata?.approval || {};
   publishConfirmSummary.innerHTML = [
     statusItem("Decision key", payload.decision_key || "-"),
+    statusItem("Approval", approvalLabel(approval)),
     statusItem("Branches", stats.branches),
     statusItem("Outputs", stats.outputs),
     statusItem("TTL", payload.cache_policy?.client_ttl ? `${payload.cache_policy.client_ttl}s` : "No response TTL")
@@ -1763,7 +1817,8 @@ function renderPublishReview(payload, schemaWarnings = []) {
       <span>${escapeHtml(item.detail)}</span>
     </div>
   `).join("");
-  document.querySelector("#confirm-publish-rule").disabled = schemaWarnings.length > 0 || hasBlockingExperimentWarnings(payload);
+  document.querySelector("#confirm-publish-rule").disabled = approval.status !== "approved" || schemaWarnings.length > 0 || hasBlockingExperimentWarnings(payload);
+  document.querySelector("#approve-publish-rule").disabled = approval.status !== "submitted";
 }
 
 function renderPublishReviewError(error) {
@@ -1773,6 +1828,13 @@ function renderPublishReviewError(error) {
       <span>${escapeHtml(error.message)}</span>
     </div>
   `;
+}
+
+function approvalLabel(approval = {}) {
+  if (approval.status === "approved") return `Approved${approval.approved_by ? ` by ${approval.approved_by}` : ""}`;
+  if (approval.status === "submitted") return `Submitted${approval.requested_by ? ` by ${approval.requested_by}` : ""}`;
+  if (approval.status === "draft") return "Draft changed";
+  return "Not submitted";
 }
 
 function draftPublishStats(draft) {
@@ -1798,6 +1860,15 @@ function publishValidationItems(payload, schemaWarnings = []) {
   }
   const branchWarnings = branchPublishWarnings(draft);
   const experimentWarnings = experimentPublishWarnings(payload);
+  const selected = cachedRuleSets.find((item) => item.decision_key === selectedRuleKey);
+  const approval = selected?.metadata?.approval || {};
+  if (approval.status === "approved") {
+    items.push({ title: "Approval", detail: `Approved by ${approval.approved_by || "publisher"}.`, level: "ok" });
+  } else if (approval.status === "submitted") {
+    items.push({ title: "Approval required", detail: "Draft is submitted for review. Approve it before publishing.", level: "warn" });
+  } else {
+    items.push({ title: "Approval required", detail: "Submit this draft for review, then approve it before publishing.", level: "warn" });
+  }
   if (schemaWarnings.length) {
     items.push({ title: "Publish blocked", detail: "Fix schema reference warnings before publishing this rule.", level: "warn" });
   }
