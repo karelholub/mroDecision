@@ -20,6 +20,7 @@ const messageOutput = document.querySelector("#message-output");
 const messagePreview = document.querySelector("#message-preview");
 const messageDetailModal = document.querySelector("#message-detail-modal");
 const messageInspectorSummary = document.querySelector("#message-inspector-summary");
+const messageRuleLinks = document.querySelector("#message-rule-links");
 const lookupInspectorSummary = document.querySelector("#lookup-inspector-summary");
 const lookupHelpTable = document.querySelector("#lookup-help-table");
 const lookupHelpKey = document.querySelector("#lookup-help-key");
@@ -467,6 +468,7 @@ async function loadRules() {
     renderEvaluateRuleOptions();
     renderRuleList();
     renderRuleInspector();
+    renderMessageRuleLinks();
   } catch (error) {
     const target = document.querySelector("#rule-list");
     target.innerHTML = header(["Name", "Decision key", "Status", "Version", "Actions"]);
@@ -2530,6 +2532,7 @@ function renderMessagePreview() {
     statusItem("Message ID", document.querySelector("#message-id").value.trim() || "-"),
     statusItem("Schema fields", Object.keys(parseJsonSafe(document.querySelector("#message-schema").value || "{}")).length)
   ].join("");
+  renderMessageRuleLinks();
 }
 
 function normalizeMessageCtas(content) {
@@ -2553,6 +2556,92 @@ function normalizeMessageCtas(content) {
 
 function messageTemplateType(value) {
   return ["banner", "alert", "modal", "inline", "toast"].includes(value) ? value : "banner";
+}
+
+function renderMessageRuleLinks() {
+  if (!messageRuleLinks) return;
+  const id = document.querySelector("#message-id")?.value.trim();
+  if (!id) {
+    messageRuleLinks.innerHTML = "";
+    return;
+  }
+  const links = messageBacklinks(id);
+  messageRuleLinks.innerHTML = `
+    <div class="message-rule-links-head">
+      <div>
+        <strong>Used By Rules</strong>
+        <span>${escapeHtml(links.length ? `${links.length} linked branch${links.length === 1 ? "" : "es"}` : "No rule branches return this message yet.")}</span>
+      </div>
+    </div>
+    <div class="message-rule-link-list">
+      ${links.length ? links.map(messageRuleLinkRow).join("") : `<div class="grid-empty">Add this message as a branch output with field <strong>message_id</strong>.</div>`}
+    </div>
+  `;
+  messageRuleLinks.querySelectorAll("[data-message-rule-key]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeMessageDetail();
+      loadRule(button.dataset.messageRuleKey);
+    });
+  });
+}
+
+function messageBacklinks(messageId) {
+  return cachedRuleSets.flatMap((rule) => {
+    const links = [];
+    collectMessageBacklinks(rule.draft, messageId, {
+      rule_key: rule.decision_key,
+      rule_name: rule.name,
+      rule_type: rule.type || "decision",
+      rule_status: rule.status || "draft",
+      definition: "draft"
+    }, links);
+    return links;
+  });
+}
+
+function collectMessageBacklinks(definition, messageId, base, links) {
+  if (!definition || typeof definition !== "object") return;
+  for (const [index, branch] of (definition.branches || []).entries()) {
+    collectMessageOutput(branch.outputs, messageId, {
+      ...base,
+      branch_id: branch.id || branch.label || `branch_${index + 1}`,
+      result: branch.result || "eligible"
+    }, links);
+  }
+  for (const node of definition.graph?.nodes || definition.nodes || []) {
+    collectMessageOutput(node.outputs || node.output, messageId, {
+      ...base,
+      branch_id: node.id || node.type || "graph_node",
+      result: node.result || node.type || "graph"
+    }, links);
+    if (node.message_id === messageId) {
+      links.push({
+        ...base,
+        branch_id: node.id || node.type || "graph_node",
+        result: node.type || "graph",
+        output_field: "message_id"
+      });
+    }
+  }
+}
+
+function collectMessageOutput(outputs, messageId, base, links) {
+  if (!outputs || typeof outputs !== "object") return;
+  for (const [field, value] of Object.entries(outputs)) {
+    if (field === "message_id" && value === messageId) {
+      links.push({ ...base, output_field: field });
+    }
+  }
+}
+
+function messageRuleLinkRow(link) {
+  return `
+    <button type="button" class="message-rule-link-row" data-message-rule-key="${escapeHtml(link.rule_key)}">
+      <span>${escapeHtml(link.rule_type)}</span>
+      <strong>${escapeHtml(link.rule_name || link.rule_key)}</strong>
+      <small>${escapeHtml(`${link.branch_id} · ${link.result} · ${link.rule_status}`)}</small>
+    </button>
+  `;
 }
 
 async function loadLookupVersions(id) {

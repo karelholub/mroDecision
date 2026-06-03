@@ -3110,6 +3110,86 @@ header {
   font-size: 11px;
 }
 
+.message-rule-links {
+  display: grid;
+  gap: 10px;
+  margin: 0 20px 20px;
+  min-width: 0;
+}
+
+.message-rule-links-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.message-rule-links-head div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.message-rule-links-head strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.message-rule-links-head span {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.message-rule-link-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.message-rule-link-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.45fr) minmax(0, 1fr) minmax(140px, 0.8fr);
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: var(--ink);
+  text-align: left;
+}
+
+.message-rule-link-row:hover {
+  border-color: rgba(15, 118, 110, 0.28);
+  background: rgba(20, 184, 166, 0.06);
+}
+
+.message-rule-link-row span,
+.message-rule-link-row strong,
+.message-rule-link-row small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.message-rule-link-row span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.message-rule-link-row strong {
+  font-size: 13px;
+}
+
+.message-rule-link-row small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .message-bottom-drawer {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -4259,6 +4339,7 @@ pre {
     .message-workbench,
     .message-editor-main,
     .message-field-grid,
+    .message-rule-link-row,
     .lookup-workbench,
     .lookup-editor-main,
     .filter-bar,
