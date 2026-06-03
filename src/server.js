@@ -444,6 +444,22 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  const messageVersionDiffMatch = pathname.match(/^\/v1\/messages\/([^/]+)\/versions\/(\d+)\/diff$/);
+  if (messageVersionDiffMatch && req.method === "GET") {
+    requireScope(req, "viewer");
+    const id = decodeURIComponent(messageVersionDiffMatch[1]);
+    const left = store.getMessageVersion(id, Number(messageVersionDiffMatch[2]));
+    const compareTo = url.searchParams.get("compare_to") || "current";
+    const right = compareTo === "current" ? store.getMessage(id) : store.getMessageVersion(id, Number(compareTo));
+    if (!right) notFoundError(`Message not found: ${id}`);
+    sendJson(res, 200, {
+      left: messageDiffRef(left),
+      right: compareTo === "current" ? { version: "current", updated_at: right.updated_at, author: right.author } : messageDiffRef(right),
+      diff: diffValues(messageDiffPayload(left), messageDiffPayload(right))
+    });
+    return;
+  }
+
   const messageMatch = pathname.match(/^\/v1\/messages\/([^/]+)$/);
   if (messageMatch && req.method === "PUT") {
     requireScope(req, "editor");
@@ -1547,6 +1563,25 @@ function lookupTableToCsv(table) {
     );
   }
   return `${lines.join("\n")}\n`;
+}
+
+function messageDiffRef(message) {
+  return {
+    version: message.version,
+    updated_at: message.updated_at,
+    author: message.author
+  };
+}
+
+function messageDiffPayload(message) {
+  return {
+    name: message.name,
+    surface: message.surface,
+    status: message.status,
+    content_schema: message.content_schema || {},
+    default_content: message.default_content || {},
+    metadata: message.metadata || {}
+  };
 }
 
 function experimentOperationsToCsv(operations) {

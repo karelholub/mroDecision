@@ -3452,7 +3452,7 @@ function duplicateSelectedMessage() {
 
 async function loadMessageVersions(id = selectedMessageId) {
   if (!messageVersionList || !id) return;
-  messageVersionList.innerHTML = header(["Version", "Updated", "Author", "Status", "Content"]);
+  messageVersionList.innerHTML = header(["Version", "Updated", "Author", "Status", "Content", "Actions"]);
   try {
     const body = await api(`/v1/messages/${encodeURIComponent(id)}/versions`);
     const versions = body.versions || [];
@@ -3462,14 +3462,21 @@ async function loadMessageVersions(id = selectedMessageId) {
           formatTime(version.updated_at),
           version.author || "-",
           version.status || "-",
-          (version.content_keys || []).join(", ") || "-"
-        ], { messageVersion: version.version })).join("")
-      : row(["No versions recorded yet", "", "", "", ""]);
+          (version.content_keys || []).join(", ") || "-",
+          `<button type="button" data-message-version-diff="${escapeHtml(version.version)}">Diff</button>`
+        ], { messageVersion: version.version, rawColumns: [5] })).join("")
+      : row(["No versions recorded yet", "", "", "", "", ""]);
     messageVersionList.querySelectorAll("[data-message-version]").forEach((element) => {
       element.addEventListener("click", () => loadMessageVersionDetail(id, element.dataset.messageVersion));
     });
+    messageVersionList.querySelectorAll("[data-message-version-diff]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        loadMessageVersionDiff(id, button.dataset.messageVersionDiff);
+      });
+    });
   } catch (error) {
-    messageVersionList.innerHTML += row([error.message, "", "", "", ""]);
+    messageVersionList.innerHTML += row([error.message, "", "", "", "", ""]);
   }
 }
 
@@ -3481,6 +3488,43 @@ async function loadMessageVersionDetail(id, version) {
   } catch (error) {
     messageOutput.textContent = error.message;
   }
+}
+
+async function loadMessageVersionDiff(id, version) {
+  try {
+    const body = await api(`/v1/messages/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}/diff?compare_to=current`);
+    messageOutput.textContent = formatMessageVersionDiff(body);
+    document.querySelector('[data-message-drawer-tab="output"]')?.click();
+  } catch (error) {
+    messageOutput.textContent = error.message;
+  }
+}
+
+function formatMessageVersionDiff(body = {}) {
+  const diff = body.diff || [];
+  const lines = [
+    `Message diff: v${body.left?.version ?? "-"} -> ${body.right?.version ?? "current"}`,
+    `Left: ${body.left?.updated_at ? formatTime(body.left.updated_at) : "-"} · ${body.left?.author || "-"}`,
+    `Right: ${body.right?.updated_at ? formatTime(body.right.updated_at) : "-"} · ${body.right?.author || "-"}`,
+    ""
+  ];
+  if (!diff.length) {
+    lines.push("No content, schema, or metadata changes.");
+  } else {
+    for (const item of diff) {
+      lines.push(`${item.change.toUpperCase()} ${item.path}`);
+      lines.push(`  before: ${formatDiffValue(item.before)}`);
+      lines.push(`  after:  ${formatDiffValue(item.after)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+function formatDiffValue(value) {
+  if (value === undefined) return "(missing)";
+  if (value === "") return "\"\"";
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }
 
 function uniqueMessageCopyId(baseId) {
@@ -4098,12 +4142,13 @@ function row(values, options = {}) {
     options.key ? `data-rule-key="${escapeHtml(options.key)}"` : "",
     options.lookupId ? `data-lookup-id="${escapeHtml(options.lookupId)}"` : "",
     options.messageId ? `data-message-id="${escapeHtml(options.messageId)}"` : "",
+    options.messageVersion ? `data-message-version="${escapeHtml(options.messageVersion)}"` : "",
     options.deliveryId ? `data-delivery-id="${escapeHtml(options.deliveryId)}"` : "",
     options.metricRuleKey ? `data-metric-rule-key="${escapeHtml(options.metricRuleKey)}"` : "",
     Number.isInteger(options.auditIndex) ? `data-audit-index="${options.auditIndex}"` : "",
     options.tokenId ? `data-token-id="${escapeHtml(options.tokenId)}"` : ""
   ].filter(Boolean).join(" ");
-  const className = options.key || options.lookupId || options.messageId || options.deliveryId || options.metricRuleKey || Number.isInteger(options.auditIndex) || options.tokenId ? "row actionable" : "row";
+  const className = options.key || options.lookupId || options.messageId || options.messageVersion || options.deliveryId || options.metricRuleKey || Number.isInteger(options.auditIndex) || options.tokenId ? "row actionable" : "row";
   return `<div class="${className}" ${attrs}>${values.map((value, index) => `<div>${options.rawColumns?.includes(index) ? String(value ?? "") : escapeHtml(String(value ?? ""))}</div>`).join("")}</div>`;
 }
 

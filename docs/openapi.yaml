@@ -1028,6 +1028,35 @@ paths:
                 properties:
                   message:
                     $ref: "#/components/schemas/Message"
+  /v1/messages/{id}/versions/{version}/diff:
+    get:
+      summary: Diff a message version against the current message or another version
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: compare_to
+          in: query
+          schema:
+            oneOf:
+              - type: integer
+              - type: string
+                enum: [current]
+            default: current
+      responses:
+        "200":
+          description: Path-based message diff summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageVersionDiff"
   /v1/evaluation-profiles:
     get:
       summary: List saved evaluation test profiles
@@ -2286,6 +2315,27 @@ components:
           format: date-time
         author:
           type: string
+    MessageVersionDiff:
+      type: object
+      properties:
+        left:
+          type: object
+          additionalProperties: true
+        right:
+          type: object
+          additionalProperties: true
+        diff:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              before: {}
+              after: {}
+              change:
+                type: string
+                enum: [added, removed, changed]
     MessageWrite:
       type: object
       properties:
