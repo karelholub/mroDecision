@@ -59,6 +59,7 @@ const ruleDetailPanel = document.querySelector("#metrics-rule-detail");
 const clientEventsPanel = document.querySelector("#metrics-client-events");
 const requestTrendPanel = document.querySelector("#metrics-request-trend");
 const overviewAlerts = document.querySelector("#overview-alerts");
+const overviewAnomalyHistory = document.querySelector("#overview-anomaly-history");
 const overviewServiceFooter = document.querySelector("#overview-service-footer");
 const overviewRuleDetailModal = document.querySelector("#overview-rule-detail-modal");
 const experimentKpis = document.querySelector("#experiment-kpis");
@@ -557,6 +558,7 @@ function renderMetrics(metrics) {
   ].join("");
 
   renderOverviewAlerts(metrics);
+  renderOverviewAnomalyHistory(metrics.anomaly_baseline || {});
   renderRuleUsage(metrics.rule_usage || []);
   loadClientEventMetrics();
   renderRequestTrend(metrics);
@@ -626,6 +628,36 @@ function overviewAlertItems(metrics) {
     items.push({ level: "ok", label: "Health", title: "No active alerts", detail: "Runtime, traffic, schema, and feedback signals look normal." });
   }
   return items.slice(0, 4);
+}
+
+function renderOverviewAnomalyHistory(baseline = {}) {
+  if (!overviewAnomalyHistory) return;
+  const signals = baseline.signals || [];
+  const alerts = baseline.alerts || [];
+  if (!signals.length) {
+    overviewAnomalyHistory.innerHTML = `<div class="status-line">No baseline data available yet.</div>`;
+    return;
+  }
+  overviewAnomalyHistory.innerHTML = `
+    <div class="anomaly-signal-grid">
+      ${signals.map((signal) => `
+        <div class="anomaly-signal ${escapeHtml(signal.level || "ok")}">
+          <span>${escapeHtml(signal.label || "-")}</span>
+          <strong>${escapeHtml(formatAnomalyValue(signal.current, signal.unit))}</strong>
+          <small>Previous ${escapeHtml(formatAnomalyValue(signal.previous, signal.unit))} · ${escapeHtml(formatSignedPercent(signal.change || 0))}</small>
+        </div>
+      `).join("")}
+    </div>
+    <div class="anomaly-alert-history">
+      ${alerts.length ? alerts.map((alert) => `
+        <div class="anomaly-alert-item ${escapeHtml(alert.level)}">
+          <span>${escapeHtml(alert.label)}</span>
+          <strong>${escapeHtml(alert.title)}</strong>
+          <small>${escapeHtml(alert.detail)}</small>
+        </div>
+      `).join("") : `<div class="anomaly-alert-item ok"><span>Baseline</span><strong>No anomalies detected</strong><small>Current metrics are within conservative baseline thresholds.</small></div>`}
+    </div>
+  `;
 }
 
 async function loadExperiments() {
@@ -3530,6 +3562,16 @@ function formatNumber(value) {
 
 function formatPercent(value) {
   return `${Math.round(Number(value || 0) * 1000) / 10}%`;
+}
+
+function formatSignedPercent(value) {
+  const percent = Math.round(Number(value || 0) * 1000) / 10;
+  return `${percent > 0 ? "+" : ""}${percent}%`;
+}
+
+function formatAnomalyValue(value, unit) {
+  if (unit === "ratio") return formatPercent(value);
+  return `${formatNumber(value)} ${unit || ""}`.trim();
 }
 
 function formatLift(value) {

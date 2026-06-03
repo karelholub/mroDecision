@@ -1442,6 +1442,113 @@ header {
   color: var(--danger);
 }
 
+.overview-anomaly-card {
+  display: grid;
+  gap: 12px;
+}
+
+.overview-anomaly-history {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.anomaly-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.anomaly-signal {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--panel-soft);
+}
+
+.anomaly-signal span,
+.anomaly-signal small {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.anomaly-signal span {
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.anomaly-signal strong {
+  min-width: 0;
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.anomaly-signal.warn {
+  border-color: rgba(245, 158, 11, 0.42);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.anomaly-signal.error {
+  border-color: rgba(180, 35, 24, 0.36);
+  background: rgba(180, 35, 24, 0.07);
+}
+
+.anomaly-alert-history {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.anomaly-alert-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+}
+
+.anomaly-alert-item span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.anomaly-alert-item strong,
+.anomaly-alert-item small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.anomaly-alert-item small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.anomaly-alert-item.ok {
+  border-color: rgba(16, 185, 129, 0.32);
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.anomaly-alert-item.warn {
+  border-color: rgba(245, 158, 11, 0.42);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.anomaly-alert-item.error {
+  border-color: rgba(180, 35, 24, 0.36);
+  background: rgba(180, 35, 24, 0.07);
+}
+
 .metric-card {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);

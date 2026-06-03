@@ -437,6 +437,7 @@ export class Store {
     const now = Date.now();
     const windowHours = normalizeMetricsWindowHours(options.window_hours);
     const sinceWindow = new Date(now - windowHours * 60 * 60 * 1000).toISOString();
+    const sincePreviousWindow = new Date(now - windowHours * 2 * 60 * 60 * 1000).toISOString();
     const since24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
     const since7d = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
     const rules = this.listRuleSets();
@@ -540,7 +541,88 @@ export class Store {
         requests_24h: Number(row.requests_24h || 0),
         unique_profiles: Number(row.unique_profiles || 0),
         last_evaluated_at: row.last_evaluated_at || null
-      }))
+      })),
+      anomaly_baseline: this.getMetricsAnomalyBaseline({
+        current_from: sinceWindow,
+        previous_from: sincePreviousWindow,
+        to: new Date(now).toISOString(),
+        window_hours: windowHours
+      })
+    };
+  }
+
+  getMetricsAnomalyBaseline({ current_from, previous_from, to, window_hours }) {
+    const auditRows = this.db
+      .prepare(
+        `SELECT
+          SUM(CASE WHEN evaluated_at >= ? AND evaluated_at <= ? THEN 1 ELSE 0 END) AS current_requests,
+          SUM(CASE WHEN evaluated_at >= ? AND evaluated_at < ? THEN 1 ELSE 0 END) AS previous_requests,
+          COUNT(DISTINCT CASE WHEN evaluated_at >= ? AND evaluated_at <= ? THEN profile_key END) AS current_profiles,
+          COUNT(DISTINCT CASE WHEN evaluated_at >= ? AND evaluated_at < ? THEN profile_key END) AS previous_profiles
+         FROM audit_log`
+      )
+      .get(current_from, to, previous_from, current_from, current_from, to, previous_from, current_from);
+    const eventRows = this.db
+      .prepare(
+        `SELECT
+          SUM(CASE WHEN occurred_at >= ? AND occurred_at <= ? THEN 1 ELSE 0 END) AS current_events,
+          SUM(CASE WHEN occurred_at >= ? AND occurred_at < ? THEN 1 ELSE 0 END) AS previous_events
+         FROM client_events`
+      )
+      .get(current_from, to, previous_from, current_from);
+    const currentRequests = Number(auditRows.current_requests || 0);
+    const previousRequests = Number(auditRows.previous_requests || 0);
+    const currentProfiles = Number(auditRows.current_profiles || 0);
+    const previousProfiles = Number(auditRows.previous_profiles || 0);
+    const currentEvents = Number(eventRows.current_events || 0);
+    const previousEvents = Number(eventRows.previous_events || 0);
+    const currentCoverage = currentRequests ? currentEvents / currentRequests : 0;
+    const previousCoverage = previousRequests ? previousEvents / previousRequests : 0;
+    const signals = [
+      anomalySignal({
+        id: "request_volume",
+        label: "Request volume",
+        current: currentRequests,
+        previous: previousRequests,
+        unit: "requests",
+        detail: "Evaluations in the selected window compared with the previous matching window."
+      }),
+      anomalySignal({
+        id: "unique_profiles",
+        label: "Unique profiles",
+        current: currentProfiles,
+        previous: previousProfiles,
+        unit: "profiles",
+        detail: "Distinct profile keys evaluated in the selected window."
+      }),
+      anomalySignal({
+        id: "client_feedback",
+        label: "Client feedback",
+        current: currentEvents,
+        previous: previousEvents,
+        unit: "events",
+        detail: "Client impressions, exposures, and conversions in the selected window."
+      }),
+      anomalySignal({
+        id: "feedback_coverage",
+        label: "Feedback coverage",
+        current: currentCoverage,
+        previous: previousCoverage,
+        unit: "ratio",
+        detail: "Client feedback events per evaluation request."
+      })
+    ];
+    const alerts = signals
+      .map((signal) => anomalyAlertFromSignal(signal))
+      .filter(Boolean);
+    return {
+      window_hours,
+      current_from,
+      previous_from,
+      previous_to: current_from,
+      generated_at: createdAtNow(),
+      signals,
+      alerts
     };
   }
 
@@ -2108,6 +2190,48 @@ function metricsWindowLabel(hours) {
   if (hours === 168) return "Last 7 days";
   if (hours === 720) return "Last 30 days";
   return `Last ${hours} hours`;
+}
+
+function anomalySignal({ id, label, current, previous, unit, detail }) {
+  const delta = Number(current || 0) - Number(previous || 0);
+  const change = Number(previous || 0) > 0 ? delta / Number(previous || 0) : (Number(current || 0) > 0 ? 1 : 0);
+  return {
+    id,
+    label,
+    current: Number(current || 0),
+    previous: Number(previous || 0),
+    delta,
+    change,
+    unit,
+    detail,
+    level: anomalyLevel({ id, current: Number(current || 0), previous: Number(previous || 0), change })
+  };
+}
+
+function anomalyLevel({ id, current, previous, change }) {
+  if (id === "feedback_coverage") {
+    if (current < 0.1 && previous >= 0.25) return "warn";
+    if (current < 0.05 && previous >= 0.5) return "error";
+    return "ok";
+  }
+  if (previous < 5 && current < 5) return "ok";
+  if (previous >= 5 && change <= -0.75) return "error";
+  if (previous >= 5 && change <= -0.5) return "warn";
+  if (previous >= 10 && change >= 2) return "warn";
+  return "ok";
+}
+
+function anomalyAlertFromSignal(signal) {
+  if (!["warn", "error"].includes(signal.level)) return null;
+  const direction = signal.delta >= 0 ? "up" : "down";
+  const percent = Math.round(Math.abs(signal.change || 0) * 100);
+  return {
+    id: signal.id,
+    level: signal.level,
+    label: signal.label,
+    title: `${signal.label} ${direction} ${percent}%`,
+    detail: `${signal.current} now vs ${signal.previous} in the previous matching window.`
+  };
 }
 
 function baselineVariant(variants = []) {

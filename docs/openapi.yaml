@@ -2520,6 +2520,8 @@ components:
           $ref: "#/components/schemas/RateLimitMetrics"
         runtime_requests:
           $ref: "#/components/schemas/RuntimeRequestMetrics"
+        anomaly_baseline:
+          $ref: "#/components/schemas/AnomalyBaseline"
         client_events:
           type: object
           properties:
@@ -2566,6 +2568,63 @@ components:
               last_evaluated_at:
                 type: string
                 nullable: true
+    AnomalyBaseline:
+      type: object
+      properties:
+        window_hours:
+          type: integer
+        current_from:
+          type: string
+          format: date-time
+        previous_from:
+          type: string
+          format: date-time
+        previous_to:
+          type: string
+          format: date-time
+        generated_at:
+          type: string
+          format: date-time
+        signals:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+              current:
+                type: number
+              previous:
+                type: number
+              delta:
+                type: number
+              change:
+                type: number
+              unit:
+                type: string
+              detail:
+                type: string
+              level:
+                type: string
+                enum: [ok, warn, error]
+        alerts:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              level:
+                type: string
+                enum: [warn, error]
+              label:
+                type: string
+              title:
+                type: string
+              detail:
+                type: string
     RuleMetrics:
       type: object
       properties:

@@ -29,6 +29,7 @@ Implemented:
 - Version history panel with published-version diff and rollback into draft.
 - Audit date filtering and CSV export.
 - Overview rule usage drilldown with fallback rate, matched branch distribution, and recent decisions.
+- Overview anomaly baselines and alert history for selected metric windows.
 - Evaluate panel trace cards for matched branch checks and graph node paths.
 - Evaluate saved profile payloads, request-shape validation, and published-vs-draft comparison.
 - Shared server-side saved evaluation profiles for team QA payloads.
@@ -187,12 +188,12 @@ Goal: make DEE safer and easier for marketing practitioners to operate without e
 - Add approval workflow with submit-for-review and approver-only publish.
 - Add dashboard date range, alert/anomaly indicators, clearer metric labels, and quick-create shortcuts.
 
-Status: started with experiment significance calculations, confidence labels, minimum-sample guidance, CSV export fields, a visual experiment variant builder with allocation controls and output fields, plain-language branch condition summaries with schema-aware inline field hints, branch output message linking with compact content previews, message-to-rule backlink inventory in the message editor, real-time message preview health states for lifecycle, content completeness, CTA readiness, and mobile clipping risk, approval workflow with submit-for-review, approver approval, and approved-draft publish gating, experiment quick-create shortcuts, goal configuration, scheduling, and sample-size guidance. Reference Data search/filtering, column quality checks, editable validation rules with advisory/warn/block save policies, Audit default date ranges, auto-load, matched-rule/payload filters, client feedback event mode with event type/object/surface filters, Message catalog status/template/surface/search filters, message duplication, surface suggestions, preview thumbnails, and Overview range selection with operational alerts are implemented. Remaining items are pending.
+Status: started with experiment significance calculations, confidence labels, minimum-sample guidance, CSV export fields, a visual experiment variant builder with allocation controls and output fields, plain-language branch condition summaries with schema-aware inline field hints, branch output message linking with compact content previews, message-to-rule backlink inventory in the message editor, real-time message preview health states for lifecycle, content completeness, CTA readiness, and mobile clipping risk, approval workflow with submit-for-review, approver approval, and approved-draft publish gating, experiment quick-create shortcuts, goal configuration, scheduling, and sample-size guidance. Reference Data search/filtering, column quality checks, editable validation rules with advisory/warn/block save policies, Audit default date ranges, auto-load, matched-rule/payload filters, client feedback event mode with event type/object/surface filters, Message catalog status/template/surface/search filters, message duplication, surface suggestions, preview thumbnails, Overview range selection with operational alerts, and baseline alert history are implemented. Remaining items are pending.
 
 ## Recommended Next Sprint
 
-1. Add dashboard anomaly baselines and alert history beyond the current live alert strip.
-2. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.
-3. Add a managed-database adapter path for enterprise deployments.
-4. Add deeper message personalization helpers such as token suggestions and content-variant previews.
-5. Add expanded Meiro delivery retry guidance and failed-attempt replay tooling.
+1. Add optional LLM-backed planning behind the deterministic assistant contract, with strict action allowlists and validation guardrails.
+2. Add a managed-database adapter path for enterprise deployments.
+3. Add deeper message personalization helpers such as token suggestions and content-variant previews.
+4. Add expanded Meiro delivery retry guidance and failed-attempt replay tooling.
+5. Add persistent alert acknowledgement and incident notes for operator workflows.
