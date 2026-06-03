@@ -7,6 +7,7 @@ services:
       PORT: 8080
       DEE_DATA_DIR: /app/data
       DEE_DB_PATH: /app/data/dee.sqlite
-      DEE_TOKENS: '[{"name":"admin","token":"dev-admin-token","scopes":["admin","evaluate"]}]'
+      DEE_CORS_ORIGINS: '*'
+      DEE_TOKENS: '[{"name":"admin","token":"dev-admin-token","scopes":["admin","evaluate","client"]}]'
     volumes:
       - ./data:/app/data
