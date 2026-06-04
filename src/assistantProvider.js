@@ -264,17 +264,41 @@ function sanitizeAdvicePlan(plan, fallback) {
 }
 
 function sanitizeRecommendation(item = {}, index = 0) {
+  const title = firstText(item, ["title", "name", "label", "experiment", "experiment_name", "idea", "summary"]);
+  const hypothesis = firstText(item, ["hypothesis", "description", "rationale", "reason", "why", "objective", "goal"]);
+  const audience = firstText(item, ["audience", "target_audience", "target_segment", "segment", "who"]);
+  const surface = firstText(item, ["surface", "placement", "channel", "location", "page"]);
+  const primaryMetric = firstText(item, ["primary_metric", "metric", "success_metric", "kpi", "conversion_metric"]);
   return {
     id: String(item.id || `recommendation_${index + 1}`),
-    title: String(item.title || `Experiment idea ${index + 1}`),
-    hypothesis: String(item.hypothesis || ""),
-    audience: String(item.audience || ""),
-    surface: String(item.surface || ""),
-    variants: Array.isArray(item.variants) ? item.variants.map(String).slice(0, 8) : [],
-    primary_metric: String(item.primary_metric || ""),
-    secondary_metrics: Array.isArray(item.secondary_metrics) ? item.secondary_metrics.map(String).slice(0, 8) : [],
-    guardrails: Array.isArray(item.guardrails) ? item.guardrails.map(String).slice(0, 8) : []
+    title: String(title || `Experiment idea ${index + 1}`),
+    hypothesis: String(hypothesis || ""),
+    audience: String(audience || ""),
+    surface: String(surface || ""),
+    variants: firstList(item, ["variants", "variant", "test_variants", "arms", "treatments", "messages"]).slice(0, 8),
+    primary_metric: String(primaryMetric || ""),
+    secondary_metrics: firstList(item, ["secondary_metrics", "metrics", "supporting_metrics"]).slice(0, 8),
+    guardrails: firstList(item, ["guardrails", "risks", "constraints", "notes"]).slice(0, 8)
   };
+}
+
+function firstText(source = {}, keys = []) {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (Array.isArray(value) && value.length) return value.map(String).join(" / ");
+  }
+  return "";
+}
+
+function firstList(source = {}, keys = []) {
+  for (const key of keys) {
+    const value = source[key];
+    if (Array.isArray(value)) return value.map((item) => typeof item === "object" ? JSON.stringify(item) : String(item)).filter(Boolean);
+    if (typeof value === "string" && value.trim()) return value.split(/\n|;/).map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
 }
 
 function sanitizeAction(action = {}) {

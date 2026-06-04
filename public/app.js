@@ -1086,24 +1086,51 @@ function renderAssistantPreview(plan) {
 }
 
 function assistantRecommendationCard(item = {}) {
+  const title = firstAssistantText(item, ["title", "name", "label", "experiment", "experiment_name", "idea", "summary"]) || "Experiment idea";
+  const hypothesis = firstAssistantText(item, ["hypothesis", "description", "rationale", "reason", "why", "objective", "goal"]);
+  const audience = firstAssistantText(item, ["audience", "target_audience", "target_segment", "segment", "who"]);
+  const surface = firstAssistantText(item, ["surface", "placement", "channel", "location", "page"]);
+  const primaryMetric = firstAssistantText(item, ["primary_metric", "metric", "success_metric", "kpi", "conversion_metric"]);
+  const variants = firstAssistantList(item, ["variants", "variant", "test_variants", "arms", "treatments", "messages"]);
+  const guardrails = firstAssistantList(item, ["guardrails", "risks", "constraints", "notes"]);
+  const rows = [
+    ["Audience", audience],
+    ["Surface", surface],
+    ["Primary metric", primaryMetric],
+    ["Variants", variants.join(" / ")],
+    ["Guardrails", guardrails.join(" / ")]
+  ].filter(([, value]) => value);
   return `
     <div class="assistant-preview-card assistant-recommendation-card">
-      <h4>${escapeHtml(item.title || "Experiment idea")}</h4>
-      ${item.hypothesis ? `<p>${escapeHtml(item.hypothesis)}</p>` : ""}
-      ${[
-        ["Audience", item.audience],
-        ["Surface", item.surface],
-        ["Primary metric", item.primary_metric],
-        ["Variants", Array.isArray(item.variants) ? item.variants.join(" / ") : ""],
-        ["Guardrails", Array.isArray(item.guardrails) ? item.guardrails.join(" / ") : ""]
-      ].filter(([, value]) => value).map(([label, value]) => `
+      <h4>${escapeHtml(title)}</h4>
+      ${hypothesis ? `<p>${escapeHtml(hypothesis)}</p>` : ""}
+      ${rows.length ? rows.map(([label, value]) => `
         <div class="assistant-preview-row">
           <span>${escapeHtml(label)}</span>
           <strong>${escapeHtml(value)}</strong>
         </div>
-      `).join("")}
+      `).join("") : `<p class="assistant-muted">The provider returned this recommendation without structured details. Ask the assistant to expand this idea or turn it into a draft.</p>`}
     </div>
   `;
+}
+
+function firstAssistantText(source = {}, keys = []) {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (Array.isArray(value) && value.length) return value.map(String).join(" / ");
+  }
+  return "";
+}
+
+function firstAssistantList(source = {}, keys = []) {
+  for (const key of keys) {
+    const value = source[key];
+    if (Array.isArray(value)) return value.map((item) => typeof item === "object" ? JSON.stringify(item) : String(item)).filter(Boolean);
+    if (typeof value === "string" && value.trim()) return value.split(/\n|;/).map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
 }
 
 function assistantPreviewCard(title, rows) {

@@ -213,6 +213,50 @@ test("assistant provider accepts LLM advice without draft actions", async () => 
   assert.equal(plan.recommendations[0].title, "CTA personalization");
 });
 
+test("assistant provider normalizes alternate LLM recommendation field names", async () => {
+  const fetcher = async () => new Response(JSON.stringify({
+    choices: [
+      {
+        message: {
+          content: JSON.stringify({
+            mode: "advice",
+            answer: "Try lifecycle-personalized offers.",
+            recommendations: [
+              {
+                name: "High LTV homepage offer",
+                description: "Show premium proof points to high lifetime value visitors.",
+                target_segment: "High LTV users",
+                placement: "Homepage hero",
+                success_metric: "Demo CTA click-through rate",
+                test_variants: ["Control", "Premium proof point"]
+              }
+            ]
+          })
+        }
+      }
+    ]
+  }), { status: 200, headers: { "content-type": "application/json" } });
+
+  const plan = await createAssistantPlanWithProvider(
+    { prompt: "What kind of experiment would you suggest for meiro.io site?" },
+    {},
+    {
+      assistant_llm_enabled: true,
+      assistant_llm_provider: "openai",
+      assistant_llm_model: "gpt-test",
+      assistant_llm_api_key: "secret"
+    },
+    fetcher
+  );
+
+  assert.equal(plan.recommendations[0].title, "High LTV homepage offer");
+  assert.equal(plan.recommendations[0].hypothesis, "Show premium proof points to high lifetime value visitors.");
+  assert.equal(plan.recommendations[0].audience, "High LTV users");
+  assert.equal(plan.recommendations[0].surface, "Homepage hero");
+  assert.equal(plan.recommendations[0].primary_metric, "Demo CTA click-through rate");
+  assert.deepEqual(plan.recommendations[0].variants, ["Control", "Premium proof point"]);
+});
+
 test("assistant provider treats follow-up draft requests as draft plans", async () => {
   const plan = await createAssistantPlanWithProvider(
     {

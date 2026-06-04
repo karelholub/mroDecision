@@ -657,6 +657,11 @@ aside input {
   overflow-wrap: anywhere;
 }
 
+.assistant-recommendation-card .assistant-muted {
+  margin-bottom: 0;
+  font-size: 0.82rem;
+}
+
 .assistant-advice-card ul,
 .assistant-advice-card ol {
   margin: 8px 0 0;
