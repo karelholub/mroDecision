@@ -2013,7 +2013,14 @@ function renderExperimentPanel() {
   const variants = Array.isArray(experiment.variants) ? experiment.variants : [];
   const total = variants.reduce((sum, variant) => sum + Number(variant.weight || 0), 0);
   const status = experiment.status || "draft";
-  const warnings = experimentMetadataWarnings(experiment);
+  const warnings = [
+    ...experimentMetadataWarnings(experiment),
+    ...experimentFreezeWarnings({
+      type,
+      metadata: { experiment },
+      draft: currentDraftForWarnings()
+    })
+  ];
   const planning = experimentPlanningSummary(experiment);
   if (!document.querySelector("#experiment-variant-builder")?.innerHTML.trim()) renderExperimentVariantBuilder(variants);
   experimentSummary.innerHTML = [
@@ -2884,20 +2891,14 @@ function publishValidationItems(payload, schemaWarnings = []) {
 function experimentPublishWarnings(payload) {
   if (payload.type !== "experiment") return [];
   const experiment = payload.metadata?.experiment || {};
-  const warnings = experimentMetadataWarnings(experiment);
-  const current = selectedPublishedMetadata?.experiment || {};
-  const currentAllocation = variantAllocationSignature(current.variants);
-  const nextAllocation = variantAllocationSignature(experiment.variants);
-  if (currentAllocation && nextAllocation && currentAllocation !== nextAllocation) {
-    warnings.push(`Variant allocation changes from ${currentAllocation} to ${nextAllocation}. Existing assignment distribution can shift.`);
-  }
-  if (current.status === "running" && experiment.status === "running" && current.unit && current.unit !== experiment.unit) {
-    warnings.push(`Assignment unit changes from ${current.unit} to ${experiment.unit}. Existing users may be re-bucketed.`);
-  }
+  const warnings = [
+    ...experimentMetadataWarnings(experiment),
+    ...experimentFreezeWarnings(payload)
+  ];
   if (experiment.status !== "running") {
     warnings.push(`Experiment will publish with status ${experiment.status || "draft"}; no variants will be assigned until status is running.`);
   }
-  return warnings;
+  return [...new Set(warnings)];
 }
 
 function hasBlockingExperimentWarnings(payload) {
@@ -2917,6 +2918,96 @@ function variantAllocationSignature(variants = []) {
   return Array.isArray(variants) && variants.length
     ? variants.map((variant) => `${variant.key}:${Number(variant.weight || 0)}`).join(", ")
     : "";
+}
+
+function experimentFreezeWarnings(payload = {}) {
+  if (payload.type !== "experiment") return [];
+  const current = selectedPublishedMetadata?.experiment || {};
+  if (!selectedPublishedDefinition || current.status !== "running") return [];
+  const next = payload.metadata?.experiment || {};
+  const warnings = [];
+  const currentAllocation = variantAllocationSignature(current.variants);
+  const nextAllocation = variantAllocationSignature(next.variants);
+  if (currentAllocation && nextAllocation && currentAllocation !== nextAllocation) {
+    warnings.push(`Active experiment freeze: allocation changes from ${currentAllocation} to ${nextAllocation}. Existing assignment distribution can shift.`);
+  }
+  const currentKeys = variantKeySignature(current.variants);
+  const nextKeys = variantKeySignature(next.variants);
+  if (currentKeys && nextKeys && currentKeys !== nextKeys) {
+    warnings.push(`Active experiment freeze: variant keys change from ${currentKeys} to ${nextKeys}. Existing assignments and reports may split.`);
+  }
+  const currentOutputs = variantOutputSignature(current.variants);
+  const nextOutputs = variantOutputSignature(next.variants);
+  if (currentOutputs && nextOutputs && currentOutputs !== nextOutputs) {
+    warnings.push("Active experiment freeze: variant outputs changed. Users already bucketed into a variant may see different content.");
+  }
+  if (current.unit && next.unit && current.unit !== next.unit) {
+    warnings.push(`Active experiment freeze: assignment unit changes from ${current.unit} to ${next.unit}. Existing users may be re-bucketed.`);
+  }
+  if (stableStringify(current.goal || {}) !== stableStringify(next.goal || {})) {
+    warnings.push("Active experiment freeze: goal settings changed. Conversion-rate and sample guidance may no longer be comparable.");
+  }
+  if (stableStringify(current.schedule || {}) !== stableStringify(next.schedule || {})) {
+    warnings.push("Active experiment freeze: schedule settings changed while the experiment is running.");
+  }
+  if (payload.draft && ruleEligibilitySignature(selectedPublishedDefinition) !== ruleEligibilitySignature(payload.draft)) {
+    warnings.push("Active experiment freeze: eligibility logic changed. The experiment audience may no longer match the launched population.");
+  }
+  return [...new Set(warnings)];
+}
+
+function currentDraftForWarnings() {
+  try {
+    return JSON.parse(document.querySelector("#rule-draft")?.value || "{}");
+  } catch {
+    return null;
+  }
+}
+
+function variantKeySignature(variants = []) {
+  return Array.isArray(variants) && variants.length
+    ? variants.map((variant) => variant.key || "").filter(Boolean).sort().join(", ")
+    : "";
+}
+
+function variantOutputSignature(variants = []) {
+  if (!Array.isArray(variants) || !variants.length) return "";
+  return stableStringify(
+    variants
+      .map((variant) => ({ key: variant.key || "", outputs: variant.outputs || {} }))
+      .sort((left, right) => left.key.localeCompare(right.key))
+  );
+}
+
+function ruleEligibilitySignature(draft = {}) {
+  if (draft.graph) {
+    return stableStringify({
+      entry: draft.graph.entry,
+      nodes: (draft.graph.nodes || [])
+        .filter((node) => !["output", "fallback"].includes(node.type))
+        .map((node) => ({ ...node, outputs: undefined, defaults: undefined }))
+    });
+  }
+  return stableStringify({
+    fallback_result: draft.fallback?.result || "",
+    branches: (draft.branches || []).map((branch) => ({
+      id: branch.id || "",
+      when: branch.when || {},
+      result: branch.result || ""
+    }))
+  });
+}
+
+function stableStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .filter((key) => value[key] !== undefined)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
 }
 
 function branchPublishWarnings(draft) {
