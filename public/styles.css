@@ -631,6 +631,40 @@ aside input {
   font-size: 0.86rem;
 }
 
+.assistant-advice-card {
+  grid-column: 1 / -1;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 0;
+  background: var(--panel);
+}
+
+.assistant-advice-card h4,
+.assistant-recommendation-card h4 {
+  overflow-wrap: anywhere;
+}
+
+.assistant-advice-card p,
+.assistant-recommendation-card p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.assistant-advice-card ul,
+.assistant-advice-card ol {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.assistant-advice-card li {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+
 .assistant-preview-row {
   display: grid;
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);

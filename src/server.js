@@ -198,6 +198,7 @@ async function routeApi(req, res, url) {
     requireScope(req, "editor");
     const body = await readJson(req, config.requestBodyLimitBytes);
     validateAssistantPlan(body.plan);
+    if (body.plan.mode !== "draft_only") badRequest("Only draft assistant plans can be applied");
     if (body.plan.guardrails?.errors?.length) badRequest("Assistant plan has blocking guardrail errors");
     const applied = applyAssistantPlan(body.plan, store, req.auth.name);
     await store.save();
@@ -2434,8 +2435,14 @@ function clientExperimentAssignment(assigned) {
 }
 
 function validateAssistantPlan(plan) {
-  if (!plan || !Array.isArray(plan.actions)) badRequest("Assistant plan must include actions");
-  if (plan.mode !== "draft_only") badRequest("Assistant plan mode must be draft_only");
+  if (!plan || typeof plan !== "object" || Array.isArray(plan)) badRequest("Assistant plan must be an object");
+  if (plan.mode === "advice") {
+    if (!Array.isArray(plan.actions)) plan.actions = [];
+    if (plan.actions.length) badRequest("Assistant advice cannot include actions");
+    return;
+  }
+  if (!Array.isArray(plan.actions)) badRequest("Assistant plan must include actions");
+  if (plan.mode !== "draft_only") badRequest("Assistant plan mode must be draft_only or advice");
   for (const action of plan.actions) {
     if (!["upsert_message", "create_rule_draft", "update_rule_draft"].includes(action.action)) {
       badRequest(`Unsupported assistant action: ${action.action}`);

@@ -4,7 +4,7 @@ const allowedActions = new Set(["upsert_message", "create_rule_draft", "update_r
 const openAiBaseUrl = "https://api.openai.com/v1";
 
 export async function createAssistantPlanWithProvider(input = {}, context = {}, settings = {}, fetcher = fetch) {
-  const deterministic = createAssistantPlan(input, context);
+  const deterministic = isAdviceRequest(input) ? createAssistantAdvice(input, context) : createAssistantPlan(input, context);
   const providerSettings = normalizeProviderSettings(settings);
   if (!providerSettings.enabled) {
     return annotatePlan(deterministic, {
@@ -56,7 +56,7 @@ export function normalizeProviderSettings(settings = {}) {
     base_url: provider === "openai" && !explicitBaseUrl ? openAiBaseUrl : explicitBaseUrl,
     model: String(settings.assistant_llm_model || "").trim(),
     api_key: String(settings.assistant_llm_api_key || "").trim(),
-    timeout_ms: Math.max(1000, Math.min(30000, Number(settings.assistant_llm_timeout_ms || 8000)))
+    timeout_ms: Math.max(1000, Math.min(30000, Number(settings.assistant_llm_timeout_ms || 15000)))
   };
 }
 
@@ -133,6 +133,7 @@ async function requestProviderPlan(input, context, settings, fetcher) {
   const body = await requestChatCompletion(settings, fetcher, {
     model: settings.model,
     temperature: 0.1,
+    max_tokens: isAdviceRequest(input) ? 1600 : 2200,
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: providerSystemPrompt() },
@@ -184,10 +185,11 @@ function chatCompletionsEndpoint(baseUrl) {
 
 function providerSystemPrompt() {
   return [
-    "You configure Meiro DEE draft plans.",
+    "You are a Meiro DEE decisioning and experimentation assistant.",
     "Return only JSON matching the existing assistant plan contract.",
-    "mode must be draft_only.",
-    "Allowed actions: upsert_message, create_rule_draft, update_rule_draft.",
+    "For broad strategic questions, return mode advice with answer, recommendations, assumptions, next_steps, and no actions.",
+    "For concrete configuration requests, return mode draft_only.",
+    "Allowed draft actions: upsert_message, create_rule_draft, update_rule_draft.",
     "Never publish, delete, archive, create tokens, call external services, or include secrets.",
     "Prefer concise draft objects and include guardrail warnings for assumptions."
   ].join(" ");
@@ -203,12 +205,13 @@ function providerContext(input, context) {
       key_column: table.key_column,
       columns: [...new Set((table.rows || []).flatMap((row) => Object.keys(row || {})))].slice(0, 20)
     })).slice(0, 30),
-    deterministic_plan: createAssistantPlan(input, context)
+    deterministic_plan: isAdviceRequest(input) ? createAssistantAdvice(input, context) : createAssistantPlan(input, context)
   };
 }
 
 function sanitizeProviderPlan(plan, fallback) {
   if (!plan || typeof plan !== "object" || Array.isArray(plan)) throw new Error("LLM plan must be an object");
+  if (plan.mode === "advice") return sanitizeAdvicePlan(plan, fallback);
   if (plan.mode !== "draft_only") throw new Error("LLM plan mode must be draft_only");
   if (!Array.isArray(plan.actions)) throw new Error("LLM plan must include actions");
   const actions = plan.actions.map((action) => sanitizeAction(action));
@@ -232,6 +235,47 @@ function sanitizeProviderPlan(plan, fallback) {
   };
 }
 
+function sanitizeAdvicePlan(plan, fallback) {
+  const recommendations = Array.isArray(plan.recommendations)
+    ? plan.recommendations.slice(0, 8).map((item, index) => sanitizeRecommendation(item, index))
+    : fallback.recommendations || [];
+  return {
+    ...fallback,
+    mode: "advice",
+    prompt: String(plan.prompt || fallback.prompt || ""),
+    summary: String(plan.summary || fallback.summary || "Assistant advice"),
+    answer: String(plan.answer || fallback.answer || ""),
+    assumptions: Array.isArray(plan.assumptions) ? plan.assumptions.map(String).slice(0, 12) : fallback.assumptions || [],
+    recommendations,
+    next_steps: Array.isArray(plan.next_steps) ? plan.next_steps.map(String).slice(0, 8) : fallback.next_steps || [],
+    actions: [],
+    guardrails: {
+      ...(fallback.guardrails || {}),
+      ...(plan.guardrails || {}),
+      status: plan.guardrails?.status || "review",
+      warnings: [
+        ...(fallback.guardrails?.warnings || []),
+        ...(plan.guardrails?.warnings || [])
+      ],
+      errors: []
+    }
+  };
+}
+
+function sanitizeRecommendation(item = {}, index = 0) {
+  return {
+    id: String(item.id || `recommendation_${index + 1}`),
+    title: String(item.title || `Experiment idea ${index + 1}`),
+    hypothesis: String(item.hypothesis || ""),
+    audience: String(item.audience || ""),
+    surface: String(item.surface || ""),
+    variants: Array.isArray(item.variants) ? item.variants.map(String).slice(0, 8) : [],
+    primary_metric: String(item.primary_metric || ""),
+    secondary_metrics: Array.isArray(item.secondary_metrics) ? item.secondary_metrics.map(String).slice(0, 8) : [],
+    guardrails: Array.isArray(item.guardrails) ? item.guardrails.map(String).slice(0, 8) : []
+  };
+}
+
 function sanitizeAction(action = {}) {
   if (!allowedActions.has(action.action)) throw new Error(`LLM plan used unsupported action: ${action.action}`);
   if (!action.id) throw new Error("LLM plan action is missing id");
@@ -242,5 +286,81 @@ function sanitizeAction(action = {}) {
     action: action.action,
     id: String(action.id),
     object: action.object
+  };
+}
+
+function isAdviceRequest(input = {}) {
+  const prompt = String(input.prompt || "").toLowerCase();
+  if (input.type || input.decision_key || input.name) return false;
+  const asksForAdvice = /(suggest|recommend|idea|ideas|what kind|which|what should|brainstorm|strategy|advise)/.test(prompt);
+  const decisioningTopic = /(experiment|test|personalization|personalisation|offer|message|banner|campaign|decision)/.test(prompt);
+  return asksForAdvice && decisioningTopic;
+}
+
+function createAssistantAdvice(input = {}, context = {}) {
+  const prompt = String(input.prompt || "").trim();
+  const schemaItems = Array.isArray(context.schemaItems) ? context.schemaItems : [];
+  const hasSchema = schemaItems.length > 0;
+  const recommendations = [
+    {
+      id: "homepage_value_prop_test",
+      title: "Homepage value proposition experiment",
+      hypothesis: "Visitors will engage more when the homepage hero adapts to their likely intent instead of showing one generic value proposition.",
+      audience: "Known or enriched visitors with intent, industry, source, or engagement signals.",
+      surface: "meiro.io homepage hero",
+      variants: ["Control: current hero", "Variant A: CDP activation value prop", "Variant B: Pipes and real-time decisioning value prop"],
+      primary_metric: "CTA click-through rate",
+      secondary_metrics: ["Demo request rate", "Scroll depth", "Return visit rate"],
+      guardrails: ["Keep assignment stable by profile or anonymous visitor id", "Exclude internal traffic", "Run until each variant reaches enough conversions"]
+    },
+    {
+      id: "use_case_route_test",
+      title: "Use-case routing experiment",
+      hypothesis: "Routing visitors to industry or use-case content based on context will increase qualified engagement.",
+      audience: "Visitors with inferred interest from UTM, referrer, page history, or Meiro profile attributes.",
+      surface: "Homepage, product pages, and navigation CTA",
+      variants: ["Control: generic CTA", "Variant: personalized CTA to relevant use case", "Variant: personalized CTA plus supporting proof point"],
+      primary_metric: "Qualified content click-through rate",
+      secondary_metrics: ["Demo request rate", "Time on use-case page"],
+      guardrails: ["Use fallback for unknown visitors", "Avoid over-personalized copy when confidence is low"]
+    },
+    {
+      id: "demo_cta_friction_test",
+      title: "Demo CTA friction experiment",
+      hypothesis: "High-intent visitors should see a lower-friction next step, while early-stage visitors should see educational content.",
+      audience: "Visitors segmented by lead score, web engagement, and returning visitor status.",
+      surface: "Global CTA, homepage hero, product page CTA",
+      variants: ["Control: Book a demo", "Variant A: Talk to an expert", "Variant B: See example implementation"],
+      primary_metric: "CTA completion rate",
+      secondary_metrics: ["Form starts", "Form submissions", "Assisted conversions"],
+      guardrails: ["Suppress aggressive demo prompts for low-intent visitors", "Track both immediate and assisted conversions"]
+    }
+  ];
+  return {
+    mode: "advice",
+    prompt,
+    summary: "Experiment ideas for meiro.io",
+    answer: "I would start with experiments that use DEE where it is strongest: choosing the right message, CTA, or route for a visitor based on profile, behavior, and page context. For meiro.io, the most practical first tests are homepage value proposition personalization, use-case routing, and CTA friction reduction.",
+    assumptions: [
+      "The site can pass a stable visitor or profile identifier to DEE.",
+      "Meiro can enrich the request with profile attributes, segments, or recent web behavior.",
+      hasSchema ? "DEE has cached Meiro schema items that can later be used for concrete rule drafts." : "No cached schema was available, so the ideas avoid relying on specific field names."
+    ],
+    recommendations,
+    next_steps: [
+      "Pick one recommendation and ask the assistant to create a draft experiment for it.",
+      "Confirm available profile attributes and context keys for audience targeting.",
+      "Define the primary conversion event and minimum sample size before publishing.",
+      "Start with a conservative 50/50 or 80/20 split and keep a fallback for unknown visitors."
+    ],
+    actions: [],
+    guardrails: {
+      status: "review",
+      errors: [],
+      warnings: [
+        "This is advisory only; no draft was created.",
+        "Convert one idea into a draft before applying changes."
+      ]
+    }
   };
 }

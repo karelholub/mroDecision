@@ -153,3 +153,62 @@ test("assistant provider test connection reports missing private API key", async
   assert.equal(result.base_url, "https://api.openai.com/v1");
   assert.match(result.message, /API key required/);
 });
+
+test("assistant provider returns deterministic advice for broad experiment questions when disabled", async () => {
+  const plan = await createAssistantPlanWithProvider(
+    { prompt: "What kind of experiment would you suggest for meiro.io site?" },
+    {},
+    { assistant_llm_enabled: false }
+  );
+
+  assert.equal(plan.mode, "advice");
+  assert.equal(plan.actions.length, 0);
+  assert.ok(plan.answer.includes("experiments"));
+  assert.ok(plan.recommendations.length >= 3);
+  assert.equal(plan.provider.status, "disabled");
+});
+
+test("assistant provider accepts LLM advice without draft actions", async () => {
+  const fetcher = async () => new Response(JSON.stringify({
+    choices: [
+      {
+        message: {
+          content: JSON.stringify({
+            mode: "advice",
+            summary: "Meiro experiment advice",
+            answer: "Start with homepage CTA personalization.",
+            assumptions: ["Website can pass visitor context."],
+            recommendations: [
+              {
+                title: "CTA personalization",
+                hypothesis: "Intent-based CTAs improve qualified clicks.",
+                audience: "Returning visitors",
+                surface: "Homepage",
+                variants: ["Control", "Personalized CTA"],
+                primary_metric: "CTA click-through rate"
+              }
+            ],
+            next_steps: ["Create a draft experiment for the selected idea."]
+          })
+        }
+      }
+    ]
+  }), { status: 200, headers: { "content-type": "application/json" } });
+
+  const plan = await createAssistantPlanWithProvider(
+    { prompt: "What kind of experiment would you suggest for meiro.io site?" },
+    {},
+    {
+      assistant_llm_enabled: true,
+      assistant_llm_provider: "openai",
+      assistant_llm_model: "gpt-test",
+      assistant_llm_api_key: "secret"
+    },
+    fetcher
+  );
+
+  assert.equal(plan.mode, "advice");
+  assert.equal(plan.actions.length, 0);
+  assert.equal(plan.provider.status, "used");
+  assert.equal(plan.recommendations[0].title, "CTA personalization");
+});

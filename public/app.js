@@ -927,7 +927,11 @@ async function planAssistantRequest() {
     });
     cachedAssistantPlan = response.plan;
     renderAssistantPlan(cachedAssistantPlan);
-    appendAssistantMessage("assistant", "Draft plan ready", cachedAssistantPlan.summary || "Review the generated draft before applying.");
+    appendAssistantMessage(
+      "assistant",
+      cachedAssistantPlan.mode === "advice" ? "Recommendations ready" : "Draft plan ready",
+      cachedAssistantPlan.answer || cachedAssistantPlan.summary || "Review the generated response."
+    );
   } catch (error) {
     cachedAssistantPlan = null;
     appendAssistantMessage("assistant", "Could not create a plan", error.message);
@@ -977,12 +981,33 @@ function renderAssistantPlan(plan) {
   renderAssistantPreview(plan);
   renderAssistantClarifications(plan);
   renderAssistantHandoff(plan, [], { applied: false });
-  document.querySelector("#assistant-apply").disabled = Boolean(guardrails.errors?.length);
+  document.querySelector("#assistant-apply").disabled = plan.mode !== "draft_only" || Boolean(guardrails.errors?.length);
 }
 
 function renderAssistantPreview(plan) {
   const target = document.querySelector("#assistant-preview");
   if (!target) return;
+  if (plan.mode === "advice") {
+    const recommendations = Array.isArray(plan.recommendations) ? plan.recommendations : [];
+    target.innerHTML = `
+      <div class="assistant-advice-card">
+        <h4>${escapeHtml(plan.summary || "Assistant recommendations")}</h4>
+        <p>${escapeHtml(plan.answer || "Review the recommendations below.")}</p>
+        ${Array.isArray(plan.assumptions) && plan.assumptions.length ? `
+          <strong>Assumptions</strong>
+          <ul>${plan.assumptions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+        ` : ""}
+      </div>
+      ${recommendations.map((item) => assistantRecommendationCard(item)).join("")}
+      ${Array.isArray(plan.next_steps) && plan.next_steps.length ? `
+        <div class="assistant-advice-card">
+          <h4>Next steps</h4>
+          <ol>${plan.next_steps.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>
+        </div>
+      ` : ""}
+    `;
+    return;
+  }
   const evaluation = plan.preview?.draft_evaluation || {};
   const schema = plan.schema || {};
   const sample = plan.preview?.sample_request || {};
@@ -1003,6 +1028,27 @@ function renderAssistantPreview(plan) {
       ["Context", Object.keys(sample.context || {}).join(", ") || "none"]
     ])
   ].join("");
+}
+
+function assistantRecommendationCard(item = {}) {
+  return `
+    <div class="assistant-preview-card assistant-recommendation-card">
+      <h4>${escapeHtml(item.title || "Experiment idea")}</h4>
+      ${item.hypothesis ? `<p>${escapeHtml(item.hypothesis)}</p>` : ""}
+      ${[
+        ["Audience", item.audience],
+        ["Surface", item.surface],
+        ["Primary metric", item.primary_metric],
+        ["Variants", Array.isArray(item.variants) ? item.variants.join(" / ") : ""],
+        ["Guardrails", Array.isArray(item.guardrails) ? item.guardrails.join(" / ") : ""]
+      ].filter(([, value]) => value).map(([label, value]) => `
+        <div class="assistant-preview-row">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
 }
 
 function assistantPreviewCard(title, rows) {
@@ -7396,7 +7442,7 @@ async function loadSettings() {
     document.querySelector("#setting-assistant-llm-model").value = settings.assistant_llm_model || "";
     document.querySelector("#setting-assistant-llm-api-key").value = "";
     document.querySelector("#setting-assistant-llm-api-key").placeholder = settings.assistant_llm_api_key_configured ? "Configured" : "";
-    document.querySelector("#setting-assistant-llm-timeout").value = settings.assistant_llm_timeout_ms || 8000;
+    document.querySelector("#setting-assistant-llm-timeout").value = settings.assistant_llm_timeout_ms || 15000;
     renderSchemaSyncStatus(settings, body.runtime?.schema_sync || {});
     renderSettingsSummary(settings, body.runtime || {});
     renderAssistantProviderStatus(settings);
@@ -7449,7 +7495,7 @@ async function testAssistantProviderConnection() {
         assistant_llm_base_url: document.querySelector("#setting-assistant-llm-base-url").value.trim(),
         assistant_llm_model: document.querySelector("#setting-assistant-llm-model").value.trim(),
         assistant_llm_api_key: document.querySelector("#setting-assistant-llm-api-key").value.trim(),
-        assistant_llm_timeout_ms: Number(document.querySelector("#setting-assistant-llm-timeout").value || 8000)
+        assistant_llm_timeout_ms: Number(document.querySelector("#setting-assistant-llm-timeout").value || 15000)
       })
     });
     if (assistantProviderTestOutput) assistantProviderTestOutput.textContent = JSON.stringify(response, null, 2);
@@ -7480,7 +7526,7 @@ async function saveSettings(event) {
       assistant_llm_provider: document.querySelector("#setting-assistant-llm-provider").value,
       assistant_llm_base_url: document.querySelector("#setting-assistant-llm-base-url").value.trim(),
       assistant_llm_model: document.querySelector("#setting-assistant-llm-model").value.trim(),
-      assistant_llm_timeout_ms: Number(document.querySelector("#setting-assistant-llm-timeout").value || 8000)
+      assistant_llm_timeout_ms: Number(document.querySelector("#setting-assistant-llm-timeout").value || 15000)
     };
     const apiToken = document.querySelector("#setting-meiro-api-token").value.trim();
     if (apiToken) payload.meiro_api_token = apiToken;

@@ -2019,7 +2019,7 @@ function seedSettings(db) {
     assistant_llm_base_url: "",
     assistant_llm_model: "",
     assistant_llm_api_key: "",
-    assistant_llm_timeout_ms: 8000,
+    assistant_llm_timeout_ms: 15000,
     schema_last_synced_at: "",
     schema_last_sync_status: "never",
     schema_last_sync_error: "",
