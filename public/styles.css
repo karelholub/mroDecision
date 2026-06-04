@@ -1782,7 +1782,7 @@ header {
 }
 
 .overview-support-grid {
-  grid-template-columns: minmax(320px, 0.95fr) minmax(300px, 0.7fr) minmax(340px, 0.95fr);
+  grid-template-columns: minmax(360px, 1fr) minmax(360px, 1fr);
 }
 
 .overview-rule-card {
@@ -1794,8 +1794,7 @@ header {
 }
 
 .overview-schema-card,
-.overview-result-card,
-.overview-inventory-card {
+.overview-result-card {
   min-height: 330px;
 }
 
@@ -2204,6 +2203,25 @@ header {
 .traffic-insights .status-item,
 .overview-service-footer .status-item {
   min-height: 58px;
+}
+
+.portfolio-mix-grid {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.portfolio-mix-grid section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.portfolio-mix-grid section > strong {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: uppercase;
 }
 
 .distribution-panel {

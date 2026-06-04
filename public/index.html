@@ -86,11 +86,20 @@
             <div class="editor overview-card overview-result-card">
               <div class="overview-card-head">
                 <div>
-                  <div class="editor-title">Decision Outcomes</div>
-                  <p>Eligibility mix and decision result health.</p>
+                  <div class="editor-title">Portfolio Mix</div>
+                  <p>Decision outcomes alongside the current rule and experiment inventory.</p>
                 </div>
               </div>
-              <div id="metrics-result-distribution" class="distribution-panel"></div>
+              <div class="portfolio-mix-grid">
+                <section>
+                  <strong>Decision outcomes</strong>
+                  <div id="metrics-result-distribution" class="distribution-panel"></div>
+                </section>
+                <section>
+                  <strong>Rules & experiments</strong>
+                  <div id="metrics-rule-inventory" class="inventory-panel"></div>
+                </section>
+              </div>
             </div>
           </div>
           <div class="overview-support-grid">
@@ -102,15 +111,6 @@
                 </div>
               </div>
               <div id="metrics-request-trend" class="request-trend-panel"></div>
-            </div>
-            <div class="editor overview-card overview-inventory-card">
-              <div class="overview-card-head">
-                <div>
-                  <div class="editor-title">Rules & Experiment Inventory</div>
-                  <p>Published assets, drafts, and archived configuration.</p>
-                </div>
-              </div>
-              <div id="metrics-rule-inventory" class="inventory-panel"></div>
             </div>
             <div class="editor overview-card overview-schema-card">
               <div class="overview-card-head">
