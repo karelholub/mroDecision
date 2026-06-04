@@ -7714,7 +7714,7 @@ async function loadSettings() {
     document.querySelector("#setting-assistant-llm-timeout").value = settings.assistant_llm_timeout_ms || 15000;
     renderSchemaSyncStatus(settings, body.runtime?.schema_sync || {});
     renderSettingsSummary(settings, body.runtime || {});
-    renderAssistantProviderStatus(settings);
+    renderAssistantProviderStatus(settings, body.runtime || {});
     await loadMeiroDeliveries();
     settingsOutput.textContent = JSON.stringify(body, null, 2);
     renderIntegration();
@@ -7768,8 +7768,10 @@ async function testAssistantProviderConnection() {
       })
     });
     if (assistantProviderTestOutput) assistantProviderTestOutput.textContent = JSON.stringify(response, null, 2);
+    await loadSettings();
   } catch (error) {
     if (assistantProviderTestOutput) assistantProviderTestOutput.textContent = error.message;
+    await loadSettings();
   }
 }
 
@@ -7810,7 +7812,7 @@ async function saveSettings(event) {
     cachedSettings = { ...cachedSettings, settings: body.settings || {} };
     renderSchemaSyncStatus(body.settings || {}, body.runtime?.schema_sync || {});
     renderSettingsSummary(body.settings || {}, body.runtime || {});
-    renderAssistantProviderStatus(body.settings || {});
+    renderAssistantProviderStatus(body.settings || {}, body.runtime || {});
     renderIntegration();
     settingsOutput.textContent = JSON.stringify(body, null, 2);
   } catch (error) {
@@ -8023,6 +8025,9 @@ function renderSettingsSummary(settings, runtime, error = null) {
   const metadataConfigured = Boolean((settings?.meiro_cli_url || settings?.meiro_url) && settings?.meiro_cli_token_configured);
   const assistantBaseConfigured = settings?.assistant_llm_provider === "openai" || Boolean(settings?.assistant_llm_base_url);
   const assistantConfigured = Boolean(settings?.assistant_llm_enabled && assistantBaseConfigured && settings?.assistant_llm_model && settings?.assistant_llm_api_key_configured);
+  const assistantProvider = runtime?.assistant_provider || {};
+  const assistantCalls = assistantProvider.calls || {};
+  const assistantLast = assistantProvider.last_call || null;
   const schemaStatus = settings?.schema_last_sync_status || "never";
   const schemaHealthy = ["ok", "success"].includes(schemaStatus);
   const schemaDetail = settings?.schema_last_synced_at
@@ -8063,8 +8068,10 @@ function renderSettingsSummary(settings, runtime, error = null) {
     {
       label: "Assistant LLM",
       value: settings?.assistant_llm_enabled ? assistantConfigured ? "Enabled" : "Incomplete" : "Disabled",
-      detail: settings?.assistant_llm_enabled ? `${assistantProviderLabel(settings.assistant_llm_provider)} · ${settings.assistant_llm_model || "no model"}` : "Deterministic planner only",
-      ok: !settings?.assistant_llm_enabled || assistantConfigured
+      detail: settings?.assistant_llm_enabled
+        ? `${assistantProviderLabel(settings.assistant_llm_provider)} · ${settings.assistant_llm_model || "no model"} · ${formatNumber(assistantCalls.total || 0)} calls · last ${assistantLast?.status || "none"}`
+        : "Deterministic planner only",
+      ok: (!settings?.assistant_llm_enabled || assistantConfigured) && Number(assistantCalls.error_rate || 0) < 0.1
     },
     {
       label: "Meiro Metadata",
@@ -8096,12 +8103,19 @@ function renderSettingsSummary(settings, runtime, error = null) {
     .join("");
 }
 
-function renderAssistantProviderStatus(settings = {}) {
+function renderAssistantProviderStatus(settings = {}, runtime = {}) {
   if (!assistantProviderStatus) return;
   const enabled = settings.assistant_llm_enabled === true;
   const baseConfigured = settings.assistant_llm_provider === "openai" || Boolean(settings.assistant_llm_base_url);
   const baseUrl = settings.assistant_llm_base_url || (settings.assistant_llm_provider === "openai" ? "https://api.openai.com/v1" : "");
   const configured = Boolean(enabled && baseConfigured && settings.assistant_llm_model && settings.assistant_llm_api_key_configured);
+  const providerMetrics = runtime.assistant_provider || {};
+  const calls = providerMetrics.calls || {};
+  const tests = providerMetrics.tests || {};
+  const usage = providerMetrics.usage || {};
+  const lastCall = providerMetrics.last_call || null;
+  const lastTest = providerMetrics.last_test || null;
+  const callHealthy = Number(calls.error_rate || 0) < 0.1;
   const items = [
     {
       label: "Mode",
@@ -8120,6 +8134,30 @@ function renderAssistantProviderStatus(settings = {}) {
       value: settings.assistant_llm_model || "Not set",
       detail: settings.assistant_llm_api_key_configured ? "API key configured" : "API key not configured",
       ok: !enabled || Boolean(settings.assistant_llm_model && settings.assistant_llm_api_key_configured)
+    },
+    {
+      label: "Plan calls",
+      value: formatNumber(calls.total || 0),
+      detail: `${formatPercent(calls.error_rate || 0)} fallback/error rate · ${formatNumber(calls.p95_ms || 0)}ms p95`,
+      ok: callHealthy
+    },
+    {
+      label: "Last plan",
+      value: lastCall ? `${lastCall.mode} · ${lastCall.status}` : "No calls yet",
+      detail: lastCall ? `${lastCall.at ? formatTime(lastCall.at) : "-"} · ${formatNumber(lastCall.duration_ms || 0)}ms` : "Ask the assistant to create or advise on a draft.",
+      ok: !lastCall || lastCall.ok !== false
+    },
+    {
+      label: "Connection tests",
+      value: `${formatNumber(tests.total || 0)} run`,
+      detail: lastTest ? `${lastTest.status} · ${formatTime(lastTest.at)} · ${formatNumber(lastTest.duration_ms || 0)}ms` : "No provider test has been run in this process.",
+      ok: !lastTest || lastTest.ok !== false
+    },
+    {
+      label: "Token usage",
+      value: formatNumber(usage.total_tokens || 0),
+      detail: `${formatNumber(usage.prompt_tokens || 0)} prompt · ${formatNumber(usage.completion_tokens || 0)} completion tokens`,
+      ok: true
     }
   ];
   assistantProviderStatus.innerHTML = items.map((item) => `

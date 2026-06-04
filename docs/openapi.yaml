@@ -2983,6 +2983,8 @@ components:
           $ref: "#/components/schemas/RateLimitMetrics"
         runtime_requests:
           $ref: "#/components/schemas/RuntimeRequestMetrics"
+        assistant_provider:
+          $ref: "#/components/schemas/AssistantProviderMetrics"
         anomaly_baseline:
           $ref: "#/components/schemas/AnomalyBaseline"
         client_events:
@@ -3277,6 +3279,87 @@ components:
                 type: integer
               max_ms:
                 type: integer
+    AssistantProviderMetrics:
+      type: object
+      description: In-memory operational telemetry for the optional LLM-backed assistant provider. Prompts and API keys are not stored.
+      properties:
+        started_at:
+          type: string
+          format: date-time
+        calls:
+          $ref: "#/components/schemas/AssistantProviderMetricSummary"
+        tests:
+          $ref: "#/components/schemas/AssistantProviderMetricSummary"
+        usage:
+          type: object
+          properties:
+            prompt_tokens:
+              type: integer
+            completion_tokens:
+              type: integer
+            total_tokens:
+              type: integer
+        last_call:
+          $ref: "#/components/schemas/AssistantProviderMetricEvent"
+          nullable: true
+        last_test:
+          $ref: "#/components/schemas/AssistantProviderMetricEvent"
+          nullable: true
+    AssistantProviderMetricSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+        ok:
+          type: integer
+        errors:
+          type: integer
+        error_rate:
+          type: number
+        statuses:
+          type: object
+          additionalProperties:
+            type: integer
+        modes:
+          type: object
+          additionalProperties:
+            type: integer
+        p50_ms:
+          type: integer
+        p95_ms:
+          type: integer
+        max_ms:
+          type: integer
+    AssistantProviderMetricEvent:
+      type: object
+      properties:
+        at:
+          type: string
+          format: date-time
+        mode:
+          type: string
+        status:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        duration_ms:
+          type: integer
+        ok:
+          type: boolean
+        error:
+          type: string
+        usage:
+          type: object
+          nullable: true
+          properties:
+            prompt_tokens:
+              type: integer
+            completion_tokens:
+              type: integer
+            total_tokens:
+              type: integer
     ExperimentOperation:
       type: object
       properties:

@@ -170,7 +170,7 @@ For high-traffic websites, tune process guardrails with environment variables:
 - `DEE_REQUEST_BODY_LIMIT_BYTES` and `DEE_BATCH_REQUEST_BODY_LIMIT_BYTES` cap JSON payload size.
 - `DEE_REQUEST_TIMEOUT_MS`, `DEE_HEADERS_TIMEOUT_MS`, `DEE_KEEP_ALIVE_TIMEOUT_MS`, and `DEE_MAX_REQUESTS_PER_SOCKET` control Node HTTP socket behavior.
 
-Monitor `/v1/metrics` for `runtime_requests`, `client_rate_limit`, `client_cache`, and `profile_cache` before raising limits. Runtime request metrics include rolling p50/p95/p99 latency, status counts, error rate, and slow-route summaries.
+Monitor `/v1/metrics` for `runtime_requests`, `client_rate_limit`, `client_cache`, `profile_cache`, and `assistant_provider` before raising limits or enabling optional LLM planning broadly. Runtime request metrics include rolling p50/p95/p99 latency, status counts, error rate, and slow-route summaries. Assistant provider metrics include call/test counts, fallback/error rate, p95 latency, last provider status, and provider-reported token usage without storing prompts or API keys.
 
 Retention is configurable in Settings:
 

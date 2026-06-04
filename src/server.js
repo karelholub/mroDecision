@@ -3,6 +3,7 @@ import { URL } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
 import { requireScope, setAuthStore } from "./auth.js";
 import { createAssistantPlanWithProvider, testAssistantProviderConnection } from "./assistantProvider.js";
+import { assistantProviderMetrics } from "./assistantProviderMetrics.js";
 import { applyAssistantPlan } from "./assistantPlanner.js";
 import { config } from "./config.js";
 import { createClientResultCache } from "./clientCache.js";
@@ -216,7 +217,8 @@ async function routeApi(req, res, url) {
         client_cache: clientResultCache.metrics(),
         profile_cache: meiroProfileCache.metrics(),
         client_rate_limit: clientRateLimiter.metrics(),
-        runtime_requests: requestMetrics.metrics()
+        runtime_requests: requestMetrics.metrics(),
+        assistant_provider: assistantProviderMetrics.metrics()
       }
     });
     return;
@@ -332,6 +334,7 @@ async function routeApi(req, res, url) {
         runtime_requests: requestMetrics.metrics(),
         schema_sync: schemaSyncRuntime(),
         profile_cache: meiroProfileCache.metrics(),
+        assistant_provider: assistantProviderMetrics.metrics(),
         meiro_deliveries: store.listMeiroDeliveries({ limit: 10 })
       }
     });
@@ -343,7 +346,13 @@ async function routeApi(req, res, url) {
     const settings = store.updateSettings(await readJson(req, config.requestBodyLimitBytes), req.auth.name);
     await store.save();
     scheduleSchemaSync();
-    sendJson(res, 200, { settings: publicSettings(settings), runtime: { schema_sync: schemaSyncRuntime() } });
+    sendJson(res, 200, {
+      settings: publicSettings(settings),
+      runtime: {
+        schema_sync: schemaSyncRuntime(),
+        assistant_provider: assistantProviderMetrics.metrics()
+      }
+    });
     return;
   }
 

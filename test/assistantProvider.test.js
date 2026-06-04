@@ -5,6 +5,7 @@ import {
   normalizeProviderSettings,
   testAssistantProviderConnection
 } from "../src/assistantProvider.js";
+import { assistantProviderMetrics } from "../src/assistantProviderMetrics.js";
 
 test("assistant provider stays deterministic when disabled", async () => {
   const plan = await createAssistantPlanWithProvider(
@@ -20,6 +21,7 @@ test("assistant provider stays deterministic when disabled", async () => {
 });
 
 test("assistant provider accepts draft-only allowed LLM plan", async () => {
+  assistantProviderMetrics.reset();
   const fetcher = async () => new Response(JSON.stringify({
     choices: [
       {
@@ -45,7 +47,8 @@ test("assistant provider accepts draft-only allowed LLM plan", async () => {
           })
         }
       }
-    ]
+    ],
+    usage: { prompt_tokens: 11, completion_tokens: 13, total_tokens: 24 }
   }), { status: 200, headers: { "content-type": "application/json" } });
 
   const plan = await createAssistantPlanWithProvider(
@@ -64,9 +67,15 @@ test("assistant provider accepts draft-only allowed LLM plan", async () => {
   assert.equal(plan.provider.mode, "llm");
   assert.equal(plan.summary, "Provider draft");
   assert.deepEqual(plan.actions.map((item) => item.action), ["create_rule_draft"]);
+  const metrics = assistantProviderMetrics.metrics();
+  assert.equal(metrics.calls.total, 1);
+  assert.equal(metrics.calls.statuses.used, 1);
+  assert.equal(metrics.usage.total_tokens, 24);
+  assert.equal(metrics.last_call.model, "test-model");
 });
 
 test("assistant provider falls back on unsupported LLM action", async () => {
+  assistantProviderMetrics.reset();
   const fetcher = async () => new Response(JSON.stringify({
     choices: [
       {
@@ -96,6 +105,11 @@ test("assistant provider falls back on unsupported LLM action", async () => {
   assert.equal(plan.provider.mode, "deterministic");
   assert.ok(plan.guardrails.warnings.some((item) => item.includes("unsupported action")));
   assert.ok(plan.actions.every((item) => item.action !== "publish_rule"));
+  const metrics = assistantProviderMetrics.metrics();
+  assert.equal(metrics.calls.total, 1);
+  assert.equal(metrics.calls.statuses.fallback, 1);
+  assert.equal(metrics.calls.error_rate, 1);
+  assert.equal(metrics.last_call.ok, false);
 });
 
 test("assistant provider defaults OpenAI base URL for private API keys", () => {
@@ -111,6 +125,7 @@ test("assistant provider defaults OpenAI base URL for private API keys", () => {
 });
 
 test("assistant provider test connection calls chat completions safely", async () => {
+  assistantProviderMetrics.reset();
   let requestUrl = "";
   let requestBody = {};
   const fetcher = async (url, options) => {
@@ -140,9 +155,14 @@ test("assistant provider test connection calls chat completions safely", async (
   assert.equal(requestUrl, "https://api.openai.com/v1/chat/completions");
   assert.equal(requestBody.model, "gpt-test");
   assert.equal(requestBody.response_format.type, "json_object");
+  const metrics = assistantProviderMetrics.metrics();
+  assert.equal(metrics.tests.total, 1);
+  assert.equal(metrics.tests.statuses.success, 1);
+  assert.equal(metrics.usage.total_tokens, 13);
 });
 
 test("assistant provider test connection reports missing private API key", async () => {
+  assistantProviderMetrics.reset();
   const result = await testAssistantProviderConnection({
     assistant_llm_provider: "openai",
     assistant_llm_model: "gpt-test"
@@ -152,6 +172,10 @@ test("assistant provider test connection reports missing private API key", async
   assert.equal(result.provider, "openai");
   assert.equal(result.base_url, "https://api.openai.com/v1");
   assert.match(result.message, /API key required/);
+  const metrics = assistantProviderMetrics.metrics();
+  assert.equal(metrics.tests.total, 1);
+  assert.equal(metrics.tests.statuses.not_configured, 1);
+  assert.equal(metrics.last_test.ok, false);
 });
 
 test("assistant provider returns deterministic advice for broad experiment questions when disabled", async () => {

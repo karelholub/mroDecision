@@ -1,12 +1,19 @@
 import { createAssistantPlan } from "./assistantPlanner.js";
+import { assistantProviderMetrics } from "./assistantProviderMetrics.js";
 
 const allowedActions = new Set(["upsert_message", "create_rule_draft", "update_rule_draft"]);
 const openAiBaseUrl = "https://api.openai.com/v1";
 
 export async function createAssistantPlanWithProvider(input = {}, context = {}, settings = {}, fetcher = fetch) {
+  const startedAt = Date.now();
   const deterministic = isAdviceRequest(input) ? createAssistantAdvice(input, context) : createAssistantPlan(input, context);
   const providerSettings = normalizeProviderSettings(settings);
   if (!providerSettings.enabled) {
+    assistantProviderMetrics.recordCall({
+      mode: "deterministic",
+      status: "disabled",
+      duration_ms: Date.now() - startedAt
+    });
     return annotatePlan(deterministic, {
       mode: "deterministic",
       status: "disabled",
@@ -14,6 +21,13 @@ export async function createAssistantPlanWithProvider(input = {}, context = {}, 
     });
   }
   if (!providerSettings.base_url || !providerSettings.model || !providerSettings.api_key) {
+    assistantProviderMetrics.recordCall({
+      mode: "deterministic",
+      status: "not_configured",
+      provider: providerSettings.provider,
+      model: providerSettings.model,
+      duration_ms: Date.now() - startedAt
+    });
     return annotatePlan(deterministic, {
       mode: "deterministic",
       status: "not_configured",
@@ -22,7 +36,15 @@ export async function createAssistantPlanWithProvider(input = {}, context = {}, 
   }
   try {
     const proposed = await requestProviderPlan(input, context, providerSettings, fetcher);
-    const sanitized = sanitizeProviderPlan(proposed, deterministic);
+    const sanitized = sanitizeProviderPlan(proposed.plan, deterministic);
+    assistantProviderMetrics.recordCall({
+      mode: "llm",
+      status: "used",
+      provider: providerSettings.provider,
+      model: providerSettings.model,
+      duration_ms: Date.now() - startedAt,
+      usage: proposed.usage
+    });
     return annotatePlan(sanitized, {
       mode: "llm",
       status: "used",
@@ -31,6 +53,15 @@ export async function createAssistantPlanWithProvider(input = {}, context = {}, 
       message: "LLM provider proposed a draft plan; server guardrails validated the draft-only contract."
     });
   } catch (error) {
+    assistantProviderMetrics.recordCall({
+      mode: "deterministic",
+      status: "fallback",
+      provider: providerSettings.provider,
+      model: providerSettings.model,
+      duration_ms: Date.now() - startedAt,
+      ok: false,
+      error: error.message || "provider failed"
+    });
     const fallback = annotatePlan(deterministic, {
       mode: "deterministic",
       status: "fallback",
@@ -71,6 +102,18 @@ export async function testAssistantProviderConnection(input = {}, storedSettings
     assistant_llm_timeout_ms: input.assistant_llm_timeout_ms || storedSettings.assistant_llm_timeout_ms
   });
   if (!settings.base_url || !settings.model || !settings.api_key) {
+    assistantProviderMetrics.recordTest({
+      mode: "llm",
+      status: "not_configured",
+      provider: settings.provider,
+      model: settings.model,
+      ok: false,
+      error: [
+        !settings.base_url ? "base URL" : "",
+        !settings.model ? "model" : "",
+        !settings.api_key ? "API key" : ""
+      ].filter(Boolean).join(", ") + " required"
+    });
     return {
       ok: false,
       provider: settings.provider,
@@ -96,7 +139,7 @@ export async function testAssistantProviderConnection(input = {}, storedSettings
         { role: "user", content: "Return JSON with ok true and service assistant_llm." }
       ]
     });
-    return {
+    const result = {
       ok: true,
       provider: settings.provider,
       base_url: settings.base_url,
@@ -106,8 +149,17 @@ export async function testAssistantProviderConnection(input = {}, storedSettings
       usage: body.usage || null,
       message: "Assistant provider connection succeeded."
     };
+    assistantProviderMetrics.recordTest({
+      mode: "llm",
+      status: "success",
+      provider: settings.provider,
+      model: settings.model,
+      duration_ms: result.duration_ms,
+      usage: body.usage || null
+    });
+    return result;
   } catch (error) {
-    return {
+    const result = {
       ok: false,
       provider: settings.provider,
       base_url: settings.base_url,
@@ -115,6 +167,16 @@ export async function testAssistantProviderConnection(input = {}, storedSettings
       duration_ms: Date.now() - startedAt,
       message: error.message || "Assistant provider connection failed."
     };
+    assistantProviderMetrics.recordTest({
+      mode: "llm",
+      status: "error",
+      provider: settings.provider,
+      model: settings.model,
+      duration_ms: result.duration_ms,
+      ok: false,
+      error: result.message
+    });
+    return result;
   }
 }
 
@@ -142,9 +204,9 @@ async function requestProviderPlan(input, context, settings, fetcher) {
   });
   const content = body.choices?.[0]?.message?.content || body.output_text || body.plan;
   if (!content) throw new Error("LLM provider response did not include plan content");
-  if (typeof content === "object") return content;
+  if (typeof content === "object") return { plan: content, usage: body.usage || null, response_id: body.id || "" };
   try {
-    return JSON.parse(content);
+    return { plan: JSON.parse(content), usage: body.usage || null, response_id: body.id || "" };
   } catch {
     throw new Error("LLM provider plan content was not JSON");
   }
