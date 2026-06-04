@@ -212,3 +212,21 @@ test("assistant provider accepts LLM advice without draft actions", async () => 
   assert.equal(plan.provider.status, "used");
   assert.equal(plan.recommendations[0].title, "CTA personalization");
 });
+
+test("assistant provider treats follow-up draft requests as draft plans", async () => {
+  const plan = await createAssistantPlanWithProvider(
+    {
+      prompt: "turn the first idea into a draft experiment",
+      history: [
+        { role: "user", content: "what kind of experiment would you suggest for meiro.io site" },
+        { role: "assistant", content: "Try homepage value proposition personalization first." }
+      ]
+    },
+    {},
+    { assistant_llm_enabled: false }
+  );
+
+  assert.equal(plan.mode, "draft_only");
+  assert.ok(plan.actions.some((item) => item.action === "create_rule_draft"));
+  assert.equal(plan.actions[0]?.object?.type || plan.actions.at(-1)?.object?.type, "experiment");
+});

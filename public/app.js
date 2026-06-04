@@ -119,6 +119,7 @@ let cachedEvaluationProfiles = [];
 let cachedConditionBlocks = [];
 let cachedConfigBundle = null;
 let cachedAssistantPlan = null;
+let assistantChatHistory = [];
 let selectedLookupMetadata = {};
 let conditionBlocksLoaded = false;
 let selectedConditionBlockId = null;
@@ -229,6 +230,12 @@ document.querySelector("#assistant-close")?.addEventListener("click", closeAssis
 document.querySelector("#assistant-plan")?.addEventListener("click", planAssistantRequest);
 document.querySelector("#assistant-apply")?.addEventListener("click", applyAssistantPlan);
 document.querySelector("#assistant-handoff")?.addEventListener("click", handleAssistantHandoffAction);
+document.querySelector("#assistant-prompt")?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    planAssistantRequest();
+  }
+});
 document.querySelectorAll("[data-assistant-suggestion]").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelector("#assistant-prompt").value = button.dataset.assistantSuggestion || "";
@@ -540,6 +547,8 @@ function openAssistantPanel() {
   panel.hidden = false;
   document.body.classList.add("assistant-open");
   document.querySelector("#assistant-toggle")?.setAttribute("aria-expanded", "true");
+  document.querySelector("#assistant-prompt")?.focus();
+  scrollAssistantConversation();
 }
 
 function closeAssistantPanel() {
@@ -553,14 +562,49 @@ function closeAssistantPanel() {
 function appendAssistantMessage(kind, title, detail = "") {
   const target = document.querySelector("#assistant-conversation");
   if (!target) return;
+  const content = detail || title || "";
   const element = document.createElement("div");
   element.className = `assistant-message assistant-message-${kind}`;
   element.innerHTML = `
-    <strong>${escapeHtml(title)}</strong>
-    ${detail ? `<span>${escapeHtml(detail)}</span>` : ""}
+    <strong>${escapeHtml(assistantMessageLabel(kind, title))}</strong>
+    ${content ? `<span>${escapeHtml(content)}</span>` : ""}
   `;
-  target.appendChild(element);
-  target.scrollTop = target.scrollHeight;
+  const result = document.querySelector("#assistant-result");
+  if (result && result.parentElement === target) {
+    target.insertBefore(element, result);
+  } else {
+    target.appendChild(element);
+  }
+  if (!["pending", "system"].includes(kind) && content) {
+    assistantChatHistory.push({
+      role: kind === "user" ? "user" : "assistant",
+      content,
+      at: new Date().toISOString()
+    });
+    assistantChatHistory = assistantChatHistory.slice(-12);
+  }
+  scrollAssistantConversation();
+  return element;
+}
+
+function assistantMessageLabel(kind, title) {
+  if (kind === "user") return "You";
+  if (kind === "pending") return "DEE Assistant";
+  if (kind === "system") return title || "DEE Assistant";
+  return "DEE Assistant";
+}
+
+function removeAssistantMessage(element) {
+  element?.remove();
+  scrollAssistantConversation();
+}
+
+function scrollAssistantConversation() {
+  const target = document.querySelector("#assistant-conversation");
+  if (!target) return;
+  requestAnimationFrame(() => {
+    target.scrollTop = target.scrollHeight;
+  });
 }
 
 function updateTopbarForView(view) {
@@ -899,10 +943,13 @@ async function planAssistantRequest() {
   const output = document.querySelector("#assistant-plan-output");
   const guardrails = document.querySelector("#assistant-guardrails");
   const applyButton = document.querySelector("#assistant-apply");
+  const sendButton = document.querySelector("#assistant-plan");
   const handoff = document.querySelector("#assistant-handoff");
   const clarifications = document.querySelector("#assistant-clarifications");
+  let pendingMessage = null;
   try {
     applyButton.disabled = true;
+    sendButton.disabled = true;
     if (handoff) {
       handoff.hidden = true;
       handoff.innerHTML = "";
@@ -916,15 +963,20 @@ async function planAssistantRequest() {
       type: document.querySelector("#assistant-type").value || undefined,
       decision_key: document.querySelector("#assistant-decision-key").value.trim() || undefined,
       surface: document.querySelector("#assistant-surface").value.trim() || undefined,
-      ttl_seconds: Number(document.querySelector("#assistant-ttl").value || 0)
+      ttl_seconds: Number(document.querySelector("#assistant-ttl").value || 0),
+      history: assistantChatHistory.slice(-10)
     };
     if (!body.prompt) throw new Error("Describe what the assistant should configure.");
     openAssistantPanel();
     appendAssistantMessage("user", body.prompt);
+    pendingMessage = appendAssistantMessage("pending", "Thinking", "Working");
+    document.querySelector("#assistant-prompt").value = "";
     const response = await api("/v1/assistant/plan", {
       method: "POST",
       body: JSON.stringify(body)
     });
+    removeAssistantMessage(pendingMessage);
+    pendingMessage = null;
     cachedAssistantPlan = response.plan;
     renderAssistantPlan(cachedAssistantPlan);
     appendAssistantMessage(
@@ -933,12 +985,15 @@ async function planAssistantRequest() {
       cachedAssistantPlan.answer || cachedAssistantPlan.summary || "Review the generated response."
     );
   } catch (error) {
+    removeAssistantMessage(pendingMessage);
     cachedAssistantPlan = null;
     appendAssistantMessage("assistant", "Could not create a plan", error.message);
     if (guardrails) guardrails.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
     if (output) output.textContent = "{}";
     if (handoff) handoff.hidden = true;
     if (clarifications) clarifications.hidden = true;
+  } finally {
+    sendButton.disabled = false;
   }
 }
 
@@ -968,6 +1023,8 @@ async function applyAssistantPlan() {
 
 function renderAssistantPlan(plan) {
   const guardrails = plan.guardrails || {};
+  const result = document.querySelector("#assistant-result");
+  if (result) result.hidden = false;
   document.querySelector("#assistant-plan-output").textContent = JSON.stringify(plan, null, 2);
   document.querySelector("#assistant-guardrails").innerHTML = [
     statusItem("Status", guardrails.status || "review"),
@@ -982,6 +1039,7 @@ function renderAssistantPlan(plan) {
   renderAssistantClarifications(plan);
   renderAssistantHandoff(plan, [], { applied: false });
   document.querySelector("#assistant-apply").disabled = plan.mode !== "draft_only" || Boolean(guardrails.errors?.length);
+  scrollAssistantConversation();
 }
 
 function renderAssistantPreview(plan) {

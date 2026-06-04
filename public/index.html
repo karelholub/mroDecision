@@ -1833,6 +1833,16 @@
           <strong>How can I help configure DEE?</strong>
           <span>Describe a rule, message, or experiment. I will create a draft plan, show assumptions, and keep publishing in the normal review flow.</span>
         </div>
+        <div id="assistant-result" class="assistant-result" hidden>
+          <div id="assistant-guardrails" class="status-panel compact-status-panel"></div>
+          <div id="assistant-preview" class="assistant-preview-grid"></div>
+          <div id="assistant-clarifications" class="assistant-clarifications" hidden></div>
+          <div id="assistant-handoff" class="assistant-handoff" hidden></div>
+          <details class="assistant-json-drawer">
+            <summary>Plan JSON</summary>
+            <pre id="assistant-plan-output">{}</pre>
+          </details>
+        </div>
       </div>
       <div class="assistant-suggestions" aria-label="Assistant suggestions">
         <button type="button" data-assistant-suggestion="Create an experiment for homepage solar banner with 80/20 split for high sustainability users">Solar experiment</button>
@@ -1871,16 +1881,6 @@
           <button type="button" id="assistant-plan">Send</button>
           <button type="button" id="assistant-apply" disabled>Apply Draft</button>
         </div>
-      </div>
-      <div class="assistant-result">
-        <div id="assistant-guardrails" class="status-panel compact-status-panel"></div>
-        <div id="assistant-preview" class="assistant-preview-grid"></div>
-        <div id="assistant-clarifications" class="assistant-clarifications" hidden></div>
-        <div id="assistant-handoff" class="assistant-handoff" hidden></div>
-        <details class="assistant-json-drawer">
-          <summary>Plan JSON</summary>
-          <pre id="assistant-plan-output">{}</pre>
-        </details>
       </div>
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>

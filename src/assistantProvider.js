@@ -198,6 +198,7 @@ function providerSystemPrompt() {
 function providerContext(input, context) {
   return {
     request: input,
+    conversation_history: Array.isArray(input.history) ? input.history.slice(-10) : [],
     available_schema: (context.schemaItems || []).slice(0, 80),
     lookup_tables: (context.lookupTables || []).map((table) => ({
       id: table.id,
@@ -292,6 +293,7 @@ function sanitizeAction(action = {}) {
 function isAdviceRequest(input = {}) {
   const prompt = String(input.prompt || "").toLowerCase();
   if (input.type || input.decision_key || input.name) return false;
+  if (/(create|build|configure|draft|make|turn|convert|set up|setup|implement)/.test(prompt)) return false;
   const asksForAdvice = /(suggest|recommend|idea|ideas|what kind|which|what should|brainstorm|strategy|advise)/.test(prompt);
   const decisioningTopic = /(experiment|test|personalization|personalisation|offer|message|banner|campaign|decision)/.test(prompt);
   return asksForAdvice && decisioningTopic;
