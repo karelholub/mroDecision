@@ -660,15 +660,19 @@ function renderMetrics(metrics) {
   const runtime = metrics.runtime_requests || {};
   const rateLimit = metrics.client_rate_limit || {};
   const windowLabel = metrics.window?.label || "Selected window";
+  const windowRequests = Number(requests.window ?? requests.last_24h ?? 0);
+  const eventCounts = eventCountsByType(events.by_type || []);
+  const eligibleCount = resultCount(metrics.result_distribution || [], "eligible");
+  const eligibilityRate = rate(eligibleCount, windowRequests);
+  const impressionRate = rate(eventCounts.impression || 0, windowRequests);
+  const conversionRate = rate(eventCounts.conversion || 0, Math.max(eventCounts.impression || 0, eventCounts.exposure || 0));
   metricCards.innerHTML = [
-    metricCard("Requests", formatNumber(requests.window ?? requests.last_24h), windowLabel, "RQ", "teal"),
-    metricCard("P95 Latency", `${formatNumber(runtime.p95_ms || 0)}ms`, `${formatNumber(runtime.sample_size || 0)} recent samples`, "P95", "blue"),
-    metricCard("Unique Profiles", formatNumber(requests.unique_profiles_window ?? requests.unique_profiles), windowLabel, "UP", "blue"),
-    metricCard("Published Rules", formatNumber(rules.published), `${formatNumber(rules.draft)} drafts`, "PR", "purple"),
-    metricCard("Schema Items", formatNumber(schema.total), `${schema.last_sync_status || "never"} sync`, "SC", "teal"),
-    metricCard("Client Cache", `${Math.round((cache.hit_rate || 0) * 100)}%`, `${formatNumber(cache.entries || 0)} decision entries`, "CC", "blue"),
-    metricCard("Profile Cache", `${Math.round((profileCache.hit_rate || 0) * 100)}%`, `${formatNumber(profileCache.entries || 0)} Meiro profiles`, "PC", "teal"),
-    metricCard("Client Events", formatNumber(events.window ?? events.last_24h ?? 0), windowLabel, "CE", "blue")
+    metricCard("Decisions", formatNumber(windowRequests), `${windowLabel} evaluations`, "D", "teal"),
+    metricCard("Audience Reach", formatNumber(requests.unique_profiles_window ?? requests.unique_profiles), "unique profiles", "A", "blue"),
+    metricCard("Eligible Rate", formatPercent(eligibilityRate), `${formatNumber(eligibleCount)} eligible outcomes`, "ER", "teal"),
+    metricCard("Impression Rate", formatPercent(impressionRate), `${formatNumber(eventCounts.impression || 0)} impressions`, "IR", "blue"),
+    metricCard("Conversion Rate", formatPercent(conversionRate), `${formatNumber(eventCounts.conversion || 0)} conversions`, "CR", "purple"),
+    metricCard("Live Assets", formatNumber(rules.published), `${formatNumber(rules.draft)} drafts waiting`, "LA", "purple")
   ].join("");
 
   renderOverviewAlerts(metrics);
@@ -681,25 +685,18 @@ function renderMetrics(metrics) {
   renderResultDistribution(metrics);
   renderRulesInventory(rules);
   renderOverviewFooter(metrics);
-  document.querySelector("#metrics-schema-health").innerHTML = [
-    statusItem("Attributes", formatNumber(schema.attributes || 0)),
-    statusItem("Segments", formatNumber(schema.segments || 0)),
-    statusItem("Context keys", formatNumber(schema.context || 0)),
-    statusItem("Last sync", schema.last_synced_at ? formatTime(schema.last_synced_at) : "never"),
-    statusItem("Imported last sync", formatNumber(schema.last_sync_count || 0)),
-    statusItem("Reference tables", formatNumber(metrics.lookups?.total || 0)),
-    statusItem("Decision cache hits", formatNumber(cache.hits || 0)),
-    statusItem("Decision cache misses", formatNumber(cache.misses || 0)),
-    statusItem("Profile cache hits", formatNumber(profileCache.hits || 0)),
-    statusItem("Profile cache errors", formatNumber(profileCache.errors || 0)),
-    statusItem("Runtime error rate", formatPercent(runtime.error_rate || 0)),
-    statusItem("Rate limit blocks", formatNumber(rateLimit.blocked || 0)),
-    statusItem("Slowest route", runtime.slow_routes?.[0] ? `${runtime.slow_routes[0].route} · ${formatNumber(runtime.slow_routes[0].avg_ms)}ms avg` : "-"),
-    ...clientEventStatusItems(events.by_type || [])
-  ].join("");
+  document.querySelector("#metrics-schema-health").innerHTML = readinessChecklist(metrics);
   if (ruleDetailPanel && !ruleDetailPanel.textContent.trim()) {
     ruleDetailPanel.innerHTML = `<div class="status-line">Select a rule in Rule Usage to inspect recent decisions, fallback rate, and matched branch frequency.</div>`;
   }
+}
+
+function eventCountsByType(items = []) {
+  return Object.fromEntries(items.map((item) => [item.event_type, Number(item.count || 0)]));
+}
+
+function resultCount(items = [], result) {
+  return Number(items.find((item) => item.result === result)?.count || 0);
 }
 
 function renderOverviewAlerts(metrics) {
@@ -1477,12 +1474,48 @@ function clientEventCard(title, fields) {
 }
 
 function clientEventStatusItems(items) {
-  const counts = Object.fromEntries(items.map((item) => [item.event_type, item.count]));
+  const counts = eventCountsByType(items);
   return [
     statusItem("Exposures", formatNumber(counts.exposure || 0)),
     statusItem("Impressions", formatNumber(counts.impression || 0)),
     statusItem("Conversions", formatNumber(counts.conversion || 0))
   ];
+}
+
+function readinessChecklist(metrics = {}) {
+  const schema = metrics.schema || {};
+  const cache = metrics.client_cache || {};
+  const profileCache = metrics.profile_cache || {};
+  const events = metrics.client_events || {};
+  const runtime = metrics.runtime_requests || {};
+  const rateLimit = metrics.client_rate_limit || {};
+  const counts = eventCountsByType(events.by_type || []);
+  const schemaOk = Number(schema.total || 0) > 0 && ["ok", "success"].includes(String(schema.last_sync_status || "").toLowerCase());
+  const feedbackOk = Number(counts.impression || 0) > 0 || Number(counts.exposure || 0) > 0 || Number(counts.conversion || 0) > 0;
+  const runtimeOk = Number(runtime.error_rate || 0) < 0.01 && Number(rateLimit.blocked || 0) === 0;
+  const profileOk = Number(profileCache.errors || 0) === 0;
+  const items = [
+    readinessItem("Profile fields", schemaOk ? "Ready" : "Needs sync", `${formatNumber(schema.total || 0)} fields · ${schema.last_synced_at ? formatTime(schema.last_synced_at) : "never synced"}`, schemaOk),
+    readinessItem("Feedback loop", feedbackOk ? "Receiving events" : "No feedback yet", `${formatNumber(counts.exposure || 0)} exposures · ${formatNumber(counts.impression || 0)} impressions · ${formatNumber(counts.conversion || 0)} conversions`, feedbackOk),
+    readinessItem("Profile enrichment", profileOk ? "Healthy" : "Errors found", `${formatNumber(profileCache.hits || 0)} hits · ${formatNumber(profileCache.errors || 0)} errors`, profileOk),
+    readinessItem("Service reliability", runtimeOk ? "Healthy" : "Needs attention", `${formatPercent(runtime.error_rate || 0)} error rate · ${formatNumber(rateLimit.blocked || 0)} blocked`, runtimeOk),
+    readinessItem("Reference data", Number(metrics.lookups?.total || 0) > 0 ? "Available" : "Not configured", `${formatNumber(metrics.lookups?.total || 0)} tables`, Number(metrics.lookups?.total || 0) > 0),
+    readinessItem("Decision cache", `${Math.round((cache.hit_rate || 0) * 100)}% hit rate`, `${formatNumber(cache.entries || 0)} cached entries`, true)
+  ];
+  return `<div class="readiness-list">${items.join("")}</div>`;
+}
+
+function readinessItem(label, value, detail, ok) {
+  return `
+    <div class="readiness-item ${ok ? "ok" : "warn"}">
+      <span>${escapeHtml(ok ? "OK" : "!")}</span>
+      <div>
+        <strong>${escapeHtml(label)}</strong>
+        <em>${escapeHtml(value)}</em>
+        <small>${escapeHtml(detail)}</small>
+      </div>
+    </div>
+  `;
 }
 
 function renderRuleUsage(items) {
@@ -1502,10 +1535,10 @@ function renderRuleUsage(items) {
 function ruleUsageHeader() {
   return `
     <div class="rule-usage-header">
-      <span>Rule</span>
+      <span>Decision</span>
       <span>Campaign</span>
       <span>Requests</span>
-      <span>Profiles</span>
+      <span>Reach</span>
       <span>Last Request</span>
       <span>Share</span>
       <span>%</span>
@@ -1627,17 +1660,46 @@ function renderRequestTrend(metrics) {
   const requests = metrics.requests || {};
   const cache = metrics.client_cache || {};
   const rules = metrics.rules || {};
+  const events = metrics.client_events || {};
+  const counts = eventCountsByType(events.by_type || []);
   const windowRequests = Number(requests.window ?? requests.last_24h ?? 0);
   const points = trendPoints(Number(requests.last_7d || requests.total || 0), windowRequests);
+  const maxPoint = Math.max(1, ...points);
   requestTrendPanel.innerHTML = `
-    <div class="trend-chart" aria-label="Request activity">
-      ${points.map((point, index) => `<span style="height:${point}%" title="Day ${index + 1}: ${point}%"></span>`).join("")}
+    <div class="traffic-hero">
+      <div>
+        <span>Decision volume</span>
+        <strong>${escapeHtml(formatNumber(windowRequests))}</strong>
+        <small>${escapeHtml(metrics.window?.label || "Selected window")}</small>
+      </div>
+      <div class="traffic-sparkline" aria-label="Request activity">
+        ${points.map((point, index) => `<span style="height:${Math.max(8, Math.round((point / maxPoint) * 100))}%" title="Period ${index + 1}: ${point}%"></span>`).join("")}
+      </div>
     </div>
-    <div class="trend-stats">
-      ${statusItem("Window", metrics.window?.label || "Selected")}
-      ${statusItem("Requests", formatNumber(windowRequests))}
-      ${statusItem("Cache hit rate", `${Math.round((cache.hit_rate || 0) * 100)}%`)}
-      ${statusItem("Active rules", formatNumber(rules.published || 0))}
+    <div class="traffic-funnel">
+      ${trafficStep("Evaluations", windowRequests, windowRequests)}
+      ${trafficStep("Exposures", counts.exposure || 0, windowRequests)}
+      ${trafficStep("Impressions", counts.impression || 0, Math.max(1, counts.exposure || windowRequests))}
+      ${trafficStep("Conversions", counts.conversion || 0, Math.max(1, counts.impression || counts.exposure || windowRequests))}
+    </div>
+    <div class="traffic-insights">
+      ${statusItem("Cache", `${Math.round((cache.hit_rate || 0) * 100)}% hit rate`)}
+      ${statusItem("Live assets", formatNumber(rules.published || 0))}
+      ${statusItem("Drafts", formatNumber(rules.draft || 0))}
+    </div>
+  `;
+}
+
+function trafficStep(label, value, denominator) {
+  const share = denominator > 0 ? Math.min(100, Math.round((Number(value || 0) / denominator) * 100)) : 0;
+  return `
+    <div class="traffic-step">
+      <div>
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(formatNumber(value))}</strong>
+      </div>
+      <i><b style="width:${share}%"></b></i>
+      <small>${escapeHtml(formatPercent(rate(value, denominator)))} of previous</small>
     </div>
   `;
 }

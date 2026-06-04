@@ -44,7 +44,7 @@
         <header>
           <div>
             <h2>Overview</h2>
-            <p class="page-subtitle">Operational health, rule usage, and service utilization.</p>
+            <p class="page-subtitle">Marketing decisioning performance, feedback quality, and launch readiness.</p>
           </div>
           <div class="actions">
             <label class="overview-window-control">
@@ -73,36 +73,53 @@
             </div>
             <div id="overview-anomaly-history" class="overview-anomaly-history"></div>
           </div>
-          <div class="overview-primary-pane">
+          <div class="overview-performance-grid">
             <div class="editor overview-card overview-rule-card">
               <div class="overview-card-head">
                 <div>
-                  <div class="editor-title">Rule Usage</div>
-                  <p>Requests by rule in the current metrics window.</p>
+                  <div class="editor-title">Decision Performance</div>
+                  <p>Which offers, messages, and experiments are receiving traffic in the selected window.</p>
                 </div>
               </div>
               <div id="metrics-rule-usage" class="overview-usage-list"></div>
             </div>
+            <div class="editor overview-card overview-result-card">
+              <div class="overview-card-head">
+                <div>
+                  <div class="editor-title">Decision Outcomes</div>
+                  <p>Eligibility mix and decision result health.</p>
+                </div>
+              </div>
+              <div id="metrics-result-distribution" class="distribution-panel"></div>
+            </div>
+          </div>
+          <div class="overview-support-grid">
             <div class="editor overview-card overview-trend-card">
               <div class="overview-card-head">
                 <div>
-                  <div class="editor-title">Request Mix</div>
-                  <p>Published evaluations, draft state, and recent activity.</p>
+                  <div class="editor-title">Decision Traffic</div>
+                  <p>Evaluation volume, activity trend, and cache behavior.</p>
                 </div>
               </div>
               <div id="metrics-request-trend" class="request-trend-panel"></div>
             </div>
-            <div class="editor overview-card overview-schema-card">
-              <div class="editor-title">Schema & Configuration</div>
-              <div id="metrics-schema-health" class="status-panel overview-status-panel"></div>
-            </div>
-            <div class="editor overview-card overview-result-card">
-              <div class="editor-title">Result Distribution</div>
-              <div id="metrics-result-distribution" class="distribution-panel"></div>
-            </div>
             <div class="editor overview-card overview-inventory-card">
-              <div class="editor-title">Rules Inventory</div>
+              <div class="overview-card-head">
+                <div>
+                  <div class="editor-title">Rules & Experiment Inventory</div>
+                  <p>Published assets, drafts, and archived configuration.</p>
+                </div>
+              </div>
               <div id="metrics-rule-inventory" class="inventory-panel"></div>
+            </div>
+            <div class="editor overview-card overview-schema-card">
+              <div class="overview-card-head">
+                <div>
+                  <div class="editor-title">Launch Readiness</div>
+                  <p>Data, profile enrichment, feedback, and service checks.</p>
+                </div>
+              </div>
+              <div id="metrics-schema-health" class="status-panel overview-status-panel"></div>
             </div>
           </div>
           <div class="editor overview-card overview-event-card">
