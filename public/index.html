@@ -1639,7 +1639,7 @@
               <div class="settings-section-head">
                 <div>
                   <div class="editor-title">Assistant Provider</div>
-                  <p>Keep deterministic guardrails while optionally letting an OpenAI-compatible model propose draft-only plans.</p>
+                  <p>Let admins connect a private OpenAI API key for draft-only assistant planning while deterministic guardrails stay in control.</p>
                 </div>
               </div>
               <div class="settings-card-grid">
@@ -1655,7 +1655,8 @@
                     <label>
                       Provider
                       <select id="setting-assistant-llm-provider">
-                        <option value="openai_compatible">OpenAI-compatible</option>
+                        <option value="openai">OpenAI / ChatGPT API</option>
+                        <option value="openai_compatible">OpenAI-compatible endpoint</option>
                       </select>
                     </label>
                     <label>
@@ -1669,7 +1670,7 @@
                     <label>
                       Base URL
                       <input id="setting-assistant-llm-base-url" placeholder="https://api.openai.com/v1" />
-                      <small>Use the API root; /chat/completions is appended automatically.</small>
+                      <small>Optional for OpenAI. Use the API root; /chat/completions is appended automatically.</small>
                     </label>
                     <label>
                       Model
@@ -1687,8 +1688,10 @@
                 </div>
               </div>
               <div class="actions left">
-                <button type="submit">Save Settings</button>
+                <button type="submit" form="settings-form">Save Settings</button>
+                <button type="button" id="test-assistant-provider">Test Assistant Provider</button>
               </div>
+              <pre id="assistant-provider-test-output" class="settings-test-output"></pre>
             </section>
             <section class="settings-tab-panel" data-settings-panel="portability">
               <div class="settings-section-head">

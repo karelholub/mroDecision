@@ -2,7 +2,7 @@ import http from "node:http";
 import { URL } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
 import { requireScope, setAuthStore } from "./auth.js";
-import { createAssistantPlanWithProvider } from "./assistantProvider.js";
+import { createAssistantPlanWithProvider, testAssistantProviderConnection } from "./assistantProvider.js";
 import { applyAssistantPlan } from "./assistantPlanner.js";
 import { config } from "./config.js";
 import { createClientResultCache } from "./clientCache.js";
@@ -647,7 +647,8 @@ async function testSettingsConnection(input = {}) {
   if (target === "profile") return testMeiroProfileConnection(input);
   if (target === "collector") return testMeiroCollectorConnection(input);
   if (target === "feedback") return testMeiroFeedbackConnection(input);
-  badRequest("target must be profile, collector, or feedback");
+  if (target === "assistant_llm") return testAssistantProviderConnection(input, store.getSettings());
+  badRequest("target must be profile, collector, feedback, or assistant_llm");
 }
 
 async function syncMeiroMetadata(input = {}, author) {

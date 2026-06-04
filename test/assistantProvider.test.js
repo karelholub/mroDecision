@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createAssistantPlanWithProvider } from "../src/assistantProvider.js";
+import {
+  createAssistantPlanWithProvider,
+  normalizeProviderSettings,
+  testAssistantProviderConnection
+} from "../src/assistantProvider.js";
 
 test("assistant provider stays deterministic when disabled", async () => {
   const plan = await createAssistantPlanWithProvider(
@@ -92,4 +96,60 @@ test("assistant provider falls back on unsupported LLM action", async () => {
   assert.equal(plan.provider.mode, "deterministic");
   assert.ok(plan.guardrails.warnings.some((item) => item.includes("unsupported action")));
   assert.ok(plan.actions.every((item) => item.action !== "publish_rule"));
+});
+
+test("assistant provider defaults OpenAI base URL for private API keys", () => {
+  const settings = normalizeProviderSettings({
+    assistant_llm_enabled: true,
+    assistant_llm_provider: "openai",
+    assistant_llm_model: "gpt-test",
+    assistant_llm_api_key: "secret"
+  });
+
+  assert.equal(settings.base_url, "https://api.openai.com/v1");
+  assert.equal(settings.provider, "openai");
+});
+
+test("assistant provider test connection calls chat completions safely", async () => {
+  let requestUrl = "";
+  let requestBody = {};
+  const fetcher = async (url, options) => {
+    requestUrl = String(url);
+    requestBody = JSON.parse(options.body);
+    return new Response(JSON.stringify({
+      id: "chatcmpl_test",
+      choices: [{ message: { content: "{\"ok\":true}" } }],
+      usage: { prompt_tokens: 10, completion_tokens: 3, total_tokens: 13 }
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+
+  const result = await testAssistantProviderConnection(
+    {
+      assistant_llm_provider: "openai",
+      assistant_llm_model: "gpt-test",
+      assistant_llm_api_key: "secret"
+    },
+    {},
+    fetcher
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.provider, "openai");
+  assert.equal(result.base_url, "https://api.openai.com/v1");
+  assert.equal(result.response_id, "chatcmpl_test");
+  assert.equal(requestUrl, "https://api.openai.com/v1/chat/completions");
+  assert.equal(requestBody.model, "gpt-test");
+  assert.equal(requestBody.response_format.type, "json_object");
+});
+
+test("assistant provider test connection reports missing private API key", async () => {
+  const result = await testAssistantProviderConnection({
+    assistant_llm_provider: "openai",
+    assistant_llm_model: "gpt-test"
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.provider, "openai");
+  assert.equal(result.base_url, "https://api.openai.com/v1");
+  assert.match(result.message, /API key required/);
 });

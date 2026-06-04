@@ -1,6 +1,7 @@
 import { createAssistantPlan } from "./assistantPlanner.js";
 
 const allowedActions = new Set(["upsert_message", "create_rule_draft", "update_rule_draft"]);
+const openAiBaseUrl = "https://api.openai.com/v1";
 
 export async function createAssistantPlanWithProvider(input = {}, context = {}, settings = {}, fetcher = fetch) {
   const deterministic = createAssistantPlan(input, context);
@@ -47,14 +48,74 @@ export async function createAssistantPlanWithProvider(input = {}, context = {}, 
 }
 
 export function normalizeProviderSettings(settings = {}) {
+  const provider = String(settings.assistant_llm_provider || "openai").trim();
+  const explicitBaseUrl = String(settings.assistant_llm_base_url || "").trim();
   return {
     enabled: settings.assistant_llm_enabled === true || settings.assistant_llm_enabled === "true",
-    provider: String(settings.assistant_llm_provider || "openai_compatible"),
-    base_url: String(settings.assistant_llm_base_url || "").trim(),
+    provider,
+    base_url: provider === "openai" && !explicitBaseUrl ? openAiBaseUrl : explicitBaseUrl,
     model: String(settings.assistant_llm_model || "").trim(),
     api_key: String(settings.assistant_llm_api_key || "").trim(),
     timeout_ms: Math.max(1000, Math.min(30000, Number(settings.assistant_llm_timeout_ms || 8000)))
   };
+}
+
+export async function testAssistantProviderConnection(input = {}, storedSettings = {}, fetcher = fetch) {
+  const settings = normalizeProviderSettings({
+    ...storedSettings,
+    assistant_llm_enabled: true,
+    assistant_llm_provider: input.assistant_llm_provider || storedSettings.assistant_llm_provider,
+    assistant_llm_base_url: input.assistant_llm_base_url || storedSettings.assistant_llm_base_url,
+    assistant_llm_model: input.assistant_llm_model || storedSettings.assistant_llm_model,
+    assistant_llm_api_key: input.assistant_llm_api_key || storedSettings.assistant_llm_api_key,
+    assistant_llm_timeout_ms: input.assistant_llm_timeout_ms || storedSettings.assistant_llm_timeout_ms
+  });
+  if (!settings.base_url || !settings.model || !settings.api_key) {
+    return {
+      ok: false,
+      provider: settings.provider,
+      base_url: settings.base_url,
+      model: settings.model,
+      message: [
+        !settings.base_url ? "base URL" : "",
+        !settings.model ? "model" : "",
+        !settings.api_key ? "API key" : ""
+      ].filter(Boolean).join(", ") + " required"
+    };
+  }
+
+  const startedAt = Date.now();
+  try {
+    const body = await requestChatCompletion(settings, fetcher, {
+      model: settings.model,
+      temperature: 0,
+      max_tokens: 80,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: "Return only a small JSON object for a connection test." },
+        { role: "user", content: "Return JSON with ok true and service assistant_llm." }
+      ]
+    });
+    return {
+      ok: true,
+      provider: settings.provider,
+      base_url: settings.base_url,
+      model: settings.model,
+      duration_ms: Date.now() - startedAt,
+      response_id: body.id || "",
+      usage: body.usage || null,
+      message: "Assistant provider connection succeeded."
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      provider: settings.provider,
+      base_url: settings.base_url,
+      model: settings.model,
+      duration_ms: Date.now() - startedAt,
+      message: error.message || "Assistant provider connection failed."
+    };
+  }
 }
 
 function annotatePlan(plan, provider) {
@@ -69,10 +130,27 @@ function annotatePlan(plan, provider) {
 }
 
 async function requestProviderPlan(input, context, settings, fetcher) {
-  const endpoint = new URL(settings.base_url);
-  if (!endpoint.pathname.endsWith("/chat/completions")) {
-    endpoint.pathname = `${endpoint.pathname.replace(/\/$/, "")}/chat/completions`;
+  const body = await requestChatCompletion(settings, fetcher, {
+    model: settings.model,
+    temperature: 0.1,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: providerSystemPrompt() },
+      { role: "user", content: JSON.stringify(providerContext(input, context)) }
+    ]
+  });
+  const content = body.choices?.[0]?.message?.content || body.output_text || body.plan;
+  if (!content) throw new Error("LLM provider response did not include plan content");
+  if (typeof content === "object") return content;
+  try {
+    return JSON.parse(content);
+  } catch {
+    throw new Error("LLM provider plan content was not JSON");
   }
+}
+
+async function requestChatCompletion(settings, fetcher, payload) {
+  const endpoint = chatCompletionsEndpoint(settings.base_url);
   const response = await fetcher(endpoint, {
     method: "POST",
     headers: {
@@ -80,15 +158,7 @@ async function requestProviderPlan(input, context, settings, fetcher) {
       "content-type": "application/json",
       accept: "application/json"
     },
-    body: JSON.stringify({
-      model: settings.model,
-      temperature: 0.1,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: providerSystemPrompt() },
-        { role: "user", content: JSON.stringify(providerContext(input, context)) }
-      ]
-    }),
+    body: JSON.stringify(payload),
     signal: AbortSignal.timeout(settings.timeout_ms)
   });
   const raw = await response.text();
@@ -101,14 +171,15 @@ async function requestProviderPlan(input, context, settings, fetcher) {
   if (!response.ok) {
     throw new Error(body.error?.message || body.message || `LLM provider returned ${response.status}`);
   }
-  const content = body.choices?.[0]?.message?.content || body.output_text || body.plan;
-  if (!content) throw new Error("LLM provider response did not include plan content");
-  if (typeof content === "object") return content;
-  try {
-    return JSON.parse(content);
-  } catch {
-    throw new Error("LLM provider plan content was not JSON");
+  return body;
+}
+
+function chatCompletionsEndpoint(baseUrl) {
+  const endpoint = new URL(baseUrl);
+  if (!endpoint.pathname.endsWith("/chat/completions")) {
+    endpoint.pathname = `${endpoint.pathname.replace(/\/$/, "")}/chat/completions`;
   }
+  return endpoint;
 }
 
 function providerSystemPrompt() {

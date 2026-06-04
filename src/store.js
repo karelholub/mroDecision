@@ -2015,7 +2015,7 @@ function seedSettings(db) {
     schema_sync_identifier_type: "",
     schema_sync_identifier_value: "",
     assistant_llm_enabled: false,
-    assistant_llm_provider: "openai_compatible",
+    assistant_llm_provider: "openai",
     assistant_llm_base_url: "",
     assistant_llm_model: "",
     assistant_llm_api_key: "",

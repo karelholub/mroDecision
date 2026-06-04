@@ -51,6 +51,7 @@ const tokenOutput = document.querySelector("#token-output");
 const schemaOutput = document.querySelector("#schema-output");
 const settingsHealthSummary = document.querySelector("#settings-health-summary");
 const assistantProviderStatus = document.querySelector("#assistant-provider-status");
+const assistantProviderTestOutput = document.querySelector("#assistant-provider-test-output");
 const integrationTemplate = document.querySelector("#integration-template");
 const integrationResponse = document.querySelector("#integration-response");
 const meiroTestOutput = document.querySelector("#meiro-test-output");
@@ -261,6 +262,7 @@ document.querySelector("#refresh-settings").addEventListener("click", loadSettin
 document.querySelector("#test-meiro-profile").addEventListener("click", () => testMeiroConnection("profile"));
 document.querySelector("#test-meiro-collector").addEventListener("click", () => testMeiroConnection("collector"));
 document.querySelector("#test-meiro-feedback").addEventListener("click", () => testMeiroConnection("feedback"));
+document.querySelector("#test-assistant-provider")?.addEventListener("click", testAssistantProviderConnection);
 document.querySelector("#refresh-meiro-deliveries").addEventListener("click", loadMeiroDeliveries);
 ["#meiro-delivery-target", "#meiro-delivery-ok", "#meiro-delivery-limit"].forEach((selector) => {
   document.querySelector(selector)?.addEventListener("change", loadMeiroDeliveries);
@@ -7389,7 +7391,7 @@ async function loadSettings() {
     document.querySelector("#schema-sync-identifier-type").value = settings.schema_sync_identifier_type || "";
     document.querySelector("#schema-sync-identifier-value").value = settings.schema_sync_identifier_value || "";
     document.querySelector("#setting-assistant-llm-enabled").value = settings.assistant_llm_enabled ? "true" : "false";
-    document.querySelector("#setting-assistant-llm-provider").value = settings.assistant_llm_provider || "openai_compatible";
+    document.querySelector("#setting-assistant-llm-provider").value = settings.assistant_llm_provider || "openai";
     document.querySelector("#setting-assistant-llm-base-url").value = settings.assistant_llm_base_url || "";
     document.querySelector("#setting-assistant-llm-model").value = settings.assistant_llm_model || "";
     document.querySelector("#setting-assistant-llm-api-key").value = "";
@@ -7433,6 +7435,26 @@ async function testMeiroConnection(target) {
     await loadMeiroDeliveries();
   } catch (error) {
     if (meiroTestOutput) meiroTestOutput.textContent = error.message;
+  }
+}
+
+async function testAssistantProviderConnection() {
+  try {
+    if (assistantProviderTestOutput) assistantProviderTestOutput.textContent = "Testing assistant provider...";
+    const response = await api("/v1/settings/test-connection", {
+      method: "POST",
+      body: JSON.stringify({
+        target: "assistant_llm",
+        assistant_llm_provider: document.querySelector("#setting-assistant-llm-provider").value,
+        assistant_llm_base_url: document.querySelector("#setting-assistant-llm-base-url").value.trim(),
+        assistant_llm_model: document.querySelector("#setting-assistant-llm-model").value.trim(),
+        assistant_llm_api_key: document.querySelector("#setting-assistant-llm-api-key").value.trim(),
+        assistant_llm_timeout_ms: Number(document.querySelector("#setting-assistant-llm-timeout").value || 8000)
+      })
+    });
+    if (assistantProviderTestOutput) assistantProviderTestOutput.textContent = JSON.stringify(response, null, 2);
+  } catch (error) {
+    if (assistantProviderTestOutput) assistantProviderTestOutput.textContent = error.message;
   }
 }
 
@@ -7684,7 +7706,8 @@ function renderSettingsSummary(settings, runtime, error = null) {
   const feedbackConfigured = Boolean(settings?.meiro_feedback_url);
   const apiConfigured = Boolean(settings?.meiro_api_url && settings?.meiro_api_token_configured);
   const metadataConfigured = Boolean((settings?.meiro_cli_url || settings?.meiro_url) && settings?.meiro_cli_token_configured);
-  const assistantConfigured = Boolean(settings?.assistant_llm_enabled && settings?.assistant_llm_base_url && settings?.assistant_llm_model && settings?.assistant_llm_api_key_configured);
+  const assistantBaseConfigured = settings?.assistant_llm_provider === "openai" || Boolean(settings?.assistant_llm_base_url);
+  const assistantConfigured = Boolean(settings?.assistant_llm_enabled && assistantBaseConfigured && settings?.assistant_llm_model && settings?.assistant_llm_api_key_configured);
   const schemaStatus = settings?.schema_last_sync_status || "never";
   const schemaHealthy = ["ok", "success"].includes(schemaStatus);
   const schemaDetail = settings?.schema_last_synced_at
@@ -7725,7 +7748,7 @@ function renderSettingsSummary(settings, runtime, error = null) {
     {
       label: "Assistant LLM",
       value: settings?.assistant_llm_enabled ? assistantConfigured ? "Enabled" : "Incomplete" : "Disabled",
-      detail: settings?.assistant_llm_enabled ? `${settings.assistant_llm_provider || "provider"} · ${settings.assistant_llm_model || "no model"}` : "Deterministic planner only",
+      detail: settings?.assistant_llm_enabled ? `${assistantProviderLabel(settings.assistant_llm_provider)} · ${settings.assistant_llm_model || "no model"}` : "Deterministic planner only",
       ok: !settings?.assistant_llm_enabled || assistantConfigured
     },
     {
@@ -7761,7 +7784,9 @@ function renderSettingsSummary(settings, runtime, error = null) {
 function renderAssistantProviderStatus(settings = {}) {
   if (!assistantProviderStatus) return;
   const enabled = settings.assistant_llm_enabled === true;
-  const configured = Boolean(enabled && settings.assistant_llm_base_url && settings.assistant_llm_model && settings.assistant_llm_api_key_configured);
+  const baseConfigured = settings.assistant_llm_provider === "openai" || Boolean(settings.assistant_llm_base_url);
+  const baseUrl = settings.assistant_llm_base_url || (settings.assistant_llm_provider === "openai" ? "https://api.openai.com/v1" : "");
+  const configured = Boolean(enabled && baseConfigured && settings.assistant_llm_model && settings.assistant_llm_api_key_configured);
   const items = [
     {
       label: "Mode",
@@ -7771,9 +7796,9 @@ function renderAssistantProviderStatus(settings = {}) {
     },
     {
       label: "Provider",
-      value: settings.assistant_llm_provider || "openai_compatible",
-      detail: settings.assistant_llm_base_url || "No base URL configured",
-      ok: !enabled || Boolean(settings.assistant_llm_base_url)
+      value: assistantProviderLabel(settings.assistant_llm_provider),
+      detail: baseUrl || "No base URL configured",
+      ok: !enabled || baseConfigured
     },
     {
       label: "Model",
@@ -7789,6 +7814,12 @@ function renderAssistantProviderStatus(settings = {}) {
       <span>${escapeHtml(item.detail)}</span>
     </div>
   `).join("");
+}
+
+function assistantProviderLabel(provider) {
+  if (provider === "openai") return "OpenAI / ChatGPT API";
+  if (provider === "openai_compatible") return "OpenAI-compatible endpoint";
+  return provider || "OpenAI / ChatGPT API";
 }
 
 async function importSchema() {

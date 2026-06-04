@@ -3397,10 +3397,10 @@ components:
           description: Enables optional LLM proposals for assistant planning. Disabled by default.
         assistant_llm_provider:
           type: string
-          enum: [openai_compatible]
+          enum: [openai, openai_compatible]
         assistant_llm_base_url:
           type: string
-          description: OpenAI-compatible API root. The server appends /chat/completions when needed.
+          description: OpenAI-compatible API root. Optional for provider openai, where https://api.openai.com/v1 is used by default. The server appends /chat/completions when needed.
         assistant_llm_model:
           type: string
         assistant_llm_api_key:
