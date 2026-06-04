@@ -147,6 +147,8 @@ For real external websites, allow their browser origin with `DEE_CORS_ORIGINS`, 
 DEE_CORS_ORIGINS="https://www.example.com,http://localhost:8091" npm start
 ```
 
+A reusable browser helper for declared website placements is available in [docs/dee-web-sdk](docs/dee-web-sdk). It supports `data-dee-placement`, client evaluation, safe fallback rendering, exposure/conversion feedback, and forced-variant QA via URL parameters.
+
 ## Management UI
 
 The embedded UI supports the current MVP workflow:
