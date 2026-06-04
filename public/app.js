@@ -1664,7 +1664,6 @@ function renderRequestTrend(metrics) {
   const counts = eventCountsByType(events.by_type || []);
   const windowRequests = Number(requests.window ?? requests.last_24h ?? 0);
   const points = trendPoints(Number(requests.last_7d || requests.total || 0), windowRequests);
-  const maxPoint = Math.max(1, ...points);
   requestTrendPanel.innerHTML = `
     <div class="traffic-hero">
       <div>
@@ -1672,9 +1671,7 @@ function renderRequestTrend(metrics) {
         <strong>${escapeHtml(formatNumber(windowRequests))}</strong>
         <small>${escapeHtml(metrics.window?.label || "Selected window")}</small>
       </div>
-      <div class="traffic-sparkline" aria-label="Request activity">
-        ${points.map((point, index) => `<span style="height:${Math.max(8, Math.round((point / maxPoint) * 100))}%" title="Period ${index + 1}: ${point}%"></span>`).join("")}
-      </div>
+      ${trafficLineChart(points)}
     </div>
     <div class="traffic-funnel">
       ${trafficStep("Evaluations", windowRequests, windowRequests)}
@@ -1686,6 +1683,43 @@ function renderRequestTrend(metrics) {
       ${statusItem("Cache", `${Math.round((cache.hit_rate || 0) * 100)}% hit rate`)}
       ${statusItem("Live assets", formatNumber(rules.published || 0))}
       ${statusItem("Drafts", formatNumber(rules.draft || 0))}
+    </div>
+  `;
+}
+
+function trafficLineChart(points = []) {
+  const values = points.map((point) => Number(point || 0));
+  const max = Math.max(1, ...values);
+  const min = Math.min(0, ...values);
+  const span = Math.max(1, max - min);
+  const width = 360;
+  const height = 126;
+  const pad = { top: 16, right: 18, bottom: 24, left: 34 };
+  const chartWidth = width - pad.left - pad.right;
+  const chartHeight = height - pad.top - pad.bottom;
+  const coordinates = values.map((value, index) => {
+    const x = pad.left + (index / Math.max(1, values.length - 1)) * chartWidth;
+    const y = pad.top + (1 - ((value - min) / span)) * chartHeight;
+    return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, value };
+  });
+  const line = coordinates.map((point) => `${point.x},${point.y}`).join(" ");
+  const area = `${pad.left},${pad.top + chartHeight} ${line} ${pad.left + chartWidth},${pad.top + chartHeight}`;
+  const grid = [0, 0.5, 1].map((ratio) => {
+    const y = pad.top + ratio * chartHeight;
+    return `<line x1="${pad.left}" y1="${y}" x2="${pad.left + chartWidth}" y2="${y}" />`;
+  }).join("");
+  const labels = coordinates.map((point, index) => `<text x="${point.x}" y="${height - 7}" text-anchor="middle">${index === coordinates.length - 1 ? "Now" : `-${coordinates.length - index - 1}`}</text>`).join("");
+  const dots = coordinates.map((point) => `<circle cx="${point.x}" cy="${point.y}" r="3"><title>${escapeHtml(formatNumber(point.value))}</title></circle>`).join("");
+  return `
+    <div class="traffic-line-chart" aria-label="Decision activity trend">
+      <svg viewBox="0 0 ${width} ${height}" role="img">
+        <title>Decision activity trend</title>
+        <g class="traffic-grid">${grid}</g>
+        <polygon class="traffic-area" points="${area}"></polygon>
+        <polyline class="traffic-line" points="${line}"></polyline>
+        <g class="traffic-points">${dots}</g>
+        <g class="traffic-labels">${labels}</g>
+      </svg>
     </div>
   `;
 }

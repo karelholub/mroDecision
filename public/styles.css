@@ -2112,19 +2112,46 @@ header {
   line-height: 1;
 }
 
-.traffic-sparkline {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  align-items: end;
-  gap: 8px;
-  min-height: 96px;
-  padding-top: 8px;
+.traffic-line-chart {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px 4px;
+  background: #ffffff;
 }
 
-.traffic-sparkline span {
-  min-height: 8px;
-  border-radius: 999px 999px 3px 3px;
-  background: linear-gradient(180deg, #14b8a6, #9ee5dc);
+.traffic-line-chart svg {
+  display: block;
+  width: 100%;
+  min-height: 126px;
+}
+
+.traffic-grid line {
+  stroke: #e6ebf1;
+  stroke-width: 1;
+}
+
+.traffic-area {
+  fill: rgba(15, 118, 110, 0.08);
+}
+
+.traffic-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.traffic-points circle {
+  fill: #ffffff;
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.traffic-labels text {
+  fill: var(--muted);
+  font-size: 10px;
 }
 
 .traffic-funnel {
