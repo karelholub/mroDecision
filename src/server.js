@@ -9,6 +9,7 @@ import { createClientResultCache } from "./clientCache.js";
 import { evaluateDecision } from "./evaluator.js";
 import { notFound, readJson, sendBuffer, sendError, sendJson, sendText, serveStatic } from "./http.js";
 import { createProfileCache, profileCacheKey } from "./profileCache.js";
+import { profileCacheWithDiagnostics } from "./profileDiagnostics.js";
 import { createRateLimiter } from "./rateLimiter.js";
 import { createRequestMetrics } from "./requestMetrics.js";
 import { Store } from "./store.js";
@@ -1793,8 +1794,10 @@ async function evaluateClientRequest(body) {
   };
   const hydrated = await hydrateClientProfile(baseRequest);
   const request = hydrated.request;
+  const schemaItems = store.listSchemaItems();
   const cached = clientResultCache.get(request, ruleSet, version);
   if (cached.hit) {
+    const profileCache = profileCacheWithDiagnostics(hydrated.cache, baseRequest, request, schemaItems, cached.value.errors || []);
     return {
       ...cached.value,
       ttl_seconds: cached.ttl_seconds,
@@ -1803,7 +1806,7 @@ async function evaluateClientRequest(body) {
         scope: ruleSet.cache_policy?.scope || "profile",
         expires_at: cached.expires_at
       },
-      profile_cache: hydrated.cache
+      profile_cache: profileCache
     };
   }
   const evaluated = evaluateDecision({
@@ -1822,6 +1825,7 @@ async function evaluateClientRequest(body) {
   const finalOutputs = messageResolved.outputs;
   const finalResult = messageResolved.available === false && evaluated.result === "eligible" ? "suppressed" : evaluated.result;
   const finalErrors = [...evaluated.errors, ...messageResolved.errors];
+  const profileCache = profileCacheWithDiagnostics(hydrated.cache, baseRequest, request, schemaItems, finalErrors);
   const ttlSeconds = Number(ruleSet.cache_policy?.client_ttl || 0);
   store.addAudit({
     ...evaluated,
@@ -1851,7 +1855,7 @@ async function evaluateClientRequest(body) {
       scope: ruleSet.cache_policy?.scope || null,
       expires_at: null
     },
-    profile_cache: hydrated.cache,
+    profile_cache: profileCache,
     experiment: assigned ? clientExperimentAssignment(assigned) : null,
     matched_rules: evaluated.matched_rules,
     errors: finalErrors

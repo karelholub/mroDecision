@@ -1978,6 +1978,89 @@ components:
               type: string
             error:
               type: string
+            diagnostics:
+              type: object
+              description: Human-readable enrichment diagnostics showing source, missing fields, profile cache freshness, and schema drift for this evaluation.
+              properties:
+                source:
+                  type: string
+                enriched:
+                  type: boolean
+                identifier_type:
+                  type: string
+                fields_added:
+                  type: object
+                  properties:
+                    attributes:
+                      type: array
+                      items:
+                        type: string
+                    segments:
+                      type: array
+                      items:
+                        type: string
+                    context:
+                      type: array
+                      items:
+                        type: string
+                fields_sent_locally:
+                  type: object
+                  properties:
+                    attributes:
+                      type: array
+                      items:
+                        type: string
+                    segments:
+                      type: array
+                      items:
+                        type: string
+                    context:
+                      type: array
+                      items:
+                        type: string
+                hydrated_field_counts:
+                  type: object
+                  properties:
+                    attributes:
+                      type: integer
+                    segments:
+                      type: integer
+                    context:
+                      type: integer
+                missing_required_attributes:
+                  type: array
+                  items:
+                    type: string
+                schema_drift:
+                  type: object
+                  properties:
+                    profile_attributes_not_in_schema:
+                      type: array
+                      items:
+                        type: string
+                    schema_attributes_missing_from_profile:
+                      type: array
+                      items:
+                        type: string
+                    profile_segments_not_in_schema:
+                      type: array
+                      items:
+                        type: string
+                    schema_segments_missing_from_profile:
+                      type: array
+                      items:
+                        type: string
+                cache_freshness:
+                  type: object
+                  properties:
+                    ttl_seconds:
+                      type: integer
+                    expires_at:
+                      type: string
+                      format: date-time
+                      nullable: true
+                    hit:
+                      type: boolean
         experiment:
           type: object
           nullable: true

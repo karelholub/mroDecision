@@ -1520,11 +1520,16 @@ function readinessChecklist(metrics = {}) {
   const schemaOk = Number(schema.total || 0) > 0 && ["ok", "success"].includes(String(schema.last_sync_status || "").toLowerCase());
   const feedbackOk = Number(counts.impression || 0) > 0 || Number(counts.exposure || 0) > 0 || Number(counts.conversion || 0) > 0;
   const runtimeOk = Number(runtime.error_rate || 0) < 0.01 && Number(rateLimit.blocked || 0) === 0;
-  const profileOk = Number(profileCache.errors || 0) === 0;
+  const profileErrors = Number(profileCache.errors || 0);
+  const profileLookups = Number(profileCache.hits || 0) + Number(profileCache.misses || 0);
+  const profileOk = profileErrors === 0;
+  const profileDetail = profileLookups > 0 || Number(profileCache.skipped || 0) > 0 || profileErrors > 0
+    ? `${formatNumber(profileLookups)} Meiro lookups · ${formatNumber(profileCache.skipped || 0)} local/skipped · ${formatNumber(profileErrors)} errors`
+    : "No sparse client requests have needed Profile API enrichment yet";
   const items = [
     readinessItem("Profile fields", schemaOk ? "Ready" : "Needs sync", `${formatNumber(schema.total || 0)} fields · ${schema.last_synced_at ? formatTime(schema.last_synced_at) : "never synced"}`, schemaOk),
     readinessItem("Feedback loop", feedbackOk ? "Receiving events" : "No feedback yet", `${formatNumber(counts.exposure || 0)} exposures · ${formatNumber(counts.impression || 0)} impressions · ${formatNumber(counts.conversion || 0)} conversions`, feedbackOk),
-    readinessItem("Profile enrichment", profileOk ? "Healthy" : "Errors found", `${formatNumber(profileCache.hits || 0)} hits · ${formatNumber(profileCache.errors || 0)} errors`, profileOk),
+    readinessItem("Profile enrichment", profileOk ? `${Math.round((profileCache.hit_rate || 0) * 100)}% cache hit` : "Errors found", profileDetail, profileOk),
     readinessItem("Service reliability", runtimeOk ? "Healthy" : "Needs attention", `${formatPercent(runtime.error_rate || 0)} error rate · ${formatNumber(rateLimit.blocked || 0)} blocked`, runtimeOk),
     readinessItem("Reference data", Number(metrics.lookups?.total || 0) > 0 ? "Available" : "Not configured", `${formatNumber(metrics.lookups?.total || 0)} tables`, Number(metrics.lookups?.total || 0) > 0),
     readinessItem("Decision cache", `${Math.round((cache.hit_rate || 0) * 100)}% hit rate`, `${formatNumber(cache.entries || 0)} cached entries`, true)
@@ -7350,6 +7355,7 @@ function renderEvaluationOutputSummary(body, error = null) {
   }
   const outputEntries = Object.entries(body.outputs || {});
   const errors = Array.isArray(body.errors) ? body.errors : [];
+  const enrichment = renderProfileEnrichmentCard(body.profile_cache);
   evalOutputSummary.innerHTML = `
     <div class="eval-output-card primary">
       <span>Result</span>
@@ -7372,7 +7378,89 @@ function renderEvaluationOutputSummary(body, error = null) {
     ${errors.length
       ? `<div class="eval-output-card warning"><span>Errors</span><strong>${escapeHtml(errors.join(", "))}</strong></div>`
       : ""}
+    ${enrichment}
   `;
+}
+
+function renderProfileEnrichmentCard(profileCache = null) {
+  if (!profileCache) return "";
+  const diagnostics = profileCache.diagnostics || {};
+  const fieldsAdded = diagnostics.fields_added || {};
+  const drift = diagnostics.schema_drift || {};
+  const freshness = diagnostics.cache_freshness || {};
+  const missing = diagnostics.missing_required_attributes || [];
+  const driftCount = [
+    drift.profile_attributes_not_in_schema,
+    drift.schema_attributes_missing_from_profile,
+    drift.profile_segments_not_in_schema,
+    drift.schema_segments_missing_from_profile
+  ].reduce((sum, items) => sum + (Array.isArray(items) ? items.length : 0), 0);
+  const addedCount = [
+    fieldsAdded.attributes,
+    fieldsAdded.segments,
+    fieldsAdded.context
+  ].reduce((sum, items) => sum + (Array.isArray(items) ? items.length : 0), 0);
+  const status = profileCache.status || "not_used";
+  const state = status === "error" || missing.length || driftCount ? "warning" : diagnostics.enriched ? "ok" : "neutral";
+  const source = diagnostics.source || profileEnrichmentStatusLabel(status);
+  const freshnessText = freshness.expires_at
+    ? `expires ${formatTime(freshness.expires_at)}`
+    : Number(freshness.ttl_seconds || profileCache.ttl_seconds || 0) > 0
+      ? `${formatNumber(freshness.ttl_seconds || profileCache.ttl_seconds)}s TTL`
+      : "no profile cache TTL";
+  return `
+    <div class="profile-enrichment-card ${escapeHtml(state)}">
+      <div class="profile-enrichment-head">
+        <div>
+          <span>Profile enrichment</span>
+          <strong>${escapeHtml(source)}</strong>
+        </div>
+        <em>${escapeHtml(status)}</em>
+      </div>
+      <div class="profile-enrichment-grid">
+        ${profileEnrichmentMetric("Source", diagnostics.enriched ? "Meiro Profile API" : "Request payload", diagnostics.identifier_type ? `Identifier: ${diagnostics.identifier_type}` : profileCache.reason || profileCache.error || "")}
+        ${profileEnrichmentMetric("Fields added", formatNumber(addedCount), `Attributes ${countList(fieldsAdded.attributes)} · Segments ${countList(fieldsAdded.segments)} · Context ${countList(fieldsAdded.context)}`)}
+        ${profileEnrichmentMetric("Missing required", formatNumber(missing.length), missing.length ? missing.join(", ") : "No missing required attributes in response")}
+        ${profileEnrichmentMetric("Schema drift", formatNumber(driftCount), profileDriftSummary(drift))}
+        ${profileEnrichmentMetric("Cache freshness", profileCache.hit ? "Hit" : "Miss", freshnessText)}
+      </div>
+    </div>
+  `;
+}
+
+function profileEnrichmentMetric(label, value, detail) {
+  return `
+    <div class="profile-enrichment-metric">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(detail || "-")}</small>
+    </div>
+  `;
+}
+
+function countList(items = []) {
+  return formatNumber(Array.isArray(items) ? items.length : 0);
+}
+
+function profileDriftSummary(drift = {}) {
+  const chunks = [];
+  if (drift.profile_attributes_not_in_schema?.length) chunks.push(`${drift.profile_attributes_not_in_schema.length} profile attributes outside schema`);
+  if (drift.schema_attributes_missing_from_profile?.length) chunks.push(`${drift.schema_attributes_missing_from_profile.length} schema attributes absent`);
+  if (drift.profile_segments_not_in_schema?.length) chunks.push(`${drift.profile_segments_not_in_schema.length} profile segments outside schema`);
+  if (drift.schema_segments_missing_from_profile?.length) chunks.push(`${drift.schema_segments_missing_from_profile.length} schema segments absent`);
+  return chunks.length ? chunks.join(" · ") : "No schema/profile drift detected";
+}
+
+function profileEnrichmentStatusLabel(status = "") {
+  const labels = {
+    disabled: "Enrichment disabled for this request",
+    local_payload: "Local payload used",
+    not_configured: "Profile API not configured",
+    hit: "Meiro profile cache hit",
+    miss: "Fetched from Meiro Profile API",
+    error: "Profile API lookup failed"
+  };
+  return labels[status] || "Profile enrichment not used";
 }
 
 function formatDecisionValue(value) {
