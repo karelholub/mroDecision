@@ -101,7 +101,7 @@ Return `false` from a renderer to keep the original fallback content and skip ex
 
 ## Notes
 
-- Use client-scoped tokens, ideally restricted to the relevant decision keys.
+- Use client-scoped tokens, ideally restricted to the relevant decision keys, browser origins, environment, and app id.
 - Configure `DEE_CORS_ORIGINS` to allow the website origin.
 - Keep images and links in structured outputs rather than raw HTML.
 - Use server-side or edge-side decisioning for critical first-paint experiences where flicker is unacceptable.

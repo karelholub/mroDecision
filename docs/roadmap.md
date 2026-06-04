@@ -118,7 +118,7 @@ Goal: add the new v2 surface types while keeping them isolated from the server-s
 - Add forced variant and holdout overrides.
 - Add experiment freeze warnings when launched allocations or eligibility change.
 
-Status: first-pass client evaluation is implemented with client tokens, allowed decision keys, TTL response hints, deterministic experiment bucketing, forced variants, forced holdout overrides, allocation validation, in-process result caching with experiment override isolation, Meiro Profile API enrichment/cache for sparse identifier-first client requests, and active-experiment freeze warnings for allocation, variant, assignment, goal, schedule, and eligibility changes. Richer app/environment scoping remains.
+Status: first-pass client evaluation is implemented with client tokens, allowed decision keys, per-token browser-origin/environment/app-id constraints, TTL response hints, deterministic experiment bucketing, forced variants, forced holdout overrides, allocation validation, in-process result caching with experiment override isolation, Meiro Profile API enrichment/cache for sparse identifier-first client requests, and active-experiment freeze warnings for allocation, variant, assignment, goal, schedule, and eligibility changes. Deeper application lifecycle governance remains.
 
 Open decision: benchmark Profile API latency under production traffic and tune profile-cache TTLs per customer environment.
 

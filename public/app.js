@@ -8510,7 +8510,7 @@ function renderIntegration() {
 
 async function loadTokens() {
   const target = document.querySelector("#token-list");
-  target.innerHTML = header(["Name", "Scopes", "Allowed decisions", "Last used", "Status"]);
+  target.innerHTML = header(["Name", "Scopes", "Allowed decisions", "Client constraints", "Last used", "Status"]);
   try {
     const body = await api("/v1/tokens");
     target.innerHTML += body.tokens
@@ -8520,6 +8520,7 @@ async function loadTokens() {
             token.name,
             token.scopes.join(", "),
             token.decision_keys?.length ? token.decision_keys.join(", ") : "All",
+            tokenConstraintSummary(token),
             token.last_used_at || "-",
             token.revoked_at ? "revoked" : "active"
           ],
@@ -8547,7 +8548,16 @@ async function createToken(event) {
           .querySelector("#token-decision-keys")
           .value.split(",")
           .map((item) => item.trim())
-          .filter(Boolean)
+          .filter(Boolean),
+        metadata: {
+          allowed_origins: document
+            .querySelector("#token-allowed-origins")
+            .value.split(",")
+            .map((item) => item.trim())
+            .filter(Boolean),
+          environment: document.querySelector("#token-environment").value.trim(),
+          app_id: document.querySelector("#token-app-id").value.trim()
+        }
       })
     });
     tokenOutput.textContent = `Copy this token now. It will not be shown again.\n\n${JSON.stringify(body, null, 2)}`;
@@ -8555,6 +8565,16 @@ async function createToken(event) {
   } catch (error) {
     tokenOutput.textContent = error.message;
   }
+}
+
+function tokenConstraintSummary(token = {}) {
+  const metadata = token.metadata || {};
+  const parts = [
+    metadata.allowed_origins?.length ? `Origins: ${metadata.allowed_origins.join(", ")}` : "",
+    metadata.environment ? `Env: ${metadata.environment}` : "",
+    metadata.app_id ? `App: ${metadata.app_id}` : ""
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "None";
 }
 
 async function revokeToken(id) {

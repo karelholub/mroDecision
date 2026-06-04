@@ -1482,7 +1482,7 @@ export class Store {
 
   listApiTokens() {
     return this.db
-      .prepare("SELECT id, name, scopes_json, decision_keys_json, created_at, last_used_at, revoked_at FROM api_tokens ORDER BY created_at DESC")
+      .prepare("SELECT id, name, scopes_json, decision_keys_json, metadata_json, created_at, last_used_at, revoked_at FROM api_tokens ORDER BY created_at DESC")
       .all()
       .map(rowToApiToken);
   }
@@ -1490,6 +1490,7 @@ export class Store {
   createApiToken(input, author) {
     const scopes = normalizeScopes(input.scopes);
     const decisionKeys = normalizeDecisionKeys(input.decision_keys);
+    const metadata = normalizeTokenMetadata(input.metadata || input);
     const now = createdAtNow();
     const plaintext = `dee_${randomBytes(24).toString("base64url")}`;
     const token = {
@@ -1497,6 +1498,7 @@ export class Store {
       name: input.name || "API token",
       scopes,
       decision_keys: decisionKeys,
+      metadata,
       created_at: now,
       created_by: author,
       last_used_at: null,
@@ -1504,10 +1506,10 @@ export class Store {
     };
     this.db
       .prepare(
-        `INSERT INTO api_tokens (id, name, token_hash, scopes_json, decision_keys_json, created_at, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO api_tokens (id, name, token_hash, scopes_json, decision_keys_json, metadata_json, created_at, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(token.id, token.name, hashToken(plaintext), stringify(scopes), stringify(decisionKeys), token.created_at, token.created_by);
+      .run(token.id, token.name, hashToken(plaintext), stringify(scopes), stringify(decisionKeys), stringify(metadata), token.created_at, token.created_by);
     return { ...token, token: plaintext };
   }
 
@@ -1923,6 +1925,7 @@ function migrate(db) {
       token_hash TEXT NOT NULL UNIQUE,
       scopes_json TEXT NOT NULL DEFAULT '[]',
       decision_keys_json TEXT NOT NULL DEFAULT '[]',
+      metadata_json TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL,
       created_by TEXT NOT NULL,
       last_used_at TEXT,
@@ -1990,6 +1993,7 @@ function migrate(db) {
   ensureColumn(db, "lookup_table_versions", "metadata_json", "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn(db, "messages", "version", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "api_tokens", "decision_keys_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "api_tokens", "metadata_json", "TEXT NOT NULL DEFAULT '{}'");
   seedLookupHistory(db);
   seedMessageHistory(db);
   seedSettings(db);
@@ -2511,6 +2515,7 @@ function rowToApiToken(row) {
     name: row.name,
     scopes: parse(row.scopes_json),
     decision_keys: parse(row.decision_keys_json || "[]"),
+    metadata: parse(row.metadata_json || "{}"),
     created_at: row.created_at,
     last_used_at: row.last_used_at || null,
     revoked_at: row.revoked_at || null
@@ -2538,6 +2543,22 @@ function normalizeScopes(scopes) {
 
 function normalizeDecisionKeys(keys) {
   return [...new Set((Array.isArray(keys) ? keys : []).map((key) => String(key).trim()).filter(Boolean))];
+}
+
+function normalizeTokenMetadata(input = {}) {
+  const allowedOrigins = normalizeStringList(input.allowed_origins || input.origins);
+  const environment = String(input.environment || input.environment_label || "").trim();
+  const appId = String(input.app_id || input.application_id || "").trim();
+  const metadata = {};
+  if (allowedOrigins.length) metadata.allowed_origins = allowedOrigins;
+  if (environment) metadata.environment = environment;
+  if (appId) metadata.app_id = appId;
+  return metadata;
+}
+
+function normalizeStringList(value) {
+  const items = Array.isArray(value) ? value : String(value || "").split(",");
+  return [...new Set(items.map((item) => String(item).trim()).filter(Boolean))];
 }
 
 function normalizeConditionBlockConditions(value) {

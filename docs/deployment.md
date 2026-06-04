@@ -53,6 +53,7 @@ DEE is designed to sit behind a CDN, load balancer, or reverse proxy for public 
 Runtime knobs:
 
 - `DEE_CORS_ORIGINS` is a comma-separated allow-list for browser origins that can call `/v1/client/*`, such as `https://www.example.com,https://app.example.com`. Use `*` only for local demos or controlled sandboxes because client tokens are intended for public browser integrations but should still be scoped and rate-limited.
+- Client tokens can add per-token constraints for allowed browser origins, environment label, app id, and allowed decision keys. Environment/app constraints are read from request context (`context.environment`, `context.app_id`) or headers (`x-dee-environment`, `x-dee-app-id`).
 - `DEE_CLIENT_RATE_LIMIT_WINDOW_MS` and `DEE_CLIENT_RATE_LIMIT_MAX` rate-limit `/v1/client/*` calls per token, origin, action, and source IP.
 - `DEE_REQUEST_BODY_LIMIT_BYTES` caps normal JSON requests.
 - `DEE_BATCH_REQUEST_BODY_LIMIT_BYTES` caps batch/import/schema payloads.

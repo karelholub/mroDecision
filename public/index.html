@@ -1814,6 +1814,20 @@
                     Allowed decision keys
                     <input id="token-decision-keys" placeholder="Optional, comma separated" />
                   </label>
+                  <label>
+                    Allowed browser origins
+                    <input id="token-allowed-origins" placeholder="Optional, e.g. https://www.example.com, *.example.com" />
+                  </label>
+                  <div class="grid-two">
+                    <label>
+                      Environment
+                      <input id="token-environment" placeholder="Optional, e.g. production" />
+                    </label>
+                    <label>
+                      App ID
+                      <input id="token-app-id" placeholder="Optional, e.g. web-storefront" />
+                    </label>
+                  </div>
                   <div class="actions left">
                     <button type="submit">Create Token</button>
                   </div>
@@ -1901,6 +1915,6 @@
       </div>
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
-    <script src="/app.js?v=20260604-experiment-freeze"></script>
+    <script src="/app.js?v=20260604-client-token-scope"></script>
   </body>
 </html>

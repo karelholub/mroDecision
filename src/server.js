@@ -131,6 +131,7 @@ async function routeApi(req, res, url) {
     enforceClientRateLimit(req, res, "evaluate");
     const body = await readJson(req, config.requestBodyLimitBytes);
     validateClientEvaluateRequest(body);
+    enforceClientTokenContext(req, body);
     enforceAllowedDecision(req, body.decision_key);
     const result = await evaluateClientRequest(body);
     await store.save();
@@ -140,6 +141,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "GET" && pathname === "/v1/client/rule-catalog") {
     requireScope(req, "client");
+    enforceClientTokenContext(req);
     sendJson(res, 200, { rule_sets: clientRuleCatalog(req.auth) });
     return;
   }
@@ -149,6 +151,7 @@ async function routeApi(req, res, url) {
     enforceClientRateLimit(req, res, "surface");
     const body = await readJson(req, config.requestBodyLimitBytes);
     validateClientSurfaceRequest(body);
+    enforceClientTokenContext(req, body);
     const result = await evaluateClientSurface(body, req.auth);
     await store.save();
     sendJson(res, 200, result);
@@ -161,6 +164,7 @@ async function routeApi(req, res, url) {
     enforceClientRateLimit(req, res, clientEventMatch[1]);
     const body = await readJson(req, config.requestBodyLimitBytes);
     validateClientEventRequest(body);
+    enforceClientTokenContext(req, body);
     enforceAllowedDecision(req, body.decision_key);
     const event = store.addClientEvent(clientEventFromRequest(clientEventMatch[1], body, req));
     if (event.accepted) {
@@ -2409,6 +2413,64 @@ function enforceAllowedDecision(req, decisionKey) {
   }
 }
 
+function enforceClientTokenContext(req, body = {}) {
+  const metadata = req.auth?.metadata || {};
+  const allowedOrigins = Array.isArray(metadata.allowed_origins) ? metadata.allowed_origins : [];
+  const requestOrigin = req.headers.origin || "";
+  if (allowedOrigins.length && !originAllowed(requestOrigin, allowedOrigins)) {
+    forbidden(`Client token is not allowed from origin: ${requestOrigin || "server"}`);
+  }
+  const expectedEnvironment = String(metadata.environment || "").trim();
+  if (expectedEnvironment) {
+    const requestEnvironment = clientContextValue(req, body, ["environment", "environment_label", "env"]);
+    if (requestEnvironment !== expectedEnvironment) forbidden(`Client token is scoped to environment: ${expectedEnvironment}`);
+  }
+  const expectedAppId = String(metadata.app_id || "").trim();
+  if (expectedAppId) {
+    const requestAppId = clientContextValue(req, body, ["app_id", "application_id", "app"]);
+    if (requestAppId !== expectedAppId) forbidden(`Client token is scoped to app: ${expectedAppId}`);
+  }
+}
+
+function originAllowed(origin, allowedOrigins) {
+  if (allowedOrigins.includes("*")) return true;
+  if (!origin) return false;
+  return allowedOrigins.some((allowed) => {
+    if (allowed === origin) return true;
+    if (allowed.startsWith("*.")) {
+      try {
+        const hostname = new URL(origin).hostname;
+        const suffix = allowed.slice(1);
+        return hostname.endsWith(suffix);
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
+}
+
+function clientContextValue(req, body, keys) {
+  const context = body?.context || {};
+  for (const key of keys) {
+    const value = context[key] ?? body?.[key];
+    if (value != null && String(value).trim()) return String(value).trim();
+  }
+  const headers = {
+    environment: req.headers["x-dee-environment"],
+    environment_label: req.headers["x-dee-environment"],
+    env: req.headers["x-dee-env"],
+    app_id: req.headers["x-dee-app-id"],
+    application_id: req.headers["x-dee-app-id"],
+    app: req.headers["x-dee-app"]
+  };
+  for (const key of keys) {
+    const value = headers[key];
+    if (value != null && String(value).trim()) return String(value).trim();
+  }
+  return "";
+}
+
 function assignExperimentVariant(ruleSet, request, evaluated) {
   if (ruleSet.type !== "experiment") return null;
   if (["ineligible", "suppressed"].includes(evaluated.result)) return null;
@@ -2518,6 +2580,13 @@ function badRequest(message) {
   const error = new Error(message);
   error.statusCode = 400;
   error.code = "bad_request";
+  throw error;
+}
+
+function forbidden(message) {
+  const error = new Error(message);
+  error.statusCode = 403;
+  error.code = "forbidden";
   throw error;
 }
 

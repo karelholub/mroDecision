@@ -103,7 +103,7 @@ function responseHeaders(res) {
       ? {
           "access-control-allow-origin": res.corsOrigin,
           "access-control-allow-credentials": "false",
-          "access-control-allow-headers": "authorization, content-type, idempotency-key, x-request-id, ngrok-skip-browser-warning",
+          "access-control-allow-headers": "authorization, content-type, idempotency-key, x-request-id, ngrok-skip-browser-warning, x-dee-app, x-dee-app-id, x-dee-env, x-dee-environment",
           "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
           "access-control-max-age": "600",
           vary: "Origin"

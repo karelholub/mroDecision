@@ -33,7 +33,13 @@ export function requireScope(req, scope) {
     throw error;
   }
 
-  req.auth = { name: token.name, token_id: token.id || null, scopes: token.scopes, decision_keys: token.decision_keys || [] };
+  req.auth = {
+    name: token.name,
+    token_id: token.id || null,
+    scopes: token.scopes,
+    decision_keys: token.decision_keys || [],
+    metadata: token.metadata || {}
+  };
 }
 
 function scopeAllows(scopes, required) {

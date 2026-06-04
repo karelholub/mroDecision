@@ -1138,7 +1138,7 @@ aside input {
 }
 
 .token-list .row {
-  grid-template-columns: minmax(130px, 1fr) minmax(110px, 0.65fr) minmax(110px, 0.65fr) minmax(120px, 0.7fr) minmax(80px, 0.45fr);
+  grid-template-columns: minmax(130px, 0.9fr) minmax(110px, 0.55fr) minmax(120px, 0.75fr) minmax(180px, 1fr) minmax(120px, 0.65fr) minmax(80px, 0.4fr);
 }
 
 .settings-panel textarea,

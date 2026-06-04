@@ -421,10 +421,24 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(verified.name, "Evaluate token");
   assert.deepEqual(verified.scopes, ["evaluate"]);
   assert.deepEqual(verified.decision_keys, []);
-  const clientToken = store.createApiToken({ name: "Client token", scopes: ["client"], decision_keys: ["homepage_offer"] }, "tester");
+  const clientToken = store.createApiToken({
+    name: "Client token",
+    scopes: ["client"],
+    decision_keys: ["homepage_offer"],
+    metadata: {
+      allowed_origins: ["https://www.example.com"],
+      environment: "production",
+      app_id: "storefront"
+    }
+  }, "tester");
   const verifiedClient = store.verifyApiToken(clientToken.token);
   assert.deepEqual(verifiedClient.scopes, ["client"]);
   assert.deepEqual(verifiedClient.decision_keys, ["homepage_offer"]);
+  assert.deepEqual(verifiedClient.metadata, {
+    allowed_origins: ["https://www.example.com"],
+    environment: "production",
+    app_id: "storefront"
+  });
   assert.equal(store.listApiTokens().length, 2);
   store.revokeApiToken(apiToken.id, "tester");
   assert.equal(store.verifyApiToken(apiToken.token), null);
