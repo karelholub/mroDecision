@@ -2423,6 +2423,15 @@ components:
                 type: string
               name:
                 type: string
+              object_type:
+                type: string
+                enum: [message, rule, rule_version]
+              usage:
+                type: string
+              status:
+                type: string
+              version:
+                type: integer
               surface:
                 type: string
     MessageVersionSummary:

@@ -205,4 +205,4 @@ Status: started with experiment significance calculations, confidence labels, mi
 2. Add a managed-database adapter path for enterprise deployments.
 3. Add deeper personalization helpers such as content-variant previews and audience-specific copy comparisons.
 4. Add optional LLM provider settings and a disabled-by-default provider adapter behind the deterministic assistant contract.
-5. Add asset usage reporting beyond messages, including downstream rule output references and external delivery hints.
+5. Add external delivery hints for managed assets, such as CDN host validation and downstream render diagnostics. Downstream rule-output asset usage reporting is implemented.

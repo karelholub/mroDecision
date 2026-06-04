@@ -3343,7 +3343,8 @@ function renderMessageAssetList() {
         <div class="message-asset-thumb"${safeBackgroundImageStyle(asset.content_url)}></div>
         <div class="message-asset-copy">
           <strong>${escapeHtml(asset.filename || asset.id)}</strong>
-          <span>${escapeHtml(asset.content_type || "image")} · ${formatBytes(asset.size_bytes || 0)} · ${usedBy.length ? `Used by ${usedBy.length}` : "Unused"}</span>
+          <span>${escapeHtml(asset.content_type || "image")} · ${formatBytes(asset.size_bytes || 0)} · ${escapeHtml(assetUsageSummary(usedBy))}</span>
+          ${usedBy.length ? `<em>${escapeHtml(assetUsageDetail(usedBy))}</em>` : ""}
         </div>
         <button type="button" data-use-message-asset="${escapeHtml(asset.content_url)}">${isSelected ? "Selected" : "Use"}</button>
       </div>
@@ -3357,6 +3358,29 @@ function renderMessageAssetList() {
       messageOutput.textContent = "Image asset linked to message.";
     });
   });
+}
+
+function assetUsageSummary(usedBy = []) {
+  if (!usedBy.length) return "Unused";
+  const counts = usedBy.reduce((acc, item) => {
+    const type = item.object_type === "rule_version" ? "published rule" : item.object_type === "rule" ? "draft rule" : "message";
+    acc[type] = (acc[type] || 0) + 1;
+    return acc;
+  }, {});
+  return Object.entries(counts)
+    .map(([type, count]) => `${count} ${type}${count === 1 ? "" : "s"}`)
+    .join(" · ");
+}
+
+function assetUsageDetail(usedBy = []) {
+  return usedBy
+    .slice(0, 3)
+    .map((item) => {
+      const version = item.version ? ` v${item.version}` : "";
+      const usage = item.usage ? ` ${item.usage.replace(/_/g, " ")}` : "";
+      return `${item.name || item.id}${version}${usage}`.trim();
+    })
+    .join(" · ") + (usedBy.length > 3 ? ` · +${usedBy.length - 3} more` : "");
 }
 
 function formatBytes(value) {

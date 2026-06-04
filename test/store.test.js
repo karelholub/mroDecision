@@ -359,6 +359,26 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(store.listMessageAssets()[0].used_by[0].id, "hero_offer");
   assert.throws(() => store.deleteMessageAsset(asset.id), /still used/);
   assert.equal(store.cleanupMessageAssets().deleted, 0);
+  store.createRuleSet(
+    {
+      name: "Hero Asset Rule",
+      decision_key: "hero_asset_rule",
+      type: "inapp_message",
+      surface: "homepage",
+      draft: {
+        fallback: {
+          result: "eligible",
+          outputs: {
+            message_content: { image_url: asset.content_url }
+          }
+        },
+        branches: []
+      }
+    },
+    "tester"
+  );
+  const assetUsageTypes = store.listMessageAssets()[0].used_by.map((item) => item.object_type).sort();
+  assert.deepEqual(assetUsageTypes, ["message", "rule"]);
   store.upsertMessage(
     "hero_offer",
     {
@@ -369,7 +389,10 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
     },
     "tester"
   );
-  assert.equal(store.cleanupMessageAssets().deleted, 1);
+  assert.equal(store.cleanupMessageAssets().deleted, 0);
+  store.archiveRuleSet("hero_asset_rule", "tester");
+  assert.throws(() => store.deleteMessageAsset(asset.id), /still used/);
+  assert.equal(store.deleteMessageAsset(asset.id, { force: true }).deleted, true);
   assert.equal(store.listMessageAssets().length, 0);
 
   const savedProfile = store.upsertEvaluationProfile(
@@ -486,8 +509,9 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
 
   const bundle = store.exportBundle();
   assert.equal(bundle.kind, "meiro-dee-config-bundle");
-  assert.equal(bundle.rule_sets.length, 3);
+  assert.equal(bundle.rule_sets.length, 4);
   assert.equal(bundle.rule_sets.find((item) => item.decision_key === "campaign_suppression").type, "inapp_message");
+  assert.equal(bundle.rule_sets.find((item) => item.decision_key === "hero_asset_rule").type, "inapp_message");
   assert.equal(bundle.lookup_tables.length, 1);
   assert.equal(bundle.messages.length, 1);
   assert.ok(bundle.condition_blocks.some((block) => block.id === "high_intent"));

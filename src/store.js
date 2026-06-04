@@ -1217,7 +1217,7 @@ export class Store {
 
   deleteMessageAsset(id, options = {}) {
     const asset = this.getMessageAsset(id);
-    if (asset.used_by.length && !options.force) badRequest("Message asset is still used by messages");
+    if (asset.used_by.length && !options.force) badRequest("Message asset is still used");
     this.db.prepare("DELETE FROM message_assets WHERE id = ?").run(id);
     return { deleted: true, asset };
   }
@@ -1233,17 +1233,41 @@ export class Store {
 
   messageAssetReferences() {
     const references = new Map();
-    const messages = this.listMessages();
     const assetUrlPattern = /\/v1\/message-assets\/([^/]+)\/content/g;
-    for (const message of messages) {
-      const payload = stringify({
+    for (const message of this.listMessages()) {
+      collectAssetReferences(references, assetUrlPattern, {
         default_content: message.default_content || {},
         metadata: message.metadata || {}
+      }, {
+        object_type: "message",
+        id: message.id,
+        name: message.name,
+        surface: message.surface || "",
+        status: message.status || "",
+        usage: "message_content"
       });
-      for (const match of payload.matchAll(assetUrlPattern)) {
-        const id = decodeURIComponent(match[1]);
-        if (!references.has(id)) references.set(id, []);
-        references.get(id).push({ id: message.id, name: message.name, surface: message.surface || "" });
+    }
+    for (const ruleSummary of this.listRuleSets()) {
+      const rule = this.getRuleSet(ruleSummary.decision_key);
+      if (!rule) continue;
+      collectAssetReferences(references, assetUrlPattern, rule.draft || {}, {
+        object_type: "rule",
+        id: rule.decision_key,
+        name: rule.name,
+        surface: rule.surface || "",
+        status: rule.status || "",
+        usage: "draft_outputs"
+      });
+      for (const version of rule.versions || []) {
+        collectAssetReferences(references, assetUrlPattern, version.definition || {}, {
+          object_type: "rule_version",
+          id: rule.decision_key,
+          name: rule.name,
+          surface: rule.surface || "",
+          status: "published",
+          version: version.version,
+          usage: "published_outputs"
+        });
       }
     }
     return references;
@@ -2827,6 +2851,24 @@ function imageBase64FromInput(input) {
   }
   if (input.base64) return String(input.base64).replace(/\s+/g, "");
   badRequest("Message asset requires data_url or base64");
+}
+
+function collectAssetReferences(references, pattern, payload, reference) {
+  const text = stringify(payload);
+  for (const match of text.matchAll(pattern)) {
+    const id = decodeURIComponent(match[1]);
+    if (!references.has(id)) references.set(id, []);
+    const existing = references.get(id);
+    const key = [
+      reference.object_type,
+      reference.id,
+      reference.usage,
+      reference.version || "",
+      reference.surface || ""
+    ].join(":");
+    if (existing.some((item) => item.reference_key === key)) continue;
+    existing.push({ ...reference, reference_key: key });
+  }
 }
 
 function hashToken(plaintext) {
