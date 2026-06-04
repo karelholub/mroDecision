@@ -972,6 +972,7 @@ export class Store {
         return {
           name: rule.name,
           decision_key: rule.decision_key,
+          surface: rule.surface || "",
           status: rule.status,
           experiment_status: activeExperiment.status || "draft",
           draft_status: draftExperiment.status || "draft",

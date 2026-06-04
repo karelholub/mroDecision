@@ -1341,6 +1341,7 @@ function renderExperimentDetail(experiment) {
       ${statusItem("Status", experiment.experiment_status || "draft")}
       ${statusItem("Rule status", experiment.status || "-")}
       ${statusItem("Version", experiment.version || "-")}
+      ${statusItem("Placement", experiment.surface || "-")}
       ${statusItem("Campaign", campaignForDecisionKey(experiment.decision_key) || "-")}
       ${statusItem("Assignment", experiment.assignment_unit || "profile")}
       ${statusItem("Baseline", experiment.baseline_variant || "-")}
@@ -1354,8 +1355,17 @@ function renderExperimentDetail(experiment) {
     </div>
     <div class="experiment-detail-actions">
       <button type="button" data-experiment-action="declare-winner" data-rule-key="${escapeHtml(experiment.decision_key)}" data-winner-key="${escapeHtml(winnerKey)}" ${winnerKey ? "" : "disabled"}>Declare Winner</button>
+      <button type="button" data-experiment-action="copy-snippet" data-rule-key="${escapeHtml(experiment.decision_key)}">Copy Website Snippet</button>
       <span>${escapeHtml(winnerKey ? `Prepare a draft with ${winnerKey} at 100% allocation.` : "No winner candidate available yet.")}</span>
     </div>
+    <details class="experiment-snippet-panel">
+      <summary>Website install snippet</summary>
+      <div class="experiment-snippet-guidance">
+        <span>Create a client token scoped to this decision, paste it below, and place the marker where the experiment should render.</span>
+        <button type="button" data-experiment-action="copy-snippet" data-rule-key="${escapeHtml(experiment.decision_key)}">Copy</button>
+      </div>
+      <pre class="experiment-snippet-code">${escapeHtml(experimentWebsiteSnippet(experiment))}</pre>
+    </details>
     ${warnings.length ? `<div class="experiment-warning-list">${warnings.map((item) => `<div>${escapeHtml(item)}</div>`).join("")}</div>` : ""}
     <div class="experiment-variant-table">
       <div class="experiment-variant-header">
@@ -1373,6 +1383,69 @@ function renderExperimentDetail(experiment) {
     </div>
   `;
   experimentDetail.querySelector('[data-experiment-action="declare-winner"]')?.addEventListener("click", declareExperimentWinner);
+  experimentDetail.querySelectorAll('[data-experiment-action="copy-snippet"]').forEach((button) => {
+    button.addEventListener("click", () => copyExperimentSnippet(experiment));
+  });
+}
+
+function experimentWebsiteSnippet(experiment) {
+  const baseUrl = deeRuntimeBaseUrl();
+  const placement = experiment.surface || experiment.decision_key || "homepage_placement";
+  const decisionKey = experiment.decision_key || "experiment_decision_key";
+  return `<div data-dee-placement="${htmlAttrSnippet(placement)}" data-dee-decision-key="${htmlAttrSnippet(decisionKey)}">
+  <div class="dee-fallback">Loading offer...</div>
+</div>
+
+<script src="https://your-cdn.example.com/dee-web-sdk.js"></script>
+<script>
+  const dee = DEEWebSDK.createClient({
+    baseUrl: ${jsStringSnippet(baseUrl)},
+    token: "CLIENT_TOKEN_WITH_CLIENT_SCOPE",
+    profileKey: window.meiroProfileId || window.customerEmail || "",
+    context: {
+      channel: "web",
+      surface: ${jsStringSnippet(placement)},
+      page_url: window.location.href
+    },
+    debug: false
+  });
+
+  dee.init();
+</script>`;
+}
+
+function deeRuntimeBaseUrl() {
+  const runtime = cachedSettings.runtime || {};
+  const candidates = [
+    runtime.public_url,
+    runtime.docker_url,
+    runtime.direct_url,
+    window.location.origin
+  ].filter(Boolean);
+  return String(candidates[0]).replace(/\/$/, "");
+}
+
+function htmlAttrSnippet(value) {
+  return String(value || "").replace(/"/g, "&quot;");
+}
+
+function jsStringSnippet(value) {
+  return JSON.stringify(String(value || ""));
+}
+
+async function copyExperimentSnippet(experiment) {
+  const snippet = experimentWebsiteSnippet(experiment);
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(snippet);
+    } else {
+      window.prompt("Copy website snippet", snippet);
+    }
+    const panel = experimentDetail.querySelector(".experiment-snippet-guidance span");
+    if (panel) panel.textContent = "Snippet copied. Paste a client token before deploying.";
+  } catch {
+    window.prompt("Copy website snippet", snippet);
+  }
 }
 
 async function declareExperimentWinner(event) {

@@ -78,6 +78,7 @@ export async function serveStatic(res, pathname) {
     const ext = path.extname(filePath);
     res.writeHead(200, {
       "content-type": contentTypes[ext] || "application/octet-stream",
+      "cache-control": "no-store",
       ...responseHeaders(res)
     });
     res.end(file);

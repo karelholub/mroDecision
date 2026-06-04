@@ -999,7 +999,7 @@ aside input {
 }
 
 .experiment-detail-actions {
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto auto minmax(0, 1fr);
   align-items: center;
 }
 
@@ -1009,6 +1009,40 @@ aside input {
   font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.experiment-snippet-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.experiment-snippet-panel summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-weight: 800;
+}
+
+.experiment-snippet-guidance {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 0 12px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.experiment-snippet-code {
+  max-height: 360px;
+  margin: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  overflow: auto;
+  white-space: pre;
+  font-size: 12px;
 }
 
 .experiment-variant-table {
@@ -1054,6 +1088,13 @@ aside input {
 .experiment-variant-row strong,
 .experiment-variant-row span {
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .experiment-detail-actions,
+  .experiment-snippet-guidance {
+    grid-template-columns: 1fr;
+  }
 }
 
 .integration-workspace,

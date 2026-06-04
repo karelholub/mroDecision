@@ -51,7 +51,7 @@ Important gaps:
 - First client-facing endpoint exists: `POST /v1/client/evaluate`.
 - Deterministic experiment assignment exists for configured variants.
 - Experiment operations dashboard with status, allocation, variant-level exposure/impression/conversion rollups, baseline/winner analysis, lift, and CSV export.
-- Reusable website SDK helper for declared placements, safe fallback rendering, exposure/conversion feedback, and forced-variant QA.
+- Reusable website SDK helper for declared placements, safe fallback rendering, exposure/conversion feedback, forced-variant QA, and copy-ready install snippets from experiment detail.
 - First impression/exposure feedback endpoints and event reports exist; in-app message library is still pending.
 - In-app message library stores reusable content for client decisions.
 - No role model beyond token scopes.
