@@ -1374,6 +1374,10 @@
               <span>Integration</span>
               <small>Pipes request and response template</small>
             </button>
+            <button type="button" class="settings-tab" data-settings-tab="assistant">
+              <span>Assistant</span>
+              <small>Optional LLM planning provider</small>
+            </button>
             <button type="button" class="settings-tab" data-settings-tab="portability">
               <span>Portability</span>
               <small>Export and import configuration</small>
@@ -1631,6 +1635,61 @@
               </div>
             </section>
             </form>
+            <section class="settings-tab-panel" data-settings-panel="assistant">
+              <div class="settings-section-head">
+                <div>
+                  <div class="editor-title">Assistant Provider</div>
+                  <p>Keep deterministic guardrails while optionally letting an OpenAI-compatible model propose draft-only plans.</p>
+                </div>
+              </div>
+              <div class="settings-card-grid">
+                <div class="settings-card wide">
+                  <div class="grid-three">
+                    <label>
+                      LLM planning
+                      <select id="setting-assistant-llm-enabled">
+                        <option value="false">Disabled</option>
+                        <option value="true">Enabled</option>
+                      </select>
+                    </label>
+                    <label>
+                      Provider
+                      <select id="setting-assistant-llm-provider">
+                        <option value="openai_compatible">OpenAI-compatible</option>
+                      </select>
+                    </label>
+                    <label>
+                      Timeout ms
+                      <input id="setting-assistant-llm-timeout" type="number" min="1000" max="30000" />
+                    </label>
+                  </div>
+                </div>
+                <div class="settings-card wide">
+                  <div class="grid-three">
+                    <label>
+                      Base URL
+                      <input id="setting-assistant-llm-base-url" placeholder="https://api.openai.com/v1" />
+                      <small>Use the API root; /chat/completions is appended automatically.</small>
+                    </label>
+                    <label>
+                      Model
+                      <input id="setting-assistant-llm-model" placeholder="gpt-4.1-mini" />
+                    </label>
+                    <label>
+                      API key
+                      <input id="setting-assistant-llm-api-key" type="password" />
+                      <small>Stored server-side and never exported.</small>
+                    </label>
+                  </div>
+                </div>
+                <div class="settings-card wide">
+                  <div id="assistant-provider-status" class="settings-health-summary"></div>
+                </div>
+              </div>
+              <div class="actions left">
+                <button type="submit">Save Settings</button>
+              </div>
+            </section>
             <section class="settings-tab-panel" data-settings-panel="portability">
               <div class="settings-section-head">
                 <div>

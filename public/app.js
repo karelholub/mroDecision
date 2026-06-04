@@ -50,6 +50,7 @@ const configImportSummary = document.querySelector("#config-import-summary");
 const tokenOutput = document.querySelector("#token-output");
 const schemaOutput = document.querySelector("#schema-output");
 const settingsHealthSummary = document.querySelector("#settings-health-summary");
+const assistantProviderStatus = document.querySelector("#assistant-provider-status");
 const integrationTemplate = document.querySelector("#integration-template");
 const integrationResponse = document.querySelector("#integration-response");
 const meiroTestOutput = document.querySelector("#meiro-test-output");
@@ -964,6 +965,7 @@ function renderAssistantPlan(plan) {
   document.querySelector("#assistant-plan-output").textContent = JSON.stringify(plan, null, 2);
   document.querySelector("#assistant-guardrails").innerHTML = [
     statusItem("Status", guardrails.status || "review"),
+    statusItem("Planner", plan.provider?.status ? `${plan.provider.mode || "deterministic"} · ${plan.provider.status}` : "deterministic"),
     statusItem("Actions", plan.actions?.length || 0),
     statusItem("Errors", guardrails.errors?.length || 0),
     statusItem("Warnings", guardrails.warnings?.length || 0),
@@ -7386,8 +7388,16 @@ async function loadSettings() {
     document.querySelector("#setting-schema-sync-interval").value = settings.schema_sync_interval_minutes || 15;
     document.querySelector("#schema-sync-identifier-type").value = settings.schema_sync_identifier_type || "";
     document.querySelector("#schema-sync-identifier-value").value = settings.schema_sync_identifier_value || "";
+    document.querySelector("#setting-assistant-llm-enabled").value = settings.assistant_llm_enabled ? "true" : "false";
+    document.querySelector("#setting-assistant-llm-provider").value = settings.assistant_llm_provider || "openai_compatible";
+    document.querySelector("#setting-assistant-llm-base-url").value = settings.assistant_llm_base_url || "";
+    document.querySelector("#setting-assistant-llm-model").value = settings.assistant_llm_model || "";
+    document.querySelector("#setting-assistant-llm-api-key").value = "";
+    document.querySelector("#setting-assistant-llm-api-key").placeholder = settings.assistant_llm_api_key_configured ? "Configured" : "";
+    document.querySelector("#setting-assistant-llm-timeout").value = settings.assistant_llm_timeout_ms || 8000;
     renderSchemaSyncStatus(settings, body.runtime?.schema_sync || {});
     renderSettingsSummary(settings, body.runtime || {});
+    renderAssistantProviderStatus(settings);
     await loadMeiroDeliveries();
     settingsOutput.textContent = JSON.stringify(body, null, 2);
     renderIntegration();
@@ -7443,12 +7453,19 @@ async function saveSettings(event) {
       meiro_profile_cache_ttl_seconds: Number(document.querySelector("#setting-meiro-profile-cache-ttl").value || 0),
       schema_sync_interval_minutes: Number(document.querySelector("#setting-schema-sync-interval").value || 15),
       schema_sync_identifier_type: document.querySelector("#schema-sync-identifier-type").value.trim(),
-      schema_sync_identifier_value: document.querySelector("#schema-sync-identifier-value").value.trim()
+      schema_sync_identifier_value: document.querySelector("#schema-sync-identifier-value").value.trim(),
+      assistant_llm_enabled: document.querySelector("#setting-assistant-llm-enabled").value === "true",
+      assistant_llm_provider: document.querySelector("#setting-assistant-llm-provider").value,
+      assistant_llm_base_url: document.querySelector("#setting-assistant-llm-base-url").value.trim(),
+      assistant_llm_model: document.querySelector("#setting-assistant-llm-model").value.trim(),
+      assistant_llm_timeout_ms: Number(document.querySelector("#setting-assistant-llm-timeout").value || 8000)
     };
     const apiToken = document.querySelector("#setting-meiro-api-token").value.trim();
     if (apiToken) payload.meiro_api_token = apiToken;
     const cliToken = document.querySelector("#setting-meiro-cli-token").value.trim();
     if (cliToken) payload.meiro_cli_token = cliToken;
+    const llmToken = document.querySelector("#setting-assistant-llm-api-key").value.trim();
+    if (llmToken) payload.assistant_llm_api_key = llmToken;
     const body = await api("/v1/settings", {
       method: "PUT",
       body: JSON.stringify(payload)
@@ -7456,6 +7473,7 @@ async function saveSettings(event) {
     cachedSettings = { ...cachedSettings, settings: body.settings || {} };
     renderSchemaSyncStatus(body.settings || {}, body.runtime?.schema_sync || {});
     renderSettingsSummary(body.settings || {}, body.runtime || {});
+    renderAssistantProviderStatus(body.settings || {});
     renderIntegration();
     settingsOutput.textContent = JSON.stringify(body, null, 2);
   } catch (error) {
@@ -7666,6 +7684,7 @@ function renderSettingsSummary(settings, runtime, error = null) {
   const feedbackConfigured = Boolean(settings?.meiro_feedback_url);
   const apiConfigured = Boolean(settings?.meiro_api_url && settings?.meiro_api_token_configured);
   const metadataConfigured = Boolean((settings?.meiro_cli_url || settings?.meiro_url) && settings?.meiro_cli_token_configured);
+  const assistantConfigured = Boolean(settings?.assistant_llm_enabled && settings?.assistant_llm_base_url && settings?.assistant_llm_model && settings?.assistant_llm_api_key_configured);
   const schemaStatus = settings?.schema_last_sync_status || "never";
   const schemaHealthy = ["ok", "success"].includes(schemaStatus);
   const schemaDetail = settings?.schema_last_synced_at
@@ -7704,6 +7723,12 @@ function renderSettingsSummary(settings, runtime, error = null) {
       ok: Number(profileCache.errors || 0) === 0
     },
     {
+      label: "Assistant LLM",
+      value: settings?.assistant_llm_enabled ? assistantConfigured ? "Enabled" : "Incomplete" : "Disabled",
+      detail: settings?.assistant_llm_enabled ? `${settings.assistant_llm_provider || "provider"} · ${settings.assistant_llm_model || "no model"}` : "Deterministic planner only",
+      ok: !settings?.assistant_llm_enabled || assistantConfigured
+    },
+    {
       label: "Meiro Metadata",
       value: metadataConfigured ? "Configured" : "CLI token missing",
       detail: metadataConfigured ? (settings.meiro_cli_url || settings.meiro_url) : "Add separate mpcli token for catalog and audience sync",
@@ -7731,6 +7756,39 @@ function renderSettingsSummary(settings, runtime, error = null) {
       </div>
     `)
     .join("");
+}
+
+function renderAssistantProviderStatus(settings = {}) {
+  if (!assistantProviderStatus) return;
+  const enabled = settings.assistant_llm_enabled === true;
+  const configured = Boolean(enabled && settings.assistant_llm_base_url && settings.assistant_llm_model && settings.assistant_llm_api_key_configured);
+  const items = [
+    {
+      label: "Mode",
+      value: enabled ? "LLM proposals enabled" : "Deterministic only",
+      detail: enabled ? "Provider plans are still validated before use." : "No provider calls are made.",
+      ok: !enabled || configured
+    },
+    {
+      label: "Provider",
+      value: settings.assistant_llm_provider || "openai_compatible",
+      detail: settings.assistant_llm_base_url || "No base URL configured",
+      ok: !enabled || Boolean(settings.assistant_llm_base_url)
+    },
+    {
+      label: "Model",
+      value: settings.assistant_llm_model || "Not set",
+      detail: settings.assistant_llm_api_key_configured ? "API key configured" : "API key not configured",
+      ok: !enabled || Boolean(settings.assistant_llm_model && settings.assistant_llm_api_key_configured)
+    }
+  ];
+  assistantProviderStatus.innerHTML = items.map((item) => `
+    <div class="settings-health-item ${item.ok ? "ok" : "warn"}">
+      <span>${escapeHtml(item.label)}</span>
+      <strong>${escapeHtml(item.value)}</strong>
+      <span>${escapeHtml(item.detail)}</span>
+    </div>
+  `).join("");
 }
 
 async function importSchema() {

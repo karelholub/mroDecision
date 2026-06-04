@@ -21,9 +21,14 @@ const portableSettingKeys = [
   "meiro_profile_cache_ttl_seconds",
   "schema_sync_interval_minutes",
   "schema_sync_identifier_type",
-  "schema_sync_identifier_value"
+  "schema_sync_identifier_value",
+  "assistant_llm_enabled",
+  "assistant_llm_provider",
+  "assistant_llm_base_url",
+  "assistant_llm_model",
+  "assistant_llm_timeout_ms"
 ];
-const redactedBundleSettingKeys = ["meiro_api_token", "meiro_cli_token"];
+const redactedBundleSettingKeys = ["meiro_api_token", "meiro_cli_token", "assistant_llm_api_key"];
 
 export class Store {
   constructor(db) {
@@ -1546,6 +1551,12 @@ export class Store {
       "schema_sync_interval_minutes",
       "schema_sync_identifier_type",
       "schema_sync_identifier_value",
+      "assistant_llm_enabled",
+      "assistant_llm_provider",
+      "assistant_llm_base_url",
+      "assistant_llm_model",
+      "assistant_llm_api_key",
+      "assistant_llm_timeout_ms",
       "schema_last_synced_at",
       "schema_last_sync_status",
       "schema_last_sync_error",
@@ -2003,6 +2014,12 @@ function seedSettings(db) {
     schema_sync_interval_minutes: 15,
     schema_sync_identifier_type: "",
     schema_sync_identifier_value: "",
+    assistant_llm_enabled: false,
+    assistant_llm_provider: "openai_compatible",
+    assistant_llm_base_url: "",
+    assistant_llm_model: "",
+    assistant_llm_api_key: "",
+    assistant_llm_timeout_ms: 8000,
     schema_last_synced_at: "",
     schema_last_sync_status: "never",
     schema_last_sync_error: "",

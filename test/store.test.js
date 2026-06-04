@@ -519,7 +519,7 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(bundle.settings.meiro_feedback_url, "https://example.test/collect/feedback");
   assert.equal(bundle.settings.meiro_api_token, undefined);
   assert.equal(bundle.settings.meiro_cli_token, undefined);
-  assert.deepEqual(bundle.settings_secrets_redacted, ["meiro_api_token", "meiro_cli_token"]);
+  assert.deepEqual(bundle.settings_secrets_redacted, ["meiro_api_token", "meiro_cli_token", "assistant_llm_api_key"]);
 
   const imported = store.importBundle(
     {

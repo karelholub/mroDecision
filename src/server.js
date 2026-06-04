@@ -2,7 +2,8 @@ import http from "node:http";
 import { URL } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
 import { requireScope, setAuthStore } from "./auth.js";
-import { applyAssistantPlan, createAssistantPlan } from "./assistantPlanner.js";
+import { createAssistantPlanWithProvider } from "./assistantProvider.js";
+import { applyAssistantPlan } from "./assistantPlanner.js";
 import { config } from "./config.js";
 import { createClientResultCache } from "./clientCache.js";
 import { evaluateDecision } from "./evaluator.js";
@@ -181,12 +182,13 @@ async function routeApi(req, res, url) {
   if (req.method === "POST" && pathname === "/v1/assistant/plan") {
     requireScope(req, "editor");
     const body = await readJson(req, config.requestBodyLimitBytes);
-    const plan = createAssistantPlan(body, {
+    const context = {
       ruleExists: (key) => Boolean(store.getRuleSet(key)),
       schemaItems: store.listSchemaItems(),
       lookupTables: store.listLookupTables(),
       clientEventCounter: (params) => store.countClientEvents(params)
-    });
+    };
+    const plan = await createAssistantPlanWithProvider(body, context, store.getSettings());
     validateAssistantPlan(plan);
     sendJson(res, 200, { plan });
     return;
@@ -1306,8 +1308,10 @@ function publicSettings(settings) {
   const copy = { ...settings };
   if (copy.meiro_api_token) copy.meiro_api_token_configured = true;
   if (copy.meiro_cli_token) copy.meiro_cli_token_configured = true;
+  if (copy.assistant_llm_api_key) copy.assistant_llm_api_key_configured = true;
   delete copy.meiro_api_token;
   delete copy.meiro_cli_token;
+  delete copy.assistant_llm_api_key;
   return copy;
 }
 

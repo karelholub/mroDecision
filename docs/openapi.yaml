@@ -3392,6 +3392,24 @@ components:
         meiro_profile_cache_ttl_seconds:
           type: integer
           description: TTL for server-side Meiro profile enrichment cache used by client evaluate and surface endpoints.
+        assistant_llm_enabled:
+          type: boolean
+          description: Enables optional LLM proposals for assistant planning. Disabled by default.
+        assistant_llm_provider:
+          type: string
+          enum: [openai_compatible]
+        assistant_llm_base_url:
+          type: string
+          description: OpenAI-compatible API root. The server appends /chat/completions when needed.
+        assistant_llm_model:
+          type: string
+        assistant_llm_api_key:
+          type: string
+          description: Provider API key. Redacted from GET settings and exports.
+        assistant_llm_api_key_configured:
+          type: boolean
+        assistant_llm_timeout_ms:
+          type: integer
         schema_sync_interval_minutes:
           type: integer
         schema_sync_identifier_type:
