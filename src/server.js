@@ -1902,7 +1902,9 @@ async function evaluateClientRequest(body) {
       attribute_keys: Object.keys(request.attributes || {}),
       segment_keys: Object.keys(request.segments || {}),
       context_keys: Object.keys(request.context || {}),
-      request_source: "client",
+      request_source: request.context?.request_source || "client",
+      surface: request.context?.surface || request.surface || ruleSet.surface || "",
+      sync_id: request.context?.sync_id || "",
       profile_enrichment: hydrated.cache?.status || "not_used"
     }
   });
@@ -2309,6 +2311,18 @@ async function evaluateClientSurfaceBatch(req, body) {
       });
     }
   }
+  const candidateEvaluations = results.reduce((sum, result) => sum + (Array.isArray(result.candidates) ? result.candidates.length : 0), 0);
+  store.addPrecomputeRun({
+    received_at: startedAt,
+    source: body.context?.request_source || "meiro_pipes_inapp_precompute",
+    surface: body.surface,
+    sync_id: body.context?.sync_id || "",
+    profile_count: results.length,
+    candidate_evaluations: candidateEvaluations,
+    eligible_count: eligible,
+    not_selected_count: suppressed,
+    error_count: errors
+  });
 
   return {
     surface: body.surface,
@@ -2317,7 +2331,8 @@ async function evaluateClientSurfaceBatch(req, body) {
     summary: {
       eligible,
       not_selected: suppressed,
-      errors
+      errors,
+      candidate_evaluations: candidateEvaluations
     },
     results
   };

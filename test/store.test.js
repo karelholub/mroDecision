@@ -579,3 +579,94 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
 
   await rm(dataDir, { recursive: true, force: true });
 });
+
+test("metrics expose Meiro Pipes in-app precompute profile rollups", async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "dee-precompute-metrics-"));
+  process.env.DEE_DATA_DIR = dataDir;
+  process.env.DEE_DB_PATH = path.join(dataDir, "test.sqlite");
+
+  const { Store } = await import(`../src/store.js?precompute-metrics-test=${Date.now()}`);
+  const store = await Store.load();
+  const evaluatedAt = "2026-06-05T10:00:00.000Z";
+  store.addAudit({
+    evaluated_at: evaluatedAt,
+    decision_key: "homepage_alert",
+    profile_key: "profile-1",
+    rule_version: 1,
+    result: "eligible",
+    outputs: { message_id: "alert-a" },
+    matched_rules: ["branch_1"],
+    errors: [],
+    inputs: {
+      request_source: "meiro_pipes_inapp_precompute",
+      surface: "homepage_hero",
+      sync_id: "sync-123"
+    }
+  });
+  store.addPrecomputeRun({
+    received_at: evaluatedAt,
+    surface: "homepage_hero",
+    sync_id: "sync-123",
+    profile_count: 2,
+    candidate_evaluations: 3,
+    eligible_count: 1,
+    not_selected_count: 1,
+    error_count: 0
+  });
+  store.addPrecomputeRun({
+    received_at: evaluatedAt,
+    surface: "homepage_footer",
+    sync_id: "sync-empty",
+    profile_count: 60,
+    candidate_evaluations: 0,
+    eligible_count: 0,
+    not_selected_count: 60,
+    error_count: 0
+  });
+  store.addAudit({
+    evaluated_at: evaluatedAt,
+    decision_key: "homepage_banner",
+    profile_key: "profile-1",
+    rule_version: 1,
+    result: "suppressed",
+    outputs: {},
+    matched_rules: ["branch_1"],
+    errors: [],
+    inputs: {
+      request_source: "meiro_pipes_inapp_precompute",
+      surface: "homepage_hero",
+      sync_id: "sync-123"
+    }
+  });
+  store.addAudit({
+    evaluated_at: evaluatedAt,
+    decision_key: "homepage_alert",
+    profile_key: "profile-2",
+    rule_version: 1,
+    result: "suppressed",
+    outputs: {},
+    matched_rules: ["branch_1"],
+    errors: [],
+    inputs: {
+      request_source: "meiro_pipes_inapp_precompute",
+      surface: "homepage_hero",
+      sync_id: "sync-123"
+    }
+  });
+
+  const originalDateNow = Date.now;
+  Date.now = () => Date.parse("2026-06-05T11:00:00.000Z");
+  try {
+    const metrics = store.getMetrics({ window_hours: 24 });
+    assert.equal(metrics.precompute.run_count, 2);
+    assert.equal(metrics.precompute.profile_count, 62);
+    assert.equal(metrics.precompute.candidate_evaluations, 3);
+    assert.equal(metrics.precompute.eligible_profiles, 1);
+    assert.equal(metrics.precompute.suppressed_profiles, 61);
+    assert.equal(metrics.precompute.by_surface[0].key, "homepage_footer");
+    assert.equal(metrics.precompute.by_sync_id[0].key, "sync-empty");
+  } finally {
+    Date.now = originalDateNow;
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});

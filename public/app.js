@@ -67,6 +67,7 @@ const metricCards = document.querySelector("#metric-cards");
 const ruleDetailPanel = document.querySelector("#metrics-rule-detail");
 const clientEventsPanel = document.querySelector("#metrics-client-events");
 const clientTrafficPanel = document.querySelector("#metrics-client-traffic");
+const precomputePanel = document.querySelector("#metrics-precompute");
 const requestTrendPanel = document.querySelector("#metrics-request-trend");
 const overviewAlerts = document.querySelector("#overview-alerts");
 const overviewAnomalyHistory = document.querySelector("#overview-anomaly-history");
@@ -666,6 +667,7 @@ function renderMetrics(metrics) {
   const events = metrics.client_events || {};
   const runtime = metrics.runtime_requests || {};
   const rateLimit = metrics.client_rate_limit || {};
+  const precompute = metrics.precompute || {};
   const windowLabel = metrics.window?.label || "Selected window";
   const windowRequests = Number(requests.window ?? requests.last_24h ?? 0);
   const eventCounts = eventCountsByType(events.by_type || []);
@@ -677,6 +679,7 @@ function renderMetrics(metrics) {
     metricCard("Decisions", formatNumber(windowRequests), `${windowLabel} evaluations`, "D", "teal"),
     metricCard("Audience Reach", formatNumber(requests.unique_profiles_window ?? requests.unique_profiles), "unique profiles", "A", "blue"),
     metricCard("Eligible Rate", formatPercent(eligibilityRate), `${formatNumber(eligibleCount)} eligible outcomes`, "ER", "teal"),
+    metricCard("Precompute", formatNumber(precompute.profile_count || 0), `${formatNumber(precompute.eligible_profiles || 0)} eligible profiles`, "IP", "blue"),
     metricCard("Impression Rate", formatPercent(impressionRate), `${formatNumber(eventCounts.impression || 0)} impressions`, "IR", "blue"),
     metricCard("Conversion Rate", formatPercent(conversionRate), `${formatNumber(eventCounts.conversion || 0)} conversions`, "CR", "purple"),
     metricCard("Live Assets", formatNumber(rules.published), `${formatNumber(rules.draft)} drafts waiting`, "LA", "purple")
@@ -690,6 +693,7 @@ function renderMetrics(metrics) {
   loadCampaignRollups(metrics.window_hours);
   renderRequestTrend(metrics);
   renderClientTraffic(metrics.client_traffic || {});
+  renderPrecomputeMetrics(precompute);
   renderResultDistribution(metrics);
   renderRulesInventory(rules);
   renderOverviewFooter(metrics);
@@ -1635,6 +1639,79 @@ function renderClientTraffic(metrics = {}) {
       <div class="traffic-call-list">${trafficRecentRows(metrics.recent)}</div>
     </div>
   `;
+}
+
+function renderPrecomputeMetrics(metrics = {}) {
+  if (!precomputePanel) return;
+  const profileCount = Number(metrics.profile_count || 0);
+  if (!profileCount) {
+    precomputePanel.innerHTML = `
+      <div class="status-line">No Meiro Pipes in-app precompute profiles in the selected window.</div>
+      <div class="precompute-hint">Check that Pipes calls <code>/v1/client/surface/batch</code>, uses the same DEE URL as this UI, and sends <code>context.request_source</code> as <code>meiro_pipes_inapp_precompute</code>.</div>
+    `;
+    return;
+  }
+  precomputePanel.innerHTML = `
+    <div class="client-traffic-summary">
+      ${trafficKpi("Profiles", formatNumber(profileCount), `${formatNumber(metrics.candidate_evaluations || 0)} candidate evaluations`)}
+      ${trafficKpi("Eligible", formatNumber(metrics.eligible_profiles || 0), `${formatPercent(rate(metrics.eligible_profiles || 0, profileCount))} of profiles`)}
+      ${trafficKpi("Suppressed", formatNumber(metrics.suppressed_profiles || 0), "No eligible selected message")}
+      ${trafficKpi("Runs", formatNumber(metrics.run_count || 0), metrics.last_seen_at ? `Last ${formatTime(metrics.last_seen_at)}` : "No runs")}
+    </div>
+    <div class="client-traffic-groups precompute-groups">
+      ${precomputeGroup("Surfaces", metrics.by_surface)}
+      ${precomputeGroup("Sync IDs", metrics.by_sync_id)}
+      ${precomputeGroup("Candidate Results", (metrics.by_result || []).map((item) => ({ key: item.result, count: item.count })))}
+    </div>
+    <div class="precompute-recent">
+      <div class="editor-title">Recent Runs</div>
+      <div class="traffic-call-list">${precomputeRunRows(metrics.recent_runs)}</div>
+    </div>
+    <div class="precompute-recent">
+      <div class="editor-title">Recent Eligible Profiles</div>
+      <div class="traffic-call-list">${precomputeRecentRows(metrics.recent_profiles)}</div>
+    </div>
+  `;
+}
+
+function precomputeGroup(title, items = []) {
+  return `
+    <section class="traffic-group">
+      <div class="editor-title">${escapeHtml(title)}</div>
+      <div class="traffic-group-list">${
+        items?.length
+          ? items.map((item) => `
+            <div class="traffic-group-row">
+              <strong title="${escapeHtml(item.key || "-")}">${escapeHtml(item.key || "-")}</strong>
+              <span>${formatNumber(item.count || 0)}</span>
+            </div>
+          `).join("")
+          : `<div class="status-line">No rows</div>`
+      }</div>
+    </section>
+  `;
+}
+
+function precomputeRecentRows(items = []) {
+  return items.length ? items.map((item) => `
+    <div class="traffic-call-row">
+      <strong>${escapeHtml(item.profile_key || "-")}</strong>
+      <span>${escapeHtml(item.eligible ? "eligible" : item.errors ? "error" : "suppressed")}</span>
+      <em>${formatNumber(item.evaluations || 0)} evaluations</em>
+      <small>${item.last_seen_at ? escapeHtml(formatTime(item.last_seen_at)) : "-"}</small>
+    </div>
+  `).join("") : `<div class="status-line">No recent profiles</div>`;
+}
+
+function precomputeRunRows(items = []) {
+  return items.length ? items.map((item) => `
+    <div class="traffic-call-row">
+      <strong>${escapeHtml(item.surface || "-")}</strong>
+      <span>${formatNumber(item.profile_count || 0)} profiles</span>
+      <em>${formatNumber(item.candidate_evaluations || 0)} candidates</em>
+      <small>${item.received_at ? escapeHtml(formatTime(item.received_at)) : "-"}</small>
+    </div>
+  `).join("") : `<div class="status-line">No recent runs</div>`;
 }
 
 function trafficKpi(label, value, detail) {

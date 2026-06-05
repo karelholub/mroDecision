@@ -557,6 +557,45 @@ export class Store {
     this.db.prepare("DELETE FROM audit_log WHERE evaluated_at < ?").run(cutoff);
   }
 
+  addPrecomputeRun(input = {}) {
+    const receivedAt = input.received_at || createdAtNow();
+    const run = {
+      id: input.id || randomBytes(16).toString("hex"),
+      received_at: receivedAt,
+      source: input.source || "meiro_pipes_inapp_precompute",
+      surface: input.surface || "",
+      sync_id: input.sync_id || "",
+      profile_count: Number(input.profile_count || 0),
+      candidate_evaluations: Number(input.candidate_evaluations || 0),
+      eligible_count: Number(input.eligible_count || 0),
+      not_selected_count: Number(input.not_selected_count || 0),
+      error_count: Number(input.error_count || 0)
+    };
+    this.db
+      .prepare(
+        `INSERT INTO precompute_runs (
+          id, received_at, source, surface, sync_id, profile_count, candidate_evaluations,
+          eligible_count, not_selected_count, error_count, run_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        run.id,
+        run.received_at,
+        run.source,
+        run.surface,
+        run.sync_id,
+        run.profile_count,
+        run.candidate_evaluations,
+        run.eligible_count,
+        run.not_selected_count,
+        run.error_count,
+        stringify({ ...run, ...(input.metadata || {}) })
+      );
+    const cutoff = new Date(Date.now() - this.getAuditRetentionDays() * 24 * 60 * 60 * 1000).toISOString();
+    this.db.prepare("DELETE FROM precompute_runs WHERE received_at < ?").run(cutoff);
+    return run;
+  }
+
   addClientEvent(input) {
     const event = {
       event_id: input.event_id || `evt_${randomBytes(16).toString("hex")}`,
@@ -709,6 +748,14 @@ export class Store {
          ORDER BY event_type ASC`
       )
       .all(sinceWindow, since24h, sinceWindow);
+    const precomputeEntries = this.db
+      .prepare("SELECT entry_json FROM audit_log WHERE evaluated_at >= ? AND entry_json LIKE ? ORDER BY evaluated_at DESC LIMIT 5000")
+      .all(sinceWindow, '%"request_source":"meiro_pipes_inapp_precompute"%')
+      .map((row) => parse(row.entry_json));
+    const precomputeRuns = this.db
+      .prepare("SELECT * FROM precompute_runs WHERE received_at >= ? ORDER BY received_at DESC LIMIT 100")
+      .all(sinceWindow)
+      .map(rowToPrecomputeRun);
     return {
       generated_at: createdAtNow(),
       window: {
@@ -756,6 +803,7 @@ export class Store {
           total_unique_profiles: Number(row.unique_profiles || 0)
         }))
       },
+      precompute: precomputeMetrics(precomputeEntries, precomputeRuns),
       result_distribution: resultDistribution.map((row) => ({ result: row.result, count: Number(row.count || 0) })),
       rule_usage: ruleUsage.map((row) => ({
         decision_key: row.decision_key,
@@ -1983,6 +2031,20 @@ function migrate(db) {
       event_json TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS precompute_runs (
+      id TEXT PRIMARY KEY,
+      received_at TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT '',
+      surface TEXT NOT NULL DEFAULT '',
+      sync_id TEXT NOT NULL DEFAULT '',
+      profile_count INTEGER NOT NULL DEFAULT 0,
+      candidate_evaluations INTEGER NOT NULL DEFAULT 0,
+      eligible_count INTEGER NOT NULL DEFAULT 0,
+      not_selected_count INTEGER NOT NULL DEFAULT 0,
+      error_count INTEGER NOT NULL DEFAULT 0,
+      run_json TEXT NOT NULL DEFAULT '{}'
+    );
+
     CREATE TABLE IF NOT EXISTS api_tokens (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -2044,6 +2106,8 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_client_events_decision_time ON client_events(decision_key, occurred_at);
     CREATE INDEX IF NOT EXISTS idx_client_events_profile_time ON client_events(profile_key, occurred_at);
     CREATE INDEX IF NOT EXISTS idx_client_events_type_time ON client_events(event_type, occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_precompute_runs_time ON precompute_runs(received_at);
+    CREATE INDEX IF NOT EXISTS idx_precompute_runs_surface_time ON precompute_runs(surface, received_at);
     CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash);
     CREATE INDEX IF NOT EXISTS idx_schema_items_kind ON schema_items(kind, name);
     CREATE INDEX IF NOT EXISTS idx_lookup_table_versions ON lookup_table_versions(id, version);
@@ -2736,6 +2800,97 @@ function conversionRate(events = {}) {
   const exposures = Number(events.exposure?.count || 0);
   if (!exposures) return 0;
   return Number(events.conversion?.count || 0) / exposures;
+}
+
+function precomputeMetrics(entries = [], runs = []) {
+  const profiles = new Map();
+  const bySurface = new Map();
+  const bySync = new Map();
+  const byResult = countBy(entries, (entry) => entry.result || "unknown");
+  let lastSeenAt = "";
+  for (const entry of entries) {
+    const profileKey = entry.profile_key || "";
+    if (!profileKey) continue;
+    const inputs = entry.inputs || {};
+    const surface = inputs.surface || entry.outputs?.surface || "";
+    const syncId = inputs.sync_id || "";
+    const current = profiles.get(profileKey) || {
+      profile_key: profileKey,
+      eligible: false,
+      errors: 0,
+      evaluations: 0,
+      last_seen_at: ""
+    };
+    current.eligible = current.eligible || entry.result === "eligible";
+    current.errors += Array.isArray(entry.errors) && entry.errors.length ? 1 : 0;
+    current.evaluations += 1;
+    current.last_seen_at = maxIso(current.last_seen_at, entry.evaluated_at);
+    profiles.set(profileKey, current);
+    if (surface) incrementSimple(bySurface, surface);
+    if (syncId) incrementSimple(bySync, syncId);
+    lastSeenAt = maxIso(lastSeenAt, entry.evaluated_at);
+  }
+  const profileList = [...profiles.values()];
+  const eligibleProfiles = profileList.filter((profile) => profile.eligible).length;
+  const errorProfiles = profileList.filter((profile) => !profile.eligible && profile.errors > 0).length;
+  const suppressedProfiles = profileList.filter((profile) => !profile.eligible && profile.errors === 0).length;
+  for (const run of runs) {
+    if (run.surface) incrementSimple(bySurface, run.surface, Number(run.profile_count || 0));
+    if (run.sync_id) incrementSimple(bySync, run.sync_id, Number(run.profile_count || 0));
+    lastSeenAt = maxIso(lastSeenAt, run.received_at);
+  }
+  const runProfiles = runs.reduce((sum, run) => sum + Number(run.profile_count || 0), 0);
+  const runCandidateEvaluations = runs.reduce((sum, run) => sum + Number(run.candidate_evaluations || 0), 0);
+  const runEligible = runs.reduce((sum, run) => sum + Number(run.eligible_count || 0), 0);
+  const runNotSelected = runs.reduce((sum, run) => sum + Number(run.not_selected_count || 0), 0);
+  const runErrors = runs.reduce((sum, run) => sum + Number(run.error_count || 0), 0);
+  return {
+    source: "meiro_pipes_inapp_precompute",
+    run_count: runs.length,
+    candidate_evaluations: Math.max(entries.length, runCandidateEvaluations),
+    profile_count: Math.max(profileList.length, runProfiles),
+    eligible_profiles: Math.max(eligibleProfiles, runEligible),
+    suppressed_profiles: Math.max(suppressedProfiles, runNotSelected),
+    error_profiles: Math.max(errorProfiles, runErrors),
+    last_seen_at: lastSeenAt,
+    by_result: Object.entries(byResult).map(([result, count]) => ({ result, count })).sort((left, right) => right.count - left.count || left.result.localeCompare(right.result)),
+    by_surface: topSimple(bySurface),
+    by_sync_id: topSimple(bySync),
+    recent_runs: runs.slice(0, 8),
+    recent_profiles: profileList
+      .sort((left, right) => String(right.last_seen_at).localeCompare(String(left.last_seen_at)))
+      .slice(0, 8)
+  };
+}
+
+function incrementSimple(map, key, amount = 1) {
+  map.set(key, (map.get(key) || 0) + amount);
+}
+
+function topSimple(map) {
+  return [...map.entries()]
+    .map(([key, count]) => ({ key, count }))
+    .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key))
+    .slice(0, 8);
+}
+
+function maxIso(left = "", right = "") {
+  return String(right || "").localeCompare(String(left || "")) > 0 ? right : left;
+}
+
+function rowToPrecomputeRun(row) {
+  return {
+    id: row.id,
+    received_at: row.received_at,
+    source: row.source,
+    surface: row.surface,
+    sync_id: row.sync_id,
+    profile_count: Number(row.profile_count || 0),
+    candidate_evaluations: Number(row.candidate_evaluations || 0),
+    eligible_count: Number(row.eligible_count || 0),
+    not_selected_count: Number(row.not_selected_count || 0),
+    error_count: Number(row.error_count || 0)
+  };
 }
 
 function normalizeMetricsWindowHours(value) {

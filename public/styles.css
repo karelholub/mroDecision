@@ -2512,6 +2512,37 @@ header {
   min-width: 0;
 }
 
+.precompute-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.precompute-hint {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.precompute-hint code {
+  color: var(--ink);
+}
+
+.precompute-groups,
+.precompute-recent {
+  min-width: 0;
+}
+
+.precompute-recent .traffic-call-row {
+  grid-template-columns: minmax(160px, 1fr) 90px 120px minmax(130px, 0.8fr);
+  min-width: 0;
+}
+
 .client-traffic-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
