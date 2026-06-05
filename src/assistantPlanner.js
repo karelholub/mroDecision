@@ -38,30 +38,74 @@ export function createAssistantPlan(input = {}, context = {}) {
   };
 }
 
-export function applyAssistantPlan(plan = {}, store, author = "assistant") {
+export function applyAssistantPlan(plan = {}, store, author = "assistant", options = {}) {
   if (!plan || !Array.isArray(plan.actions)) {
     badRequest("Assistant plan must include actions");
   }
+  const approved = Array.isArray(options.approved_action_ids) ? new Set(options.approved_action_ids.map(String)) : null;
   const applied = [];
+  const skipped = [];
+  const rollback = [];
   for (const item of plan.actions) {
+    const actionKey = assistantActionKey(item);
+    if (approved && !approved.has(actionKey) && !approved.has(String(item.id || ""))) {
+      skipped.push({ action: item.action, id: item.id, action_key: actionKey, status: "not_approved" });
+      continue;
+    }
     if (item.action === "upsert_message") {
+      const before = store.getMessage?.(item.id);
       const message = store.upsertMessage(item.id, item.object || {}, author);
-      applied.push({ action: item.action, id: message.id, status: "draft_dependency_saved" });
+      applied.push({ action: item.action, id: message.id, action_key: actionKey, status: "draft_dependency_saved" });
+      rollback.push(before
+        ? { action: "restore_message", id: message.id, object: before }
+        : { action: "manual_review", id: message.id, object_type: "message", reason: "Message was created by the assistant and cannot be deleted automatically." });
       continue;
     }
     if (item.action === "create_rule_draft") {
       const ruleSet = store.createRuleSet(item.object || {}, author);
-      applied.push({ action: item.action, id: ruleSet.decision_key, status: "draft_created" });
+      applied.push({ action: item.action, id: ruleSet.decision_key, action_key: actionKey, status: "draft_created" });
+      rollback.push({ action: "archive_rule_draft", id: ruleSet.decision_key });
       continue;
     }
     if (item.action === "update_rule_draft") {
+      const before = store.getRuleSet?.(item.id);
       const ruleSet = store.updateDraft(item.id, item.object || {}, author);
-      applied.push({ action: item.action, id: ruleSet.decision_key, status: "draft_updated" });
+      applied.push({ action: item.action, id: ruleSet.decision_key, action_key: actionKey, status: "draft_updated" });
+      if (before) rollback.push({ action: "restore_rule_draft", id: ruleSet.decision_key, object: before });
       continue;
     }
     badRequest(`Unsupported assistant action: ${item.action}`);
   }
-  return { applied };
+  return { applied, skipped, rollback };
+}
+
+export function rollbackAssistantPlan(rollback = [], store, author = "assistant") {
+  if (!Array.isArray(rollback)) badRequest("Assistant rollback must be an array");
+  const restored = [];
+  const skipped = [];
+  for (const item of rollback) {
+    if (item.action === "restore_message") {
+      const message = store.upsertMessage(item.id, item.object || {}, author);
+      restored.push({ action: item.action, id: message.id, status: "message_restored" });
+      continue;
+    }
+    if (item.action === "restore_rule_draft") {
+      const ruleSet = store.updateDraft(item.id, item.object || {}, author);
+      restored.push({ action: item.action, id: ruleSet.decision_key, status: "draft_restored" });
+      continue;
+    }
+    if (item.action === "archive_rule_draft") {
+      const ruleSet = store.archiveRuleSet(item.id, author);
+      restored.push({ action: item.action, id: ruleSet.decision_key, status: "created_draft_archived" });
+      continue;
+    }
+    skipped.push({ action: item.action, id: item.id, status: "manual_review", reason: item.reason || "Rollback action is not automated." });
+  }
+  return { restored, skipped };
+}
+
+function assistantActionKey(item = {}) {
+  return `${item.action || "unknown"}:${item.id || ""}`;
 }
 
 function buildRuleSet({ type, name, decisionKey, surface, conditions, variants, messageId, input }) {

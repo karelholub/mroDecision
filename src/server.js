@@ -5,7 +5,7 @@ import { requireScope, setAuthStore } from "./auth.js";
 import { createAssistantGovernanceReport } from "./assistantGovernance.js";
 import { createAssistantPlanWithProvider, testAssistantProviderConnection } from "./assistantProvider.js";
 import { assistantProviderMetrics } from "./assistantProviderMetrics.js";
-import { applyAssistantPlan } from "./assistantPlanner.js";
+import { applyAssistantPlan, rollbackAssistantPlan } from "./assistantPlanner.js";
 import { config } from "./config.js";
 import { createClientResultCache } from "./clientCache.js";
 import { createClientTrafficMetrics } from "./clientTrafficMetrics.js";
@@ -231,10 +231,22 @@ async function routeApi(req, res, url) {
     validateAssistantPlan(body.plan);
     if (body.plan.mode !== "draft_only") badRequest("Only draft assistant plans can be applied");
     if (body.plan.guardrails?.errors?.length) badRequest("Assistant plan has blocking guardrail errors");
-    const applied = applyAssistantPlan(body.plan, store, req.auth.name);
+    const applied = applyAssistantPlan(body.plan, store, req.auth.name, {
+      approved_action_ids: body.approved_action_ids
+    });
     await store.save();
     clientResultCache.clear();
     sendJson(res, 200, applied);
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/v1/assistant/rollback") {
+    requireScope(req, "editor");
+    const body = await readJson(req, config.requestBodyLimitBytes);
+    const result = rollbackAssistantPlan(body.rollback, store, req.auth.name);
+    await store.save();
+    clientResultCache.clear();
+    sendJson(res, 200, result);
     return;
   }
 

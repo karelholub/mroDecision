@@ -1038,6 +1038,10 @@ aside input {
 }
 
 .assistant-handoff-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: start;
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
 }
@@ -1082,12 +1086,36 @@ aside input {
   overflow-wrap: anywhere;
 }
 
+.assistant-action-approval {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.assistant-action-approval input {
+  width: 15px;
+  height: 15px;
+}
+
 .assistant-handoff-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
   min-width: 0;
+}
+
+.assistant-handoff-badge {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--muted);
+  background: var(--panel-soft);
+  font-size: 0.76rem;
+  white-space: nowrap;
 }
 
 .experiment-kpi-strip {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyAssistantPlan, createAssistantPlan } from "../src/assistantPlanner.js";
+import { applyAssistantPlan, createAssistantPlan, rollbackAssistantPlan } from "../src/assistantPlanner.js";
 
 test("assistant planner creates guarded experiment draft plan", () => {
   const plan = createAssistantPlan({
@@ -59,6 +59,12 @@ test("assistant planner flags broad ambiguous audience assumptions", () => {
 test("assistant apply only uses draft-safe store methods", () => {
   const calls = [];
   const fakeStore = {
+    getMessage() {
+      return null;
+    },
+    getRuleSet() {
+      return null;
+    },
     upsertMessage(id) {
       calls.push(["upsertMessage", id]);
       return { id };
@@ -82,4 +88,66 @@ test("assistant apply only uses draft-safe store methods", () => {
   assert.deepEqual(calls.map((item) => item[0]), ["upsertMessage", "createRuleSet"]);
   assert.equal(result.applied.length, 2);
   assert.equal(result.applied.at(-1).status, "draft_created");
+  assert.equal(result.rollback.length, 2);
+});
+
+test("assistant apply respects approved action ids", () => {
+  const calls = [];
+  const fakeStore = {
+    getRuleSet(key) {
+      return { decision_key: key, draft: { fallback: { result: "old", outputs: {} }, branches: [] } };
+    },
+    updateDraft(key) {
+      calls.push(["updateDraft", key]);
+      return { decision_key: key };
+    },
+    upsertMessage(id) {
+      calls.push(["upsertMessage", id]);
+      return { id };
+    }
+  };
+  const plan = {
+    mode: "draft_only",
+    actions: [
+      { action: "upsert_message", id: "message_a", object: { id: "message_a" } },
+      { action: "update_rule_draft", id: "rule_a", object: { decision_key: "rule_a", draft: { fallback: { result: "ok", outputs: {} }, branches: [] } } }
+    ]
+  };
+
+  const result = applyAssistantPlan(plan, fakeStore, "tester", {
+    approved_action_ids: ["update_rule_draft:rule_a"]
+  });
+
+  assert.deepEqual(calls, [["updateDraft", "rule_a"]]);
+  assert.equal(result.applied.length, 1);
+  assert.equal(result.skipped.length, 1);
+  assert.equal(result.rollback[0].action, "restore_rule_draft");
+});
+
+test("assistant rollback restores automated rollback actions", () => {
+  const calls = [];
+  const fakeStore = {
+    upsertMessage(id) {
+      calls.push(["upsertMessage", id]);
+      return { id };
+    },
+    updateDraft(key) {
+      calls.push(["updateDraft", key]);
+      return { decision_key: key };
+    },
+    archiveRuleSet(key) {
+      calls.push(["archiveRuleSet", key]);
+      return { decision_key: key };
+    }
+  };
+  const result = rollbackAssistantPlan([
+    { action: "restore_message", id: "message_a", object: { id: "message_a" } },
+    { action: "restore_rule_draft", id: "rule_a", object: { decision_key: "rule_a" } },
+    { action: "archive_rule_draft", id: "rule_b" },
+    { action: "manual_review", id: "message_b", reason: "Created message cannot be deleted." }
+  ], fakeStore, "tester");
+
+  assert.deepEqual(calls.map((item) => item[0]), ["upsertMessage", "updateDraft", "archiveRuleSet"]);
+  assert.equal(result.restored.length, 3);
+  assert.equal(result.skipped.length, 1);
 });

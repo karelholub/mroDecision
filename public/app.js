@@ -125,6 +125,7 @@ let cachedEvaluationProfiles = [];
 let cachedConditionBlocks = [];
 let cachedConfigBundle = null;
 let cachedAssistantPlan = null;
+let cachedAssistantRollback = [];
 let assistantChatHistory = [];
 let selectedExperimentKey = null;
 let selectedLookupMetadata = {};
@@ -990,6 +991,7 @@ async function planAssistantRequest() {
     removeAssistantMessage(pendingMessage);
     pendingMessage = null;
     cachedAssistantPlan = response.plan;
+    cachedAssistantRollback = [];
     renderAssistantPlan(cachedAssistantPlan);
     appendAssistantMessage(
       "assistant",
@@ -999,6 +1001,7 @@ async function planAssistantRequest() {
   } catch (error) {
     removeAssistantMessage(pendingMessage);
     cachedAssistantPlan = null;
+    cachedAssistantRollback = [];
     appendAssistantMessage("assistant", "Could not create a plan", error.message);
     if (guardrails) guardrails.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
     if (output) output.textContent = "{}";
@@ -1014,23 +1017,57 @@ async function applyAssistantPlan() {
   const applyButton = document.querySelector("#assistant-apply");
   try {
     applyButton.disabled = true;
+    const approvedActionIds = selectedAssistantActionIds();
+    if (!approvedActionIds.length) throw new Error("Select at least one assistant action to apply.");
     const response = await api("/v1/assistant/apply", {
       method: "POST",
-      body: JSON.stringify({ plan: cachedAssistantPlan })
+      body: JSON.stringify({ plan: cachedAssistantPlan, approved_action_ids: approvedActionIds })
     });
+    cachedAssistantRollback = response.rollback || [];
     document.querySelector("#assistant-guardrails").innerHTML = [
       statusItem("Applied", response.applied?.length || 0),
+      statusItem("Skipped", response.skipped?.length || 0),
+      statusItem("Rollback", cachedAssistantRollback.length ? `${cachedAssistantRollback.length} prepared` : "Manual review"),
       statusItem("Mode", "Draft only"),
       statusItem("Publish", "Manual review required")
     ].join("");
     appendAssistantMessage("assistant", "Draft saved", "I saved the assistant changes as drafts. Use the review buttons before publishing.");
     await Promise.all([loadRules(), loadMessages()]);
-    renderAssistantHandoff(cachedAssistantPlan, response.applied || [], { applied: true });
+    renderAssistantHandoff(cachedAssistantPlan, response.applied || [], { applied: true, rollback: cachedAssistantRollback });
   } catch (error) {
     document.querySelector("#assistant-guardrails").innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
     appendAssistantMessage("assistant", "Could not apply draft", error.message);
     applyButton.disabled = false;
   }
+}
+
+async function rollbackAssistantChanges() {
+  if (!cachedAssistantRollback.length) return;
+  try {
+    const response = await api("/v1/assistant/rollback", {
+      method: "POST",
+      body: JSON.stringify({ rollback: cachedAssistantRollback })
+    });
+    cachedAssistantRollback = [];
+    document.querySelector("#assistant-guardrails").innerHTML = [
+      statusItem("Restored", response.restored?.length || 0),
+      statusItem("Manual review", response.skipped?.length || 0),
+      statusItem("Mode", "Draft rollback")
+    ].join("");
+    appendAssistantMessage("assistant", "Rollback complete", "I restored the automated rollback items. Any manual-review items are listed in the handoff panel.");
+    await Promise.all([loadRules(), loadMessages()]);
+    renderAssistantHandoff(cachedAssistantPlan, [], { applied: false });
+    document.querySelector("#assistant-apply").disabled = false;
+  } catch (error) {
+    document.querySelector("#assistant-guardrails").innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
+    appendAssistantMessage("assistant", "Could not rollback draft changes", error.message);
+  }
+}
+
+function selectedAssistantActionIds() {
+  return Array.from(document.querySelectorAll("[data-assistant-action-approval]:checked"))
+    .map((input) => input.value)
+    .filter(Boolean);
 }
 
 function renderAssistantPlan(plan) {
@@ -1226,23 +1263,24 @@ function assistantClarificationRow(item) {
 function renderAssistantHandoff(plan, applied = [], options = {}) {
   const target = document.querySelector("#assistant-handoff");
   if (!target) return;
-  const ruleActions = (plan.actions || []).filter((item) => ["create_rule_draft", "update_rule_draft"].includes(item.action));
-  if (!ruleActions.length) {
+  const actions = plan.actions || [];
+  if (!actions.length) {
     target.hidden = true;
     target.innerHTML = "";
     return;
   }
-  const appliedById = new Map(applied.map((item) => [item.id, item]));
+  const appliedByKey = new Map(applied.map((item) => [item.action_key || `${item.action}:${item.id}`, item]));
   target.hidden = false;
   target.innerHTML = `
     <div class="assistant-handoff-header">
       <div>
-        <strong>${options.applied ? "Drafts ready for review" : "Affected drafts"}</strong>
-        <span>${options.applied ? "Assistant changes are saved as drafts. Publishing remains a separate review step." : "Review what will be created or updated before applying."}</span>
+        <strong>${options.applied ? "Drafts ready for review" : "Approve assistant actions"}</strong>
+        <span>${options.applied ? "Assistant changes are saved as drafts. Publishing remains a separate review step." : "Choose exactly which draft actions should be saved. Dependencies are shown as separate actions."}</span>
       </div>
+      ${options.applied && options.rollback?.length ? `<button type="button" data-assistant-action="rollback-assistant">Rollback Applied Drafts</button>` : ""}
     </div>
     <div class="assistant-handoff-list">
-      ${ruleActions.map((item) => assistantHandoffRow(item, appliedById.get(item.id), options)).join("")}
+      ${actions.map((item) => assistantHandoffRow(item, appliedByKey.get(assistantActionKey(item)), options)).join("")}
     </div>
   `;
 }
@@ -1251,31 +1289,57 @@ function assistantHandoffRow(action, applied, options = {}) {
   const object = action.object || {};
   const stats = draftPublishStats(object.draft || {});
   const experiment = object.metadata?.experiment;
+  const actionKey = assistantActionKey(action);
+  const isRuleAction = ["create_rule_draft", "update_rule_draft"].includes(action.action);
   const validation = [
-    `${stats.branches} branch${stats.branches === 1 ? "" : "es"}`,
-    `${stats.outputs} output${stats.outputs === 1 ? "" : "s"}`,
+    isRuleAction ? `${stats.branches} branch${stats.branches === 1 ? "" : "es"}` : null,
+    isRuleAction ? `${stats.outputs} output${stats.outputs === 1 ? "" : "s"}` : null,
+    action.action === "upsert_message" ? `${object.metadata?.template_type || "message"} template` : null,
     object.cache_policy?.client_ttl ? `${object.cache_policy.client_ttl}s TTL` : "No response TTL",
     experiment ? `${experiment.variants?.length || 0} variants` : null
   ].filter(Boolean).join(" · ");
-  const actionLabel = action.action === "update_rule_draft" ? "Update draft" : "Create draft";
+  const actionLabel = assistantActionLabel(action.action);
   return `
     <div class="assistant-handoff-row">
       <div>
+        ${options.applied ? "" : `
+          <label class="assistant-action-approval">
+            <input type="checkbox" data-assistant-action-approval value="${escapeHtml(actionKey)}" checked />
+            <span>Approve</span>
+          </label>
+        `}
         <strong>${escapeHtml(object.name || action.id)}</strong>
         <span>${escapeHtml(actionLabel)} · ${escapeHtml(object.decision_key || action.id)} · ${escapeHtml(validation)}</span>
         ${applied ? `<small>${escapeHtml(applied.status || "draft_saved")}</small>` : ""}
       </div>
       <div class="assistant-handoff-actions">
-        <button type="button" data-assistant-action="open-draft" data-rule-key="${escapeHtml(action.id)}" ${options.applied ? "" : "disabled"}>Review Draft</button>
-        <button type="button" data-assistant-action="publish-review" data-rule-key="${escapeHtml(action.id)}" ${options.applied ? "" : "disabled"}>Open Publish Review</button>
+        ${isRuleAction ? `
+          <button type="button" data-assistant-action="open-draft" data-rule-key="${escapeHtml(action.id)}" ${options.applied ? "" : "disabled"}>Review Draft</button>
+          <button type="button" data-assistant-action="publish-review" data-rule-key="${escapeHtml(action.id)}" ${options.applied ? "" : "disabled"}>Open Publish Review</button>
+        ` : `<span class="assistant-handoff-badge">Dependency</span>`}
       </div>
     </div>
   `;
 }
 
+function assistantActionKey(action = {}) {
+  return `${action.action || "unknown"}:${action.id || ""}`;
+}
+
+function assistantActionLabel(action) {
+  if (action === "upsert_message") return "Save message";
+  if (action === "update_rule_draft") return "Update rule draft";
+  if (action === "create_rule_draft") return "Create rule draft";
+  return action || "Action";
+}
+
 async function handleAssistantHandoffAction(event) {
   const button = event.target.closest("[data-assistant-action]");
   if (!button || button.disabled) return;
+  if (button.dataset.assistantAction === "rollback-assistant") {
+    await rollbackAssistantChanges();
+    return;
+  }
   const key = button.dataset.ruleKey;
   if (!key) return;
   try {

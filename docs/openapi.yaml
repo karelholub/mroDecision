@@ -392,6 +392,11 @@ paths:
               properties:
                 plan:
                   $ref: "#/components/schemas/AssistantPlan"
+                approved_action_ids:
+                  type: array
+                  description: Optional list of approved action keys such as create_rule_draft:homepage_banner. If omitted, all actions are applied for backward compatibility.
+                  items:
+                    type: string
       responses:
         "200":
           description: Applied draft actions
@@ -401,6 +406,54 @@ paths:
                 type: object
                 properties:
                   applied:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  skipped:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  rollback:
+                    type: array
+                    description: Server-generated rollback actions for restoring affected drafts where possible.
+                    items:
+                      type: object
+                      additionalProperties: true
+  /v1/assistant/rollback:
+    post:
+      summary: Roll back assistant-applied draft changes
+      description: Applies automated rollback actions returned by /v1/assistant/apply. Created messages may require manual review because messages are not deleted automatically.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rollback]
+              properties:
+                rollback:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+      responses:
+        "200":
+          description: Rollback result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  restored:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  skipped:
                     type: array
                     items:
                       type: object
