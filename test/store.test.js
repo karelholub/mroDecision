@@ -621,7 +621,13 @@ test("metrics expose Meiro Pipes in-app precompute profile rollups", async () =>
     candidate_evaluations: 0,
     eligible_count: 0,
     not_selected_count: 60,
-    error_count: 0
+    error_count: 0,
+    metadata: {
+      diagnostics: {
+        requested_surface: "homepage_footer",
+        no_candidate_reason: "no_published_inapp_rules_for_surface"
+      }
+    }
   });
   store.addAudit({
     evaluated_at: evaluatedAt,
@@ -665,6 +671,8 @@ test("metrics expose Meiro Pipes in-app precompute profile rollups", async () =>
     assert.equal(metrics.precompute.suppressed_profiles, 61);
     assert.equal(metrics.precompute.by_surface[0].key, "homepage_footer");
     assert.equal(metrics.precompute.by_sync_id[0].key, "sync-empty");
+    const emptyRun = metrics.precompute.recent_runs.find((run) => run.sync_id === "sync-empty");
+    assert.equal(emptyRun.diagnostics.no_candidate_reason, "no_published_inapp_rules_for_surface");
   } finally {
     Date.now = originalDateNow;
     await rm(dataDir, { recursive: true, force: true });

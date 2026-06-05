@@ -2879,6 +2879,7 @@ function maxIso(left = "", right = "") {
 }
 
 function rowToPrecomputeRun(row) {
+  const payload = parse(row.run_json || "{}");
   return {
     id: row.id,
     received_at: row.received_at,
@@ -2889,7 +2890,8 @@ function rowToPrecomputeRun(row) {
     candidate_evaluations: Number(row.candidate_evaluations || 0),
     eligible_count: Number(row.eligible_count || 0),
     not_selected_count: Number(row.not_selected_count || 0),
-    error_count: Number(row.error_count || 0)
+    error_count: Number(row.error_count || 0),
+    diagnostics: payload.diagnostics || null
   };
 }
 

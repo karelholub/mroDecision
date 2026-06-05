@@ -1663,6 +1663,7 @@ function renderPrecomputeMetrics(metrics = {}) {
       ${precomputeGroup("Sync IDs", metrics.by_sync_id)}
       ${precomputeGroup("Candidate Results", (metrics.by_result || []).map((item) => ({ key: item.result, count: item.count })))}
     </div>
+    ${precomputeDiagnosticHint(metrics)}
     <div class="precompute-recent">
       <div class="editor-title">Recent Runs</div>
       <div class="traffic-call-list">${precomputeRunRows(metrics.recent_runs)}</div>
@@ -1672,6 +1673,31 @@ function renderPrecomputeMetrics(metrics = {}) {
       <div class="traffic-call-list">${precomputeRecentRows(metrics.recent_profiles)}</div>
     </div>
   `;
+}
+
+function precomputeDiagnosticHint(metrics = {}) {
+  const recent = (metrics.recent_runs || []).find((item) => item.diagnostics?.no_candidate_reason);
+  if (!recent) return "";
+  const diagnostics = recent.diagnostics || {};
+  const surface = diagnostics.requested_surface || recent.surface || "-";
+  const surfaces = (diagnostics.available_surfaces || []).map((item) => item.surface).filter(Boolean).slice(0, 5);
+  return `
+    <div class="precompute-hint">
+      Latest zero-candidate run for <strong>${escapeHtml(surface)}</strong>: ${escapeHtml(precomputeReasonLabel(diagnostics.no_candidate_reason))}
+      ${surfaces.length ? ` Available published surfaces: ${escapeHtml(surfaces.join(", "))}.` : ""}
+    </div>
+  `;
+}
+
+function precomputeReasonLabel(reason = "") {
+  const labels = {
+    no_published_inapp_rules: "no published in-app message rules exist",
+    client_token_filters_all_inapp_rules: "the client token cannot access any published in-app rules",
+    client_token_filters_requested_surface: "published rules exist for this surface, but the client token filters them out",
+    no_published_inapp_rules_for_surface: "no published in-app rules match this surface",
+    surface_required: "surface is missing"
+  };
+  return labels[reason] || reason || "no diagnostic reason";
 }
 
 function precomputeGroup(title, items = []) {
@@ -1708,7 +1734,7 @@ function precomputeRunRows(items = []) {
     <div class="traffic-call-row">
       <strong>${escapeHtml(item.surface || "-")}</strong>
       <span>${formatNumber(item.profile_count || 0)} profiles</span>
-      <em>${formatNumber(item.candidate_evaluations || 0)} candidates</em>
+      <em title="${escapeHtml(precomputeReasonLabel(item.diagnostics?.no_candidate_reason || ""))}">${formatNumber(item.candidate_evaluations || 0)} candidates</em>
       <small>${item.received_at ? escapeHtml(formatTime(item.received_at)) : "-"}</small>
     </div>
   `).join("") : `<div class="status-line">No recent runs</div>`;

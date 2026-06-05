@@ -33,6 +33,8 @@ Use [inapp-precompute-send.js](inapp-precompute-send.js) when Pipes exports a fu
 
 The downstream record includes `eligible`, `decision_key`, `message_id`, expanded `message_content`, TTL/cache hints, candidates, errors, and `sync_id` so Meiro can expose the latest prepared in-app response through profile attributes or a decision event.
 
+Batch responses include `summary.candidate_evaluations` and `diagnostics`. If Pipes sends many profiles but Overview shows `0 candidates`, check `diagnostics.no_candidate_reason`. The most common cause is that no `published` `inapp_message` rule has the same `surface` as the batch request, or the client token allow-list excludes that rule.
+
 ## UI Templates
 
 The embedded DEE UI includes an Integration tab that generates a ready-to-copy request template from the saved Meiro and DEE runtime settings. Use it after creating an evaluate-only API token in Settings.

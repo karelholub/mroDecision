@@ -2250,6 +2250,8 @@ components:
               profile_cache:
                 type: object
                 additionalProperties: true
+        diagnostics:
+          $ref: "#/components/schemas/ClientSurfaceDiagnostics"
     ClientSurfaceBatchResponse:
       type: object
       required: [surface, evaluated_at, count, summary, results]
@@ -2271,6 +2273,11 @@ components:
               type: integer
             errors:
               type: integer
+            candidate_evaluations:
+              type: integer
+              description: Total in-app candidate evaluations across all profiles in the batch.
+        diagnostics:
+          $ref: "#/components/schemas/ClientSurfaceDiagnostics"
         results:
           type: array
           items:
@@ -2286,6 +2293,57 @@ components:
                         type: string
                       message:
                         type: string
+    ClientSurfaceDiagnostics:
+      type: object
+      description: Explains which published in-app rules were available for the requested surface and token.
+      properties:
+        requested_surface:
+          type: string
+        limit:
+          type: integer
+        published_inapp_rules:
+          type: integer
+        allowed_inapp_rules:
+          type: integer
+        matched_rule_count:
+          type: integer
+        evaluated_rule_count:
+          type: integer
+        no_candidate_reason:
+          type: string
+          enum:
+            - ""
+            - no_published_inapp_rules
+            - client_token_filters_all_inapp_rules
+            - client_token_filters_requested_surface
+            - no_published_inapp_rules_for_surface
+            - surface_required
+        matched_rules:
+          type: array
+          items:
+            type: object
+            properties:
+              decision_key:
+                type: string
+              name:
+                type: string
+              priority:
+                type: integer
+              surface:
+                type: string
+              status:
+                type: string
+        available_surfaces:
+          type: array
+          items:
+            type: object
+            properties:
+              surface:
+                type: string
+              count:
+                type: integer
+        token_filtered_rule_count:
+          type: integer
     ClientEventRequest:
       type: object
       required: [decision_key, profile_key]

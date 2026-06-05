@@ -2224,16 +2224,8 @@ function messageAvailability(message, ruleSet, request, evaluatedAt) {
 }
 
 async function evaluateClientSurface(body, auth) {
-  const ruleSets = store
-    .listRuleSets()
-    .filter((ruleSet) =>
-      ruleSet.type === "inapp_message" &&
-      ruleSet.status === "published" &&
-      ruleSet.surface === body.surface &&
-      (!auth.decision_keys?.length || auth.decision_keys.includes(ruleSet.decision_key))
-    )
-    .sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0) || a.decision_key.localeCompare(b.decision_key))
-    .slice(0, Math.min(Number(body.limit || 20), 50));
+  const plan = surfaceEvaluationPlan(body, auth);
+  const ruleSets = plan.rule_sets;
 
   const candidates = [];
   let selected = null;
@@ -2269,12 +2261,14 @@ async function evaluateClientSurface(body, auth) {
     surface: body.surface,
     profile_key: body.profile_key,
     selected,
-    candidates
+    candidates,
+    diagnostics: plan.diagnostics
   };
 }
 
 async function evaluateClientSurfaceBatch(req, body) {
   const startedAt = new Date().toISOString();
+  const batchPlan = surfaceEvaluationPlan(body, req.auth);
   const results = [];
   let eligible = 0;
   let suppressed = 0;
@@ -2321,7 +2315,8 @@ async function evaluateClientSurfaceBatch(req, body) {
     candidate_evaluations: candidateEvaluations,
     eligible_count: eligible,
     not_selected_count: suppressed,
-    error_count: errors
+    error_count: errors,
+    metadata: { diagnostics: batchPlan.diagnostics }
   });
 
   return {
@@ -2334,8 +2329,66 @@ async function evaluateClientSurfaceBatch(req, body) {
       errors,
       candidate_evaluations: candidateEvaluations
     },
+    diagnostics: batchPlan.diagnostics,
     results
   };
+}
+
+function surfaceEvaluationPlan(body = {}, auth = {}) {
+  const limit = Math.min(Number(body.limit || 20), 50);
+  const allPublishedInApp = store
+    .listRuleSets()
+    .filter((ruleSet) => ruleSet.type === "inapp_message" && ruleSet.status === "published");
+  const allowed = allPublishedInApp.filter((ruleSet) => !auth.decision_keys?.length || auth.decision_keys.includes(ruleSet.decision_key));
+  const matchingBeforeLimit = allowed
+    .filter((ruleSet) => ruleSet.surface === body.surface)
+    .sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0) || a.decision_key.localeCompare(b.decision_key));
+  const blockedByToken = allPublishedInApp.filter((ruleSet) => ruleSet.surface === body.surface && !allowed.includes(ruleSet));
+  const ruleSets = matchingBeforeLimit.slice(0, limit);
+  const diagnostics = {
+    requested_surface: body.surface || "",
+    limit,
+    published_inapp_rules: allPublishedInApp.length,
+    allowed_inapp_rules: allowed.length,
+    matched_rule_count: matchingBeforeLimit.length,
+    evaluated_rule_count: ruleSets.length,
+    matched_rules: ruleSets.map(surfaceRuleDiagnostic),
+    available_surfaces: surfaceDiagnostics(allowed),
+    token_filtered_rule_count: blockedByToken.length,
+    no_candidate_reason: surfaceNoCandidateReason({ allPublishedInApp, allowed, matchingBeforeLimit, blockedByToken, surface: body.surface })
+  };
+  return { rule_sets: ruleSets, diagnostics };
+}
+
+function surfaceRuleDiagnostic(ruleSet) {
+  return {
+    decision_key: ruleSet.decision_key,
+    name: ruleSet.name,
+    priority: Number(ruleSet.priority || 0),
+    surface: ruleSet.surface || "",
+    status: ruleSet.status
+  };
+}
+
+function surfaceDiagnostics(ruleSets = []) {
+  const counts = new Map();
+  for (const ruleSet of ruleSets) {
+    const surface = ruleSet.surface || "(empty)";
+    counts.set(surface, (counts.get(surface) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([surface, count]) => ({ surface, count }))
+    .sort((left, right) => right.count - left.count || left.surface.localeCompare(right.surface))
+    .slice(0, 12);
+}
+
+function surfaceNoCandidateReason({ allPublishedInApp, allowed, matchingBeforeLimit, blockedByToken, surface }) {
+  if (matchingBeforeLimit.length) return "";
+  if (!allPublishedInApp.length) return "no_published_inapp_rules";
+  if (!allowed.length) return "client_token_filters_all_inapp_rules";
+  if (blockedByToken.length) return "client_token_filters_requested_surface";
+  if (surface) return "no_published_inapp_rules_for_surface";
+  return "surface_required";
 }
 
 function clientEventFromRequest(eventType, body, req) {
