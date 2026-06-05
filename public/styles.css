@@ -162,6 +162,7 @@ button.primary {
 label {
   display: grid;
   gap: 7px;
+  min-width: 0;
   color: var(--muted);
   font-size: 13px;
 }
@@ -170,6 +171,7 @@ input,
 textarea,
 select {
   width: 100%;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 9px 10px;
@@ -443,7 +445,7 @@ aside input {
 
 .experiment-planning-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   min-width: 0;
 }
@@ -497,6 +499,41 @@ aside input {
   line-height: 1.35;
 }
 
+.bandit-settings-panel,
+.experiment-bandit-detail {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid rgba(14, 154, 142, 0.2);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(14, 154, 142, 0.05);
+}
+
+.bandit-settings-panel[hidden] {
+  display: none;
+}
+
+.bandit-settings-head,
+.experiment-bandit-detail > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bandit-settings-head strong,
+.experiment-bandit-detail strong {
+  color: var(--ink);
+}
+
+.bandit-settings-head span,
+.experiment-bandit-detail span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .variant-builder-panel {
   display: grid;
   gap: 10px;
@@ -535,7 +572,7 @@ aside input {
 
 .variant-builder-row {
   display: grid;
-  grid-template-columns: minmax(130px, 0.45fr) minmax(180px, 0.55fr) minmax(260px, 1fr) auto;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(160px, 0.9fr) minmax(180px, 1.2fr);
   gap: 10px;
   align-items: start;
   border: 1px solid var(--line);
@@ -543,6 +580,10 @@ aside input {
   padding: 10px;
   background: var(--panel);
   min-width: 0;
+}
+
+.variant-builder-row > label:nth-child(3) {
+  grid-column: 1 / -1;
 }
 
 .variant-weight-control {
@@ -568,9 +609,10 @@ aside input {
 
 .variant-builder-actions {
   display: flex;
+  grid-column: 1 / -1;
   gap: 6px;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .variant-weight-total {
@@ -933,6 +975,13 @@ aside input {
   border-color: rgba(180, 83, 9, 0.32);
   background: var(--warning-soft);
   color: #92400e;
+}
+
+.experiment-ops-meta .adaptive {
+  border-color: rgba(14, 154, 142, 0.28);
+  background: rgba(14, 154, 142, 0.08);
+  color: var(--teal);
+  font-weight: 800;
 }
 
 .experiment-ops-bars {

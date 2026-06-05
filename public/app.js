@@ -371,7 +371,21 @@ document.querySelector("#rule-type").addEventListener("change", () => {
   renderBranchEditor();
   syncJsonFromBuilder();
 });
-["#experiment-status", "#experiment-unit", "#experiment-goal-event", "#experiment-goal-lift", "#experiment-baseline-rate", "#experiment-daily-traffic", "#experiment-starts-at", "#experiment-ends-at"].forEach((selector) => {
+[
+  "#experiment-status",
+  "#experiment-unit",
+  "#experiment-mode",
+  "#experiment-bandit-exploration-rate",
+  "#experiment-bandit-min-exposures",
+  "#experiment-bandit-window-days",
+  "#experiment-bandit-freeze-variant",
+  "#experiment-goal-event",
+  "#experiment-goal-lift",
+  "#experiment-baseline-rate",
+  "#experiment-daily-traffic",
+  "#experiment-starts-at",
+  "#experiment-ends-at"
+].forEach((selector) => {
   document.querySelector(selector).addEventListener("input", renderRuleInspector);
   document.querySelector(selector).addEventListener("change", renderRuleInspector);
 });
@@ -1283,6 +1297,7 @@ function experimentOpsCard(experiment, index) {
   const conversionCount = experiment.events?.conversion?.count || 0;
   const allocationState = Math.round(Number(experiment.allocation_total || 0) * 1000) === 100000 ? "ok" : "warn";
   const campaign = campaignForDecisionKey(experiment.decision_key);
+  const mode = experimentMode(experiment);
   return `
     <button type="button" class="experiment-ops-card" data-experiment-index="${index}">
       <div class="experiment-ops-head">
@@ -1295,6 +1310,7 @@ function experimentOpsCard(experiment, index) {
       <div class="experiment-ops-meta">
         <span>v${escapeHtml(experiment.version || "-")}</span>
         <span>${escapeHtml(experiment.assignment_unit || "profile")} assignment</span>
+        <span class="${mode === "bandit" ? "adaptive" : ""}">${escapeHtml(mode === "bandit" ? "adaptive bandit" : "fixed split")}</span>
         <span class="${allocationState}">${formatNumber(experiment.allocation_total || 0)}% allocation</span>
         ${campaign ? `<span>${escapeHtml(campaign)}</span>` : ""}
       </div>
@@ -1330,6 +1346,7 @@ function renderExperimentDetail(experiment) {
   }
   const warnings = experimentOpsWarnings(experiment);
   const winnerKey = experiment.significant_winner_variant || experiment.winner_variant || "";
+  const mode = experimentMode(experiment);
   experimentDetail.innerHTML = `
     <div class="experiment-detail-summary">
       ${statusItem("Status", experiment.experiment_status || "draft")}
@@ -1338,11 +1355,13 @@ function renderExperimentDetail(experiment) {
       ${statusItem("Placement", experiment.surface || "-")}
       ${statusItem("Campaign", campaignForDecisionKey(experiment.decision_key) || "-")}
       ${statusItem("Assignment", experiment.assignment_unit || "profile")}
+      ${statusItem("Mode", mode === "bandit" ? "Adaptive bandit" : "Fixed split")}
       ${statusItem("Baseline", experiment.baseline_variant || "-")}
       ${statusItem("Winner", experiment.winner_variant ? `${experiment.winner_variant} ${formatLift(experiment.winner_lift_vs_baseline)}` : "-")}
       ${statusItem("Significance", experiment.significant_winner_variant ? `${experiment.significant_winner_variant} ${formatPercent(experiment.significant_winner_confidence || 0)}` : "No 95% winner")}
       ${statusItem("Last published", experiment.last_published_at ? formatTime(experiment.last_published_at) : "-")}
     </div>
+    ${mode === "bandit" ? experimentBanditDetail(experiment) : ""}
     <div class="significance-methodology">
       <strong>How significance is calculated</strong>
       <span>DEE compares each non-baseline variant against the baseline with a two-sided z-test for conversion-rate difference. The confidence label is 1 - p-value; "95% significant" requires at least 95% confidence and the minimum exposure guardrail.</span>
@@ -1406,6 +1425,24 @@ function experimentWebsiteSnippet(experiment) {
 
   dee.init();
 </script>`;
+}
+
+function experimentBanditDetail(experiment = {}) {
+  const bandit = experiment.bandit || {};
+  return `
+    <div class="experiment-bandit-detail">
+      <div>
+        <strong>Adaptive allocation guardrails</strong>
+        <span>Bandit experiments bypass decision-result caching so allocation can react to exposure and conversion feedback.</span>
+      </div>
+      <div class="experiment-detail-summary">
+        ${statusItem("Exploration", `${formatNumber(bandit.exploration_rate ?? 10)}%`)}
+        ${statusItem("Min exposures", formatNumber(bandit.min_exposures_per_variant ?? 100))}
+        ${statusItem("Window", bandit.window_days ? `${formatNumber(bandit.window_days)}d` : "All feedback")}
+        ${statusItem("Frozen winner", bandit.freeze_variant || "-")}
+      </div>
+    </div>
+  `;
 }
 
 function deeRuntimeBaseUrl() {
@@ -2063,6 +2100,9 @@ function renderExperimentPanel() {
   const variants = Array.isArray(experiment.variants) ? experiment.variants : [];
   const total = variants.reduce((sum, variant) => sum + Number(variant.weight || 0), 0);
   const status = experiment.status || "draft";
+  const mode = experimentMode(experiment);
+  const banditPanel = document.querySelector("#experiment-bandit-panel");
+  if (banditPanel) banditPanel.hidden = mode !== "bandit";
   const warnings = [
     ...experimentMetadataWarnings(experiment),
     ...experimentFreezeWarnings({
@@ -2076,9 +2116,14 @@ function renderExperimentPanel() {
   experimentSummary.innerHTML = [
     statusItem("Status", status),
     statusItem("Assignment", experiment.unit || "profile"),
+    statusItem("Mode", mode === "bandit" ? "Adaptive bandit" : "Fixed split"),
     statusItem("Goal", experiment.goal?.event || "conversion"),
     statusItem("Variants", variants.length),
     statusItem("Allocation", `${Number.isFinite(total) ? total : 0}%`),
+    ...(mode === "bandit" ? [
+      statusItem("Exploration", `${formatNumber(experiment.bandit?.exploration_rate ?? 10)}%`),
+      statusItem("Min exposures", formatNumber(experiment.bandit?.min_exposures_per_variant ?? 100))
+    ] : []),
     statusItem("Sample target", planning.sampleSize ? formatNumber(planning.sampleSize) : "-"),
     statusItem("Duration", planning.durationLabel),
     ...warnings.map((warning) => statusItem("Warning", warning))
@@ -2090,6 +2135,11 @@ function renderExperimentPanel() {
 function setExperimentMetadata(experiment = {}) {
   document.querySelector("#experiment-status").value = experiment.status || "draft";
   document.querySelector("#experiment-unit").value = experiment.unit || "profile";
+  document.querySelector("#experiment-mode").value = experimentMode(experiment);
+  document.querySelector("#experiment-bandit-exploration-rate").value = Number(experiment.bandit?.exploration_rate ?? experiment.bandit?.explorationRate ?? 10);
+  document.querySelector("#experiment-bandit-min-exposures").value = Number(experiment.bandit?.min_exposures_per_variant ?? experiment.bandit?.minExposuresPerVariant ?? 100);
+  document.querySelector("#experiment-bandit-window-days").value = Number(experiment.bandit?.window_days ?? experiment.bandit?.windowDays ?? 0) || "";
+  document.querySelector("#experiment-bandit-freeze-variant").value = experiment.bandit?.freeze_variant || experiment.freeze_variant || "";
   document.querySelector("#experiment-goal-event").value = experiment.goal?.event || "conversion";
   document.querySelector("#experiment-goal-lift").value = Number(experiment.goal?.minimum_detectable_lift_pct || 10);
   document.querySelector("#experiment-baseline-rate").value = Number(experiment.goal?.baseline_conversion_rate_pct || 5);
@@ -2308,6 +2358,8 @@ function readExperimentMetadata({ tolerateInvalid = false } = {}) {
     return {
       status: document.querySelector("#experiment-status").value || "draft",
       unit: document.querySelector("#experiment-unit").value || "profile",
+      mode: document.querySelector("#experiment-mode").value || "fixed",
+      ...readExperimentBandit(),
       goal: readExperimentGoal(),
       schedule: readExperimentSchedule(),
       variants
@@ -2317,11 +2369,36 @@ function readExperimentMetadata({ tolerateInvalid = false } = {}) {
     return {
       status: document.querySelector("#experiment-status").value || "draft",
       unit: document.querySelector("#experiment-unit").value || "profile",
+      mode: document.querySelector("#experiment-mode").value || "fixed",
+      ...readExperimentBandit(),
       goal: readExperimentGoal(),
       schedule: readExperimentSchedule(),
       variants: []
     };
   }
+}
+
+function experimentMode(experiment = {}) {
+  if (experiment.mode === "bandit" || experiment.experiment_mode === "bandit" || experiment.assignment_mode === "bandit" || experiment.bandit?.enabled) return "bandit";
+  return "fixed";
+}
+
+function readExperimentBandit() {
+  const mode = document.querySelector("#experiment-mode").value || "fixed";
+  if (mode !== "bandit") return {};
+  const explorationRate = Math.max(0, Math.min(100, Number(document.querySelector("#experiment-bandit-exploration-rate").value || 10)));
+  const minExposures = Math.max(0, Math.round(Number(document.querySelector("#experiment-bandit-min-exposures").value || 100)));
+  const windowDays = Math.max(0, Math.round(Number(document.querySelector("#experiment-bandit-window-days").value || 0)));
+  const freezeVariant = document.querySelector("#experiment-bandit-freeze-variant").value.trim();
+  return {
+    bandit: {
+      enabled: true,
+      exploration_rate: explorationRate,
+      min_exposures_per_variant: minExposures,
+      ...(windowDays ? { window_days: windowDays } : {}),
+      ...(freezeVariant ? { freeze_variant: freezeVariant } : {})
+    }
+  };
 }
 
 function readExperimentGoal() {
@@ -2362,6 +2439,17 @@ function experimentMetadataWarnings(experiment = {}) {
   if (!Number.isFinite(Number(goal.baseline_conversion_rate_pct)) || Number(goal.baseline_conversion_rate_pct) <= 0) warnings.push("Baseline conversion rate is required for sample guidance.");
   if (!Number.isFinite(Number(goal.minimum_detectable_lift_pct)) || Number(goal.minimum_detectable_lift_pct) <= 0) warnings.push("Minimum detectable lift must be greater than 0.");
   if (schedule.starts_at && schedule.ends_at && new Date(schedule.ends_at) <= new Date(schedule.starts_at)) warnings.push("Experiment end date must be after start date.");
+  if (experimentMode(experiment) === "bandit") {
+    const explorationRate = Number(experiment.bandit?.exploration_rate ?? 10);
+    const minExposures = Number(experiment.bandit?.min_exposures_per_variant ?? 100);
+    const windowDays = Number(experiment.bandit?.window_days ?? 0);
+    const freezeVariant = experiment.bandit?.freeze_variant || experiment.freeze_variant || "";
+    if (!Number.isFinite(explorationRate) || explorationRate < 0 || explorationRate > 100) warnings.push("Bandit exploration rate must be between 0% and 100%.");
+    if (Number.isFinite(explorationRate) && explorationRate > 50) warnings.push("Bandit exploration is high; most traffic will remain randomized.");
+    if (!Number.isFinite(minExposures) || minExposures < 0) warnings.push("Bandit minimum exposures must be zero or greater.");
+    if (windowDays && (!Number.isFinite(windowDays) || windowDays < 1)) warnings.push("Bandit performance window must be at least one day.");
+    if (freezeVariant && !variants.some((variant) => variant.key === freezeVariant)) warnings.push(`Frozen winner ${freezeVariant} is not a configured variant.`);
+  }
   return [...new Set(warnings)];
 }
 

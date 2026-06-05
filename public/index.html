@@ -328,6 +328,37 @@
                         <option value="identifier">Identifier</option>
                       </select>
                     </label>
+                    <label>
+                      Assignment mode
+                      <select id="experiment-mode">
+                        <option value="fixed">Fixed split</option>
+                        <option value="bandit">Adaptive bandit</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div id="experiment-bandit-panel" class="bandit-settings-panel" hidden>
+                    <div class="bandit-settings-head">
+                      <strong>Bandit guardrails</strong>
+                      <span>DEE keeps some exploration traffic while favoring variants with stronger conversion feedback.</span>
+                    </div>
+                    <div class="experiment-planning-grid">
+                      <label>
+                        Exploration rate %
+                        <input id="experiment-bandit-exploration-rate" type="number" min="0" max="100" step="1" value="10" />
+                      </label>
+                      <label>
+                        Minimum exposures / variant
+                        <input id="experiment-bandit-min-exposures" type="number" min="0" step="1" value="100" />
+                      </label>
+                      <label>
+                        Performance window days
+                        <input id="experiment-bandit-window-days" type="number" min="1" step="1" placeholder="All feedback" />
+                      </label>
+                      <label>
+                        Frozen winner
+                        <input id="experiment-bandit-freeze-variant" placeholder="Optional variant key" />
+                      </label>
+                    </div>
                   </div>
                   <div class="experiment-planning-grid">
                     <label>
@@ -1919,6 +1950,6 @@
       </div>
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
-  <script src="/app.js?v=20260605-inline-rule-editor"></script>
+  <script src="/app.js?v=20260605-bandit-ui"></script>
 </body>
 </html>
