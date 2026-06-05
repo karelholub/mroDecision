@@ -1072,12 +1072,22 @@ aside input {
   box-shadow: 0 0 0 2px rgba(14, 154, 142, 0.12);
 }
 
+.experiment-ops-card.selected {
+  border-color: rgba(14, 154, 142, 0.45);
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 118, 110, 0.1);
+}
+
 .experiment-ops-head,
 .experiment-ops-meta,
 .experiment-ops-events,
+.experiment-card-metrics,
 .variant-allocation-row,
 .experiment-variant-row,
-.experiment-variant-header {
+.experiment-variant-header,
+.experiment-detail-table,
+.experiment-detail-table-row,
+.experiment-detail-table-header {
   min-width: 0;
 }
 
@@ -1178,10 +1188,90 @@ aside input {
 }
 
 .experiment-ops-events,
+.experiment-card-metrics,
 .experiment-detail-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
   gap: 8px;
+}
+
+.experiment-card-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.experiment-card-metrics .status-item {
+  min-height: 58px;
+  background: #ffffff;
+}
+
+.experiment-card-metrics .status-item strong {
+  font-size: 13px;
+}
+
+.experiment-detail-table {
+  display: grid;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  overflow-x: auto;
+}
+
+.experiment-detail-table-header,
+.experiment-detail-table-row {
+  display: grid;
+  grid-template-columns:
+    minmax(130px, 1fr)
+    minmax(92px, 0.7fr)
+    minmax(90px, 0.65fr)
+    minmax(130px, 1fr)
+    minmax(150px, 1.15fr)
+    minmax(100px, 0.75fr)
+    minmax(110px, 0.8fr)
+    minmax(90px, 0.65fr)
+    minmax(110px, 0.8fr)
+    minmax(120px, 0.85fr);
+  min-width: 1120px;
+}
+
+.experiment-detail-table-header {
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.experiment-detail-table-header span,
+.experiment-detail-table-row span,
+.experiment-detail-table-row strong {
+  min-width: 0;
+  border-right: 1px solid var(--line);
+  padding: 12px 10px;
+  overflow-wrap: anywhere;
+}
+
+.experiment-detail-table-header span:last-child,
+.experiment-detail-table-row span:last-child {
+  border-right: 0;
+}
+
+.experiment-detail-table-row {
+  border-top: 1px solid var(--line);
+  align-items: stretch;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.experiment-detail-table-row strong {
+  display: block;
+}
+
+.experiment-detail-info-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.38fr) minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
 }
 
 .experiment-warning-list {
@@ -1342,6 +1432,35 @@ aside input {
   font-size: 12px;
 }
 
+.experiment-depth-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.experiment-depth-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.experiment-depth-head strong,
+.experiment-depth-head span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.experiment-depth-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .experiment-variant-table {
   display: grid;
   gap: 0;
@@ -1389,7 +1508,8 @@ aside input {
 
 @media (max-width: 900px) {
   .experiment-detail-actions,
-  .experiment-snippet-guidance {
+  .experiment-snippet-guidance,
+  .experiment-detail-info-row {
     grid-template-columns: 1fr;
   }
 }

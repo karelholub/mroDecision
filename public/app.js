@@ -125,6 +125,7 @@ let cachedConditionBlocks = [];
 let cachedConfigBundle = null;
 let cachedAssistantPlan = null;
 let assistantChatHistory = [];
+let selectedExperimentKey = null;
 let selectedLookupMetadata = {};
 let conditionBlocksLoaded = false;
 let selectedConditionBlockId = null;
@@ -1267,11 +1268,12 @@ function renderExperiments() {
   const experiments = campaignFilteredExperiments();
   if (experimentKpis) {
     experimentKpis.innerHTML = [
-      metricCard("Experiments", formatNumber(summary.total || 0), `${formatNumber(summary.running || 0)} running`, "EX", "teal"),
+      metricCard("Experiments", formatNumber(summary.total || 0), "Total configured", "EX", "teal"),
       metricCard("Paused", formatNumber(summary.paused || 0), `${formatNumber(summary.draft || 0)} draft · ${formatNumber(summary.archived || 0)} archived`, "PA", "blue"),
-      metricCard("Exposures", formatNumber(summary.exposures || 0), "Variant shown to users", "EV", "purple"),
-      metricCard("Conversions", formatNumber(summary.conversions || 0), `${formatPercent(rate(summary.conversions || 0, summary.exposures || 0))} of exposures`, "CV", "teal"),
-      metricCard("Impressions", formatNumber(summary.impressions || 0), "Message rendered events", "IM", "blue")
+      metricCard("In Progress", formatNumber(summary.running || 0), "Currently running", "IP", "purple"),
+      metricCard("Completed", formatNumber(summary.archived || 0), "Archived or closed", "CO", "teal"),
+      metricCard("Not Started", formatNumber(summary.draft || 0), "Draft experiments", "NS", "blue"),
+      metricCard("Feedback", formatNumber(summary.exposures || 0), `${formatNumber(summary.conversions || 0)} conversions · ${formatPercent(rate(summary.conversions || 0, summary.exposures || 0))}`, "FB", "purple")
     ].join("");
   }
   if (!cachedExperiments.length) {
@@ -1284,11 +1286,16 @@ function renderExperiments() {
     experimentDetail.innerHTML = `<div class="status-line">Clear the campaign filter or select another campaign to inspect performance.</div>`;
     return;
   }
-  experimentList.innerHTML = experiments.map((experiment, index) => experimentOpsCard(experiment, index)).join("");
+  const selected = experiments.find((experiment) => experiment.decision_key === selectedExperimentKey) || experiments[0];
+  selectedExperimentKey = selected?.decision_key || null;
+  experimentList.innerHTML = experiments.map((experiment, index) => experimentOpsCard(experiment, index, experiment.decision_key === selectedExperimentKey)).join("");
   experimentList.querySelectorAll("[data-experiment-index]").forEach((button) => {
-    button.addEventListener("click", () => renderExperimentDetail(experiments[Number(button.dataset.experimentIndex)]));
+    button.addEventListener("click", () => {
+      selectedExperimentKey = experiments[Number(button.dataset.experimentIndex)]?.decision_key || null;
+      renderExperiments();
+    });
   });
-  renderExperimentDetail(experiments[0]);
+  renderExperimentDetail(selected);
 }
 
 function campaignFilteredExperiments() {
@@ -1296,19 +1303,22 @@ function campaignFilteredExperiments() {
   return cachedExperiments.filter((experiment) => matchesDecisionCampaign(experiment.decision_key, campaign));
 }
 
-function experimentOpsCard(experiment, index) {
+function experimentOpsCard(experiment, index, selected = false) {
   const exposureCount = experiment.events?.exposure?.count || 0;
   const impressionCount = experiment.events?.impression?.count || 0;
   const conversionCount = experiment.events?.conversion?.count || 0;
   const allocationState = Math.round(Number(experiment.allocation_total || 0) * 1000) === 100000 ? "ok" : "warn";
   const campaign = campaignForDecisionKey(experiment.decision_key);
   const mode = experimentMode(experiment);
+  const confidence = experimentBestConfidence(experiment);
+  const significance = experiment.significant_winner_confidence || confidence;
+  const winner = experiment.significant_winner_variant || experiment.winner_variant || "-";
   return `
-    <button type="button" class="experiment-ops-card" data-experiment-index="${index}">
+    <button type="button" class="experiment-ops-card ${selected ? "selected" : ""}" data-experiment-index="${index}">
       <div class="experiment-ops-head">
         <div>
           <strong>${escapeHtml(experiment.name)}</strong>
-          <span>${escapeHtml(experiment.decision_key)}</span>
+          <span>${escapeHtml([experiment.decision_key, campaign, mode === "bandit" ? "Adaptive" : "Fixed split"].filter(Boolean).join(" · "))}</span>
         </div>
         <mark class="experiment-status ${escapeHtml(experiment.experiment_status)}">${escapeHtml(experiment.experiment_status)}</mark>
       </div>
@@ -1322,14 +1332,20 @@ function experimentOpsCard(experiment, index) {
       <div class="experiment-ops-bars">
         ${experiment.variants.map((variant) => variantAllocationBar(variant)).join("")}
       </div>
-      <div class="experiment-ops-events">
-        ${statusItem("Exposures", formatNumber(exposureCount))}
-        ${statusItem("Conversions", `${formatNumber(conversionCount)} · ${formatPercent(experiment.conversion_rate || 0)}`)}
-        ${statusItem("Winner", experiment.winner_variant || "-")}
+      <div class="experiment-card-metrics">
+        ${statusItem("Confidence", confidence ? formatPercent(confidence) : "-")}
+        ${statusItem("Significance", significance ? formatPercent(significance) : "-")}
+        ${statusItem("Executions", formatNumber(exposureCount))}
+        ${statusItem("Lift", formatLift(experiment.winner_lift_vs_baseline))}
+        ${statusItem("Winner", winner)}
         ${statusItem("Impressions", formatNumber(impressionCount))}
       </div>
     </button>
   `;
+}
+
+function experimentBestConfidence(experiment = {}) {
+  return Math.max(0, ...(experiment.variants || []).map((variant) => Number(variant.significance?.confidence || 0)));
 }
 
 function variantAllocationBar(variant) {
@@ -1354,24 +1370,29 @@ function renderExperimentDetail(experiment) {
   const winnerKey = recommendation.eligible ? recommendation.variant_key : "";
   const mode = experimentMode(experiment);
   experimentDetail.innerHTML = `
-    <div class="experiment-detail-summary">
-      ${statusItem("Status", experiment.experiment_status || "draft")}
-      ${statusItem("Rule status", experiment.status || "-")}
-      ${statusItem("Version", experiment.version || "-")}
-      ${statusItem("Placement", experiment.surface || "-")}
-      ${statusItem("Campaign", campaignForDecisionKey(experiment.decision_key) || "-")}
-      ${statusItem("Assignment", experiment.assignment_unit || "profile")}
-      ${statusItem("Mode", mode === "bandit" ? "Adaptive bandit" : "Fixed split")}
-      ${statusItem("Baseline", experiment.baseline_variant || "-")}
-      ${statusItem("Winner", experiment.winner_variant ? `${experiment.winner_variant} ${formatLift(experiment.winner_lift_vs_baseline)}` : "-")}
-      ${statusItem("Significance", experiment.significant_winner_variant ? `${experiment.significant_winner_variant} ${formatPercent(experiment.significant_winner_confidence || 0)}` : "No 95% winner")}
-      ${statusItem("Last published", experiment.last_published_at ? formatTime(experiment.last_published_at) : "-")}
+    <div class="experiment-detail-table">
+      <div class="experiment-detail-table-header">
+        <span>Variant Name</span>
+        <span>Status</span>
+        <span>Rank</span>
+        <span>Placement</span>
+        <span>Campaign</span>
+        <span>Assignment</span>
+        <span>Mode</span>
+        <span>Baseline</span>
+        <span>Winner</span>
+        <span>Significance</span>
+      </div>
+      ${experiment.variants.length ? experiment.variants.map((variant, index) => experimentTopVariantRow(experiment, variant, index, mode)).join("") : `<div class="status-line">No variants configured.</div>`}
+    </div>
+    <div class="experiment-detail-info-row">
+      ${statusItem("Last updated", experiment.updated_at ? formatTime(experiment.updated_at) : "-")}
+      <div class="significance-methodology">
+        <strong>How significance is calculated</strong>
+        <span>DEE compares each non-baseline variant against the baseline with a two-sided z-test for conversion-rate difference. The confidence label is 1 - p-value; "95% significant" requires at least 95% confidence and the minimum exposure guardrail.</span>
+      </div>
     </div>
     ${mode === "bandit" ? experimentBanditDetail(experiment) : ""}
-    <div class="significance-methodology">
-      <strong>How significance is calculated</strong>
-      <span>DEE compares each non-baseline variant against the baseline with a two-sided z-test for conversion-rate difference. The confidence label is 1 - p-value; "95% significant" requires at least 95% confidence and the minimum exposure guardrail.</span>
-    </div>
     ${experimentWinnerAutomationPanel(experiment)}
     <div class="experiment-detail-actions">
       <button type="button" data-experiment-action="declare-winner" data-rule-key="${escapeHtml(experiment.decision_key)}" data-winner-key="${escapeHtml(winnerKey)}" ${winnerKey ? "" : "disabled"}>Declare Winner</button>
@@ -1387,25 +1408,51 @@ function renderExperimentDetail(experiment) {
       <pre class="experiment-snippet-code">${escapeHtml(experimentWebsiteSnippet(experiment))}</pre>
     </details>
     ${warnings.length ? `<div class="experiment-warning-list">${warnings.map((item) => `<div>${escapeHtml(item)}</div>`).join("")}</div>` : ""}
-    <div class="experiment-variant-table">
-      <div class="experiment-variant-header">
-        <span>Variant</span>
-        <span>Weight</span>
-        <span>Exposures</span>
-        <span>Conversions</span>
-        <span>Conv. rate</span>
-        <span>Lift</span>
-        <span>Confidence</span>
-        <span>Impressions</span>
-        <span>Last event</span>
+    <section class="experiment-depth-panel">
+      <div class="experiment-depth-head">
+        <strong>Variant result in depth</strong>
+        <span>${escapeHtml(experiment.status === "published" ? "Live client feedback" : "Draft or sample data; verify before launch.")}</span>
       </div>
-      ${experiment.variants.length ? experiment.variants.map((variant) => experimentVariantRow(variant)).join("") : `<div class="status-line">No variants configured.</div>`}
-    </div>
+      <div class="experiment-variant-table">
+        <div class="experiment-variant-header">
+          <span>Variant</span>
+          <span>Weight</span>
+          <span>Exposures</span>
+          <span>Conversions</span>
+          <span>Conv. rate</span>
+          <span>Lift</span>
+          <span>Confidence</span>
+          <span>Impressions</span>
+          <span>Last event</span>
+        </div>
+        ${experiment.variants.length ? experiment.variants.map((variant) => experimentVariantRow(variant)).join("") : `<div class="status-line">No variants configured.</div>`}
+      </div>
+    </section>
   `;
   experimentDetail.querySelector('[data-experiment-action="declare-winner"]')?.addEventListener("click", declareExperimentWinner);
   experimentDetail.querySelectorAll('[data-experiment-action="copy-snippet"]').forEach((button) => {
     button.addEventListener("click", () => copyExperimentSnippet(experiment));
   });
+}
+
+function experimentTopVariantRow(experiment, variant, index, mode) {
+  const campaign = campaignForDecisionKey(experiment.decision_key) || "-";
+  const significance = variant.significance?.confidence ? formatPercent(variant.significance.confidence) : variant.baseline ? "Baseline" : "-";
+  const isWinner = variant.key && variant.key === experiment.winner_variant;
+  return `
+    <div class="experiment-detail-table-row">
+      <strong>${escapeHtml(variant.key || "(empty)")}</strong>
+      <span><mark class="experiment-status ${escapeHtml(experiment.experiment_status || "draft")}">${escapeHtml(experiment.experiment_status || "draft")}</mark></span>
+      <span>${escapeHtml(index === 0 ? "primary" : `variant ${index + 1}`)}</span>
+      <span>${escapeHtml(experiment.surface || "-")}</span>
+      <span>${escapeHtml(campaign)}</span>
+      <span>${escapeHtml(experiment.assignment_unit || "profile")}</span>
+      <span>${escapeHtml(mode === "bandit" ? "Adaptive bandit" : "Fixed split")}</span>
+      <span>${escapeHtml(variant.baseline ? "Yes" : "-")}</span>
+      <span>${escapeHtml(isWinner ? `${variant.key} ${formatLift(variant.lift_vs_baseline)}` : "-")}</span>
+      <span>${escapeHtml(significance)}</span>
+    </div>
+  `;
 }
 
 function experimentWebsiteSnippet(experiment) {
