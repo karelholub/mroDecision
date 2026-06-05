@@ -182,7 +182,13 @@ test("validates experiment variant allocation", () => {
       metadata: {
         experiment: {
           status: "running",
+          mode: "bandit",
           unit: "profile",
+          bandit: {
+            exploration_rate: 15,
+            min_exposures_per_variant: 50,
+            window_days: 14
+          },
           variants: [
             { key: "control", weight: 50, outputs: { banner: "A" } },
             { key: "treatment", weight: 50, outputs: { banner: "B" } }
@@ -213,6 +219,28 @@ test("validates experiment variant allocation", () => {
         draft: { fallback: { result: "eligible", outputs: {} }, branches: [] }
       }),
     /status/
+  );
+  assert.throws(
+    () =>
+      validateRuleSetPayload({
+        name: "Bad Experiment Mode",
+        decision_key: "bad_experiment_mode",
+        type: "experiment",
+        metadata: { experiment: { mode: "roulette", variants: [{ key: "a", weight: 100 }] } },
+        draft: { fallback: { result: "eligible", outputs: {} }, branches: [] }
+      }),
+    /mode/
+  );
+  assert.throws(
+    () =>
+      validateRuleSetPayload({
+        name: "Bad Bandit",
+        decision_key: "bad_bandit",
+        type: "experiment",
+        metadata: { experiment: { mode: "bandit", bandit: { exploration_rate: 120 }, variants: [{ key: "a", weight: 100 }] } },
+        draft: { fallback: { result: "eligible", outputs: {} }, branches: [] }
+      }),
+    /exploration_rate/
   );
 });
 

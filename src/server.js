@@ -1858,8 +1858,9 @@ async function evaluateClientRequest(body) {
   const hydrated = await hydrateClientProfile(baseRequest);
   const request = hydrated.request;
   const schemaItems = store.listSchemaItems();
-  const cached = clientResultCache.get(request, ruleSet, version);
-  if (cached.hit) {
+  const adaptiveExperiment = isAdaptiveExperiment(ruleSet, version);
+  const cached = adaptiveExperiment ? { hit: false, cache_key: null, skipped: true } : clientResultCache.get(request, ruleSet, version);
+  if (!adaptiveExperiment && cached.hit) {
     const profileCache = profileCacheWithDiagnostics(hydrated.cache, baseRequest, request, schemaItems, cached.value.errors || []);
     return {
       ...cached.value,
@@ -1923,7 +1924,11 @@ async function evaluateClientRequest(body) {
     matched_rules: evaluated.matched_rules,
     errors: finalErrors
   };
-  response.cache.expires_at = response.errors.length ? null : clientResultCache.set(cached.cache_key, response, ruleSet);
+  response.cache.expires_at = response.errors.length || adaptiveExperiment ? null : clientResultCache.set(cached.cache_key, response, ruleSet);
+  if (adaptiveExperiment) {
+    response.cache.scope = null;
+    response.cache.reason = "adaptive_experiment_not_cached";
+  }
   return response;
 }
 
@@ -2591,14 +2596,146 @@ function assignExperimentVariant(ruleSet, request, evaluated) {
     const variant = variants.find((item) => item.key === forced);
     if (variant) return { ...variant, bucket: null };
   }
+  if (experimentMode(experiment) === "bandit") {
+    const adaptive = adaptiveBanditVariant(ruleSet, request, experiment, variants);
+    if (adaptive) return adaptive;
+  }
+  return fixedWeightVariant(ruleSet, request, experiment, variants);
+}
+
+function fixedWeightVariant(ruleSet, request, experiment, variants) {
   const unit = experiment.unit === "identifier" ? firstIdentifierValue(request) : request.profile_key;
   const bucket = bucketFor(`${ruleSet.decision_key}:${unit || request.profile_key}`);
   let cursor = 0;
   for (const variant of variants) {
     cursor += Number(variant.weight || 0);
-    if (bucket < cursor) return { ...variant, bucket };
+    if (bucket < cursor) return { ...variant, bucket, strategy: "fixed" };
   }
-  return { ...variants.at(-1), bucket };
+  return { ...variants.at(-1), bucket, strategy: "fixed" };
+}
+
+function adaptiveBanditVariant(ruleSet, request, experiment, variants) {
+  const bandit = experiment.bandit || {};
+  const frozen = bandit.freeze_variant || experiment.freeze_variant;
+  if (frozen) {
+    const variant = variants.find((item) => item.key === frozen);
+    if (variant) return { ...variant, bucket: null, strategy: "bandit", reason: "frozen_winner" };
+  }
+
+  const minExposures = integerInRange(bandit.min_exposures_per_variant, 100, 0, 1000000);
+  const stats = variants.map((variant) => banditVariantStats(ruleSet, variant, bandit));
+  const underSampled = stats.filter((item) => item.exposures < minExposures);
+  if (underSampled.length) {
+    const selected = leastExposedVariant(underSampled);
+    return {
+      ...selected.variant,
+      bucket: null,
+      strategy: "bandit",
+      reason: "minimum_sample",
+      bandit: banditAssignmentSummary(selected, stats, bandit)
+    };
+  }
+
+  const unit = experiment.unit === "identifier" ? firstIdentifierValue(request) : request.profile_key;
+  const explorationRate = percentInRange(bandit.exploration_rate, 10);
+  const explorationBucket = bucketFor(`${ruleSet.decision_key}:${unit || request.profile_key}:bandit_explore`);
+  if (explorationBucket < explorationRate) {
+    const selected = fixedWeightVariant(ruleSet, request, experiment, variants);
+    const stat = stats.find((item) => item.key === selected.key) || banditVariantStats(ruleSet, selected, bandit);
+    return {
+      ...selected,
+      strategy: "bandit",
+      reason: "exploration",
+      bandit: banditAssignmentSummary(stat, stats, bandit)
+    };
+  }
+
+  const selected = winnerBanditVariant(stats);
+  return {
+    ...selected.variant,
+    bucket: null,
+    strategy: "bandit",
+    reason: "exploitation",
+    bandit: banditAssignmentSummary(selected, stats, bandit)
+  };
+}
+
+function banditVariantStats(ruleSet, variant, bandit = {}) {
+  const since = bandit.window_days ? daysAgoIso(Number(bandit.window_days)) : "";
+  const base = {
+    decision_key: ruleSet.decision_key,
+    variant_key: variant.key
+  };
+  if (since) base.since = since;
+  const exposures = store.countClientEvents({ ...base, event_type: "exposure" });
+  const conversions = store.countClientEvents({ ...base, event_type: "conversion" });
+  return {
+    key: variant.key,
+    variant,
+    exposures,
+    conversions,
+    conversion_rate: exposures > 0 ? conversions / exposures : 0
+  };
+}
+
+function leastExposedVariant(stats) {
+  return [...stats].sort((left, right) =>
+    Number(left.exposures || 0) - Number(right.exposures || 0) ||
+    String(left.key).localeCompare(String(right.key))
+  )[0];
+}
+
+function winnerBanditVariant(stats) {
+  return [...stats].sort((left, right) =>
+    Number(right.conversion_rate || 0) - Number(left.conversion_rate || 0) ||
+    Number(right.conversions || 0) - Number(left.conversions || 0) ||
+    Number(left.exposures || 0) - Number(right.exposures || 0) ||
+    String(left.key).localeCompare(String(right.key))
+  )[0];
+}
+
+function banditAssignmentSummary(selected, stats, bandit = {}) {
+  return {
+    selected_variant: selected.key,
+    selected_exposures: selected.exposures,
+    selected_conversions: selected.conversions,
+    selected_conversion_rate: selected.conversion_rate,
+    exploration_rate: percentInRange(bandit.exploration_rate, 10),
+    min_exposures_per_variant: integerInRange(bandit.min_exposures_per_variant, 100, 0, 1000000),
+    window_days: bandit.window_days ? Number(bandit.window_days) : null,
+    variants: stats.map((item) => ({
+      key: item.key,
+      exposures: item.exposures,
+      conversions: item.conversions,
+      conversion_rate: item.conversion_rate
+    }))
+  };
+}
+
+function isAdaptiveExperiment(ruleSet, version = {}) {
+  const experiment = version.metadata?.experiment || ruleSet.metadata?.experiment || {};
+  return experimentMode(experiment) === "bandit";
+}
+
+function experimentMode(experiment = {}) {
+  if (experiment.mode === "bandit" || experiment.assignment_mode === "bandit" || experiment.bandit?.enabled === true) return "bandit";
+  return "fixed";
+}
+
+function percentInRange(value, fallback) {
+  const number = Number(value ?? fallback);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(100, Math.max(0, number));
+}
+
+function integerInRange(value, fallback, min, max) {
+  const number = Number(value ?? fallback);
+  if (!Number.isInteger(number)) return fallback;
+  return Math.min(max, Math.max(min, number));
+}
+
+function daysAgoIso(days) {
+  return new Date(Date.now() - Number(days) * 24 * 60 * 60 * 1000).toISOString();
 }
 
 function isForcedHoldout(request, decisionKey) {
@@ -2608,12 +2745,25 @@ function isForcedHoldout(request, decisionKey) {
 
 function auditExperimentAssignment(assigned) {
   if (assigned.holdout) return { holdout: true, reason: assigned.reason || "holdout" };
-  return { key: assigned.key, bucket: assigned.bucket };
+  return {
+    key: assigned.key,
+    bucket: assigned.bucket,
+    strategy: assigned.strategy || "fixed",
+    reason: assigned.reason || "",
+    bandit: assigned.bandit || null
+  };
 }
 
 function clientExperimentAssignment(assigned) {
   if (assigned.holdout) return { variant_key: null, bucket: null, holdout: true, reason: assigned.reason || "holdout" };
-  return { variant_key: assigned.key, bucket: assigned.bucket, holdout: false };
+  return {
+    variant_key: assigned.key,
+    bucket: assigned.bucket,
+    holdout: false,
+    strategy: assigned.strategy || "fixed",
+    reason: assigned.reason || "",
+    bandit: assigned.bandit || null
+  };
 }
 
 function validateAssistantPlan(plan) {

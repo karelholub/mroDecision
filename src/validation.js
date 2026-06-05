@@ -123,6 +123,10 @@ function validateExperimentMetadata(experiment) {
   if (experiment.unit != null && !["profile", "identifier"].includes(experiment.unit)) {
     badRequest("metadata.experiment.unit must be profile or identifier");
   }
+  if (experiment.mode != null && !["fixed", "bandit"].includes(experiment.mode)) {
+    badRequest("metadata.experiment.mode must be fixed or bandit");
+  }
+  if (experiment.bandit != null) validateBanditMetadata(experiment.bandit);
   if (experiment.variants == null) return;
   if (!Array.isArray(experiment.variants) || experiment.variants.length === 0) {
     badRequest("metadata.experiment.variants must be a non-empty array");
@@ -139,6 +143,25 @@ function validateExperimentMetadata(experiment) {
     return sum + weight;
   }, 0);
   if (Math.round(total * 1000) !== 100000) badRequest("Experiment variant weights must sum to 100");
+}
+
+function validateBanditMetadata(bandit) {
+  if (!isPlainObject(bandit)) badRequest("metadata.experiment.bandit must be an object");
+  if (bandit.exploration_rate != null) {
+    const value = Number(bandit.exploration_rate);
+    if (!Number.isFinite(value) || value < 0 || value > 100) badRequest("metadata.experiment.bandit.exploration_rate must be between 0 and 100");
+  }
+  if (bandit.min_exposures_per_variant != null) {
+    const value = Number(bandit.min_exposures_per_variant);
+    if (!Number.isInteger(value) || value < 0) badRequest("metadata.experiment.bandit.min_exposures_per_variant must be a non-negative integer");
+  }
+  if (bandit.window_days != null) {
+    const value = Number(bandit.window_days);
+    if (!Number.isInteger(value) || value < 1) badRequest("metadata.experiment.bandit.window_days must be a positive integer");
+  }
+  if (bandit.freeze_variant != null && typeof bandit.freeze_variant !== "string") {
+    badRequest("metadata.experiment.bandit.freeze_variant must be a string");
+  }
 }
 
 export function validateSchemaImport(body) {

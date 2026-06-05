@@ -996,6 +996,8 @@ export class Store {
           surface: rule.surface || "",
           status: rule.status,
           experiment_status: activeExperiment.status || "draft",
+          experiment_mode: activeExperiment.mode === "bandit" || activeExperiment.bandit?.enabled === true ? "bandit" : "fixed",
+          bandit: activeExperiment.bandit || null,
           draft_status: draftExperiment.status || "draft",
           published_status: publishedExperiment.status || "",
           assignment_unit: activeExperiment.unit || "profile",

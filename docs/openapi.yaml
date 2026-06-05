@@ -2018,6 +2018,13 @@ components:
               nullable: true
             reason:
               type: string
+            strategy:
+              type: string
+              enum: [fixed, bandit]
+            bandit:
+              type: object
+              nullable: true
+              description: Adaptive assignment diagnostics when an experiment uses bandit mode.
             error:
               type: string
             diagnostics:
@@ -2486,6 +2493,29 @@ components:
             unit:
               type: string
               enum: [profile, identifier]
+            mode:
+              type: string
+              enum: [fixed, bandit]
+              description: Fixed split is the default. Bandit enables guarded adaptive allocation using recent exposure/conversion feedback.
+            bandit:
+              type: object
+              properties:
+                exploration_rate:
+                  type: number
+                  minimum: 0
+                  maximum: 100
+                  description: Percentage of assignments reserved for weighted exploration. Defaults to 10.
+                min_exposures_per_variant:
+                  type: integer
+                  minimum: 0
+                  description: Minimum exposures each variant should receive before exploitation. Defaults to 100.
+                window_days:
+                  type: integer
+                  minimum: 1
+                  description: Optional rolling event window for adaptive scoring.
+                freeze_variant:
+                  type: string
+                  description: Optional winner variant key. When set, all eligible traffic receives that variant.
             variants:
               type: array
               items:
@@ -3493,6 +3523,12 @@ components:
           type: string
         experiment_status:
           type: string
+        experiment_mode:
+          type: string
+          enum: [fixed, bandit]
+        bandit:
+          type: object
+          nullable: true
         draft_status:
           type: string
         published_status:
