@@ -1847,14 +1847,64 @@ components:
           type: string
           format: date-time
         database:
+          $ref: "#/components/schemas/DatabaseReadiness"
+    DatabaseReadiness:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        adapter:
+          type: string
+        adapter_info:
+          $ref: "#/components/schemas/StoreAdapterInfo"
+        deployment:
+          $ref: "#/components/schemas/StoreDeploymentReadiness"
+        path:
+          type: string
+        error:
+          type: string
+    StoreAdapterInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        production_notes:
+          type: string
+        capabilities:
           type: object
-          properties:
-            ok:
-              type: boolean
-            path:
-              type: string
-            error:
-              type: string
+    StoreDeploymentReadiness:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [production_ready, single_instance, not_ready]
+        summary:
+          type: string
+        recommended_max_replicas:
+          type: integer
+          nullable: true
+        backup_mode:
+          type: string
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoreDeploymentCheck"
+    StoreDeploymentCheck:
+      type: object
+      properties:
+        key:
+          type: string
+        ok:
+          type: boolean
+        level:
+          type: string
+          enum: [ok, warn, error]
+        label:
+          type: string
+        detail:
+          type: string
     Identifier:
       type: object
       required: [typeId, value]

@@ -8,6 +8,20 @@ import { createdAtNow } from "./http.js";
 const databaseFile = () => config.dbPath;
 const runtimeFile = () => path.join(config.dataDir, "store.runtime.json");
 const seedFile = () => path.join(config.dataDir, "seed.json");
+const defaultSqliteAdapterInfo = {
+  id: "sqlite",
+  label: "SQLite",
+  production_notes: "Single-writer local file store; run one service replica per database volume.",
+  capabilities: {
+    persistent: true,
+    multi_instance: false,
+    managed_database: false,
+    transactions: "sqlite",
+    online_migrations: false,
+    recommended_max_replicas: 1,
+    backup_mode: "file_snapshot"
+  }
+};
 const portableSettingKeys = [
   "environment_label",
   "audit_retention_days",
@@ -43,7 +57,7 @@ export class Store {
     this.db = db;
     this.transactionDepth = 0;
     this.adapter = options.adapter || "sqlite";
-    this.adapterInfo = options.adapterInfo || null;
+    this.adapterInfo = options.adapterInfo || (this.adapter === "sqlite" ? defaultSqliteAdapterInfo : null);
   }
 
   static async load(options = {}) {
@@ -53,7 +67,7 @@ export class Store {
     db.exec("PRAGMA journal_mode = WAL");
     migrate(db);
     await seedIfEmpty(db);
-    return new Store(db, { adapter: options.adapter || "sqlite", adapterInfo: options.adapterInfo || null });
+    return new Store(db, { adapter: options.adapter || "sqlite", adapterInfo: options.adapterInfo || defaultSqliteAdapterInfo });
   }
 
   async save() {
@@ -71,6 +85,7 @@ export class Store {
         ok: row?.ok === 1,
         adapter: this.adapter || "sqlite",
         adapter_info: this.adapterInfo,
+        deployment: storeDeploymentReadiness(this.adapterInfo),
         path: config.dbPath
       };
     } catch (error) {
@@ -78,6 +93,7 @@ export class Store {
         ok: false,
         adapter: this.adapter || "sqlite",
         adapter_info: this.adapterInfo,
+        deployment: storeDeploymentReadiness(this.adapterInfo, error),
         path: config.dbPath,
         error: error.message
       };
@@ -3059,6 +3075,66 @@ function floorToHour(value) {
   const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
   date.setUTCMinutes(0, 0, 0);
   return date;
+}
+
+function storeDeploymentReadiness(adapterInfo = {}, error = null) {
+  const capabilities = adapterInfo?.capabilities || {};
+  const checks = [
+    {
+      key: "database_connection",
+      ok: !error,
+      level: error ? "error" : "ok",
+      label: "Database connection",
+      detail: error ? error.message : "Store can run a lightweight database query."
+    },
+    {
+      key: "persistent_storage",
+      ok: capabilities.persistent === true,
+      level: capabilities.persistent === true ? "ok" : "error",
+      label: "Persistent storage",
+      detail: capabilities.persistent === true ? "Data survives service restarts." : "Persistent storage is required before production use."
+    },
+    {
+      key: "multi_instance",
+      ok: capabilities.multi_instance === true,
+      level: capabilities.multi_instance === true ? "ok" : "warn",
+      label: "Multiple service replicas",
+      detail: capabilities.multi_instance === true
+        ? "Adapter supports multiple DEE service replicas."
+        : "Run one DEE replica per database volume, or move to a managed database adapter."
+    },
+    {
+      key: "online_migrations",
+      ok: capabilities.online_migrations === true,
+      level: capabilities.online_migrations === true ? "ok" : "warn",
+      label: "Online migrations",
+      detail: capabilities.online_migrations === true
+        ? "Adapter is intended for online migration workflows."
+        : "Schedule maintenance windows for schema changes."
+    },
+    {
+      key: "managed_database",
+      ok: capabilities.managed_database === true,
+      level: capabilities.managed_database === true ? "ok" : "warn",
+      label: "Managed database",
+      detail: capabilities.managed_database === true
+        ? "Database backups, failover, and storage growth can be handled by the database platform."
+        : "Use file backups and avoid horizontally scaled writers."
+    }
+  ];
+  const hasError = checks.some((check) => check.level === "error");
+  const hasWarn = checks.some((check) => check.level === "warn");
+  return {
+    status: hasError ? "not_ready" : hasWarn ? "single_instance" : "production_ready",
+    summary: hasError
+      ? "Database is not ready."
+      : hasWarn
+        ? "Ready for local or single-instance deployments; managed database recommended for high traffic."
+        : "Ready for multi-instance production deployment.",
+    recommended_max_replicas: Number.isFinite(Number(capabilities.recommended_max_replicas)) ? Number(capabilities.recommended_max_replicas) : null,
+    backup_mode: capabilities.backup_mode || "",
+    checks
+  };
 }
 
 function normalizeMetricsWindowHours(value) {

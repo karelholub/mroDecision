@@ -561,6 +561,8 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(store.getAuditRetentionDays(), 30);
   assert.equal(store.getClientEventRetentionDays(), 45);
   assert.equal(store.health().ok, true);
+  assert.equal(store.health().deployment.status, "single_instance");
+  assert.equal(store.health().deployment.checks.find((check) => check.key === "multi_instance").ok, false);
   assert.equal(store.bootstrapTokensEnabled(), true);
   assert.equal(store.hasActiveAdminToken(), false);
   assert.throws(

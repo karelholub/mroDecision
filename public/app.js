@@ -8562,7 +8562,8 @@ function renderSettingsSummary(settings, runtime, error = null) {
   const assistantLast = assistantProvider.last_call || null;
   const storeAdapter = runtime?.store_adapter || {};
   const adapterInfo = storeAdapter.adapter_info || {};
-  const multiInstance = adapterInfo.capabilities?.multi_instance === true;
+  const deployment = storeAdapter.deployment || {};
+  const productionReady = deployment.status === "production_ready";
   const schemaStatus = settings?.schema_last_sync_status || "never";
   const schemaHealthy = ["ok", "success"].includes(schemaStatus);
   const schemaDetail = settings?.schema_last_synced_at
@@ -8578,10 +8579,11 @@ function renderSettingsSummary(settings, runtime, error = null) {
     },
     {
       label: "Persistence",
-      value: adapterInfo.label || storeAdapter.adapter || "SQLite",
-      detail: adapterInfo.production_notes || "Store adapter metadata unavailable",
-      ok: multiInstance
+      value: productionReady ? "Production ready" : deployment.status === "single_instance" ? "Single instance" : adapterInfo.label || storeAdapter.adapter || "SQLite",
+      detail: deployment.summary || adapterInfo.production_notes || "Store adapter metadata unavailable",
+      ok: productionReady
     },
+    ...storeDeploymentHealthItems(deployment),
     {
       label: "Meiro Collector",
       value: collectorConfigured ? "Configured" : "Incomplete",
@@ -8642,6 +8644,18 @@ function renderSettingsSummary(settings, runtime, error = null) {
       </div>
     `)
     .join("");
+}
+
+function storeDeploymentHealthItems(deployment = {}) {
+  const checks = Array.isArray(deployment.checks) ? deployment.checks : [];
+  return checks
+    .filter((check) => check.key !== "database_connection")
+    .map((check) => ({
+      label: `Store: ${check.label || check.key}`,
+      value: check.ok ? "Ready" : check.level === "error" ? "Blocked" : "Review",
+      detail: check.detail || "",
+      ok: check.ok
+    }));
 }
 
 function renderAssistantProviderStatus(settings = {}, runtime = {}) {
