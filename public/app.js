@@ -76,6 +76,7 @@ const overviewAnomalyHistory = document.querySelector("#overview-anomaly-history
 const overviewServiceFooter = document.querySelector("#overview-service-footer");
 const overviewChangeLog = document.querySelector("#overview-change-log");
 const overviewCampaignRollups = document.querySelector("#overview-campaign-rollups");
+const overviewCampaignDetail = document.querySelector("#overview-campaign-detail");
 const overviewRuleDetailPanel = document.querySelector("#overview-rule-detail-panel");
 const experimentKpis = document.querySelector("#experiment-kpis");
 const experimentList = document.querySelector("#experiment-list");
@@ -118,6 +119,7 @@ let cachedMessages = [];
 let cachedMessageAssets = [];
 let cachedExperiments = [];
 let cachedExperimentSummary = {};
+let cachedCampaigns = [];
 let cachedMeiroDeliveries = [];
 let cachedSettings = {};
 let cachedSchema = [];
@@ -805,7 +807,8 @@ async function loadCampaignRollups(windowHours) {
   try {
     const hours = windowHours || document.querySelector("#overview-window")?.value || "24";
     const body = await api(`/v1/campaigns?window_hours=${encodeURIComponent(hours)}&limit=10`);
-    renderCampaignRollups(body.campaigns || []);
+    cachedCampaigns = body.campaigns || [];
+    renderCampaignRollups(cachedCampaigns);
   } catch (error) {
     overviewCampaignRollups.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
   }
@@ -818,6 +821,9 @@ function renderCampaignRollups(campaigns) {
     : `<div class="status-line">No campaigns configured yet.</div>`;
   overviewCampaignRollups.querySelectorAll("[data-campaign-action]").forEach((button) => {
     button.addEventListener("click", () => runCampaignBulkAction(button.dataset.campaign, button.dataset.campaignAction));
+  });
+  overviewCampaignRollups.querySelectorAll("[data-campaign-detail]").forEach((button) => {
+    button.addEventListener("click", () => renderCampaignDetail(button.dataset.campaignDetail));
   });
 }
 
@@ -850,7 +856,7 @@ function campaignRollupItem(item) {
   return `
     <div class="campaign-rollup-item">
       <div>
-        <strong>${escapeHtml(item.campaign || "Unassigned")}</strong>
+        <button type="button" class="campaign-detail-link" data-campaign-detail="${escapeHtml(item.campaign || "Unassigned")}">${escapeHtml(item.campaign || "Unassigned")}</button>
         <small>${escapeHtml((item.decision_keys || []).join(", ") || "No decisions linked")}</small>
       </div>
       <span>${escapeHtml(assetSummary)}</span>
@@ -865,6 +871,196 @@ function campaignRollupItem(item) {
       </div>
     </div>
   `;
+}
+
+function renderCampaignDetail(campaignName) {
+  if (!overviewCampaignDetail) return;
+  const campaign = cachedCampaigns.find((item) => (item.campaign || "Unassigned") === (campaignName || "Unassigned"));
+  if (!campaign) {
+    overviewCampaignDetail.innerHTML = `<div class="status-line">Campaign not found.</div>`;
+    return;
+  }
+  const assets = campaign.assets || {};
+  const events = campaign.recent_events || [];
+  overviewCampaignDetail.innerHTML = `
+    <div class="campaign-detail-hero">
+      <div>
+        <span>Campaign</span>
+        <strong>${escapeHtml(campaign.campaign || "Unassigned")}</strong>
+        <small>${escapeHtml((campaign.surfaces || []).join(", ") || "No surfaces configured")}</small>
+      </div>
+      <div class="campaign-detail-kpis">
+        ${campaignDetailKpi("Rules", campaign.rules || 0, `${formatNumber(campaign.published_rules || 0)} published`)}
+        ${campaignDetailKpi("Experiments", campaign.experiments || 0, `${formatNumber(assets.experiments?.length || 0)} listed`)}
+        ${campaignDetailKpi("Messages", campaign.messages || 0, `${formatNumber(assets.messages?.length || 0)} listed`)}
+        ${campaignDetailKpi("Conversion", formatPercent(campaign.conversion_rate || 0), `${formatNumber(campaign.client_events?.conversion || 0)} conversions`)}
+      </div>
+    </div>
+    <div class="campaign-detail-grid">
+      ${campaignAssetSection("Experiments", assets.experiments || [], "experiment")}
+      ${campaignAssetSection("Rules", assets.rules || [], "rule")}
+      ${campaignAssetSection("Messages", assets.messages || [], "message")}
+      ${campaignSurfacesSection(campaign.surfaces || [], campaign.client_events || {})}
+      ${campaignReviewSection(campaign.review_status || {})}
+      ${campaignDependenciesSection(campaign.dependencies || [])}
+      ${campaignRecentEventsSection(events)}
+    </div>
+  `;
+  overviewCampaignDetail.querySelectorAll("[data-campaign-nav]").forEach((button) => {
+    button.addEventListener("click", handleCampaignNavigation);
+  });
+  overviewCampaignDetail.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function campaignDetailKpi(label, value, detail) {
+  return `
+    <div>
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(String(value))}</strong>
+      <small>${escapeHtml(detail || "")}</small>
+    </div>
+  `;
+}
+
+function campaignAssetSection(title, items = [], kind) {
+  return `
+    <section class="campaign-detail-section">
+      <div class="campaign-detail-section-head">
+        <strong>${escapeHtml(title)}</strong>
+        <span>${escapeHtml(formatNumber(items.length))} item${items.length === 1 ? "" : "s"}</span>
+      </div>
+      <div class="campaign-asset-list">
+        ${items.length ? items.map((item) => campaignAssetRow(item, kind)).join("") : `<div class="status-line">No ${escapeHtml(title.toLowerCase())} in this campaign.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function campaignAssetRow(item, kind) {
+  const detail = [
+    item.surface || "",
+    item.status || "",
+    item.approval_status ? `review ${item.approval_status}` : "",
+    item.variant_count ? `${item.variant_count} variants` : "",
+    item.template_type || ""
+  ].filter(Boolean).join(" · ");
+  const action = kind === "message" ? "open-message" : kind === "experiment" ? "open-experiment" : "open-rule";
+  return `
+    <div class="campaign-asset-row">
+      <div>
+        <strong>${escapeHtml(item.name || item.id)}</strong>
+        <span>${escapeHtml(item.id || "")}</span>
+        <small>${escapeHtml(detail || "No detail")}</small>
+      </div>
+      <button type="button" data-campaign-nav="${escapeHtml(action)}" data-object-id="${escapeHtml(item.id)}">Open</button>
+    </div>
+  `;
+}
+
+function campaignSurfacesSection(surfaces = [], events = {}) {
+  return `
+    <section class="campaign-detail-section">
+      <div class="campaign-detail-section-head">
+        <strong>Surfaces</strong>
+        <span>${escapeHtml(formatNumber(surfaces.length))} configured</span>
+      </div>
+      <div class="campaign-chip-list">
+        ${surfaces.length ? surfaces.map((surface) => `<span>${escapeHtml(surface)}</span>`).join("") : `<span>No surfaces</span>`}
+      </div>
+      <div class="campaign-mini-metrics">
+        ${campaignDetailKpi("Exposure", events.exposure || 0, "client events")}
+        ${campaignDetailKpi("Impression", events.impression || 0, "client events")}
+        ${campaignDetailKpi("Conversion", events.conversion || 0, "client events")}
+      </div>
+    </section>
+  `;
+}
+
+function campaignReviewSection(status = {}) {
+  const rows = ["draft", "submitted", "approved", "published", "archived"];
+  return `
+    <section class="campaign-detail-section">
+      <div class="campaign-detail-section-head">
+        <strong>Review Status</strong>
+        <span>Rule governance</span>
+      </div>
+      <div class="campaign-review-list">
+        ${rows.map((key) => `
+          <div>
+            <span>${escapeHtml(key)}</span>
+            <strong>${escapeHtml(formatNumber(status[key] || 0))}</strong>
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function campaignDependenciesSection(items = []) {
+  return `
+    <section class="campaign-detail-section campaign-detail-wide">
+      <div class="campaign-detail-section-head">
+        <strong>Dependencies</strong>
+        <span>Rules and experiments using messages</span>
+      </div>
+      <div class="campaign-dependency-list">
+        ${items.length ? items.map((item) => `
+          <div class="${item.resolved ? "" : "missing"}">
+            <span>${escapeHtml(item.rule_name || item.rule_id)} -> ${escapeHtml(item.message_name || item.message_id)}</span>
+            <small>${escapeHtml(item.resolved ? "resolved" : "missing message")}</small>
+          </div>
+        `).join("") : `<div class="status-line">No message dependencies detected.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function campaignRecentEventsSection(events = []) {
+  return `
+    <section class="campaign-detail-section campaign-detail-wide">
+      <div class="campaign-detail-section-head">
+        <strong>Recent Events</strong>
+        <span>${escapeHtml(formatNumber(events.length))} latest client events</span>
+      </div>
+      <div class="campaign-event-list">
+        ${events.length ? events.map((event) => `
+          <div>
+            <span>${escapeHtml(event.occurred_at ? formatTime(event.occurred_at) : "-")}</span>
+            <strong>${escapeHtml(event.event_type || "-")}</strong>
+            <small>${escapeHtml([event.decision_key, event.object_key, event.surface, event.profile_key].filter(Boolean).join(" · "))}</small>
+          </div>
+        `).join("") : `<div class="status-line">No client events in this window.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+async function handleCampaignNavigation(event) {
+  const button = event.target.closest("[data-campaign-nav]");
+  if (!button) return;
+  const id = button.dataset.objectId;
+  try {
+    if (button.dataset.campaignNav === "open-rule") {
+      switchView("rules");
+      await loadRule(id);
+      return;
+    }
+    if (button.dataset.campaignNav === "open-experiment") {
+      switchView("experiments");
+      await loadExperiments();
+      selectedExperimentKey = id;
+      renderExperiments();
+      experimentDetail?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (button.dataset.campaignNav === "open-message") {
+      switchView("messages");
+      if (!cachedMessages.length) await loadMessages();
+      loadMessage(id, cachedMessages);
+    }
+  } catch (error) {
+    overviewCampaignDetail.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
+  }
 }
 
 async function runCampaignBulkAction(campaign, action) {

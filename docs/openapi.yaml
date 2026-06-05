@@ -4005,10 +4005,57 @@ components:
           type: array
           items:
             type: string
+        assets:
+          type: object
+          properties:
+            experiments:
+              type: array
+              items:
+                $ref: "#/components/schemas/CampaignAsset"
+            rules:
+              type: array
+              items:
+                $ref: "#/components/schemas/CampaignAsset"
+            messages:
+              type: array
+              items:
+                $ref: "#/components/schemas/CampaignAsset"
+        dependencies:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        review_status:
+          type: object
+          additionalProperties:
+            type: integer
+        recent_events:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
         last_activity_at:
           type: string
           format: date-time
           nullable: true
+    CampaignAsset:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        surface:
+          type: string
+        approval_status:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
     CampaignActionRequest:
       type: object
       required: [campaign, action]

@@ -207,6 +207,8 @@ export class Store {
     const since = new Date(Date.now() - windowHours * 60 * 60 * 1000).toISOString();
     const campaigns = new Map();
     const decisionCampaigns = new Map();
+    const ruleSummaries = new Map();
+    const messageSummaries = new Map();
     const ensure = (label) => {
       const campaign = label || "Unassigned";
       if (!campaigns.has(campaign)) {
@@ -224,6 +226,9 @@ export class Store {
           client_events: { exposure: 0, impression: 0, conversion: 0 },
           decision_keys: [],
           surfaces: [],
+          assets: { experiments: [], rules: [], messages: [] },
+          review_status: { draft: 0, submitted: 0, approved: 0, published: 0, archived: 0 },
+          recent_events: [],
           last_activity_at: null
         });
       }
@@ -239,14 +244,24 @@ export class Store {
       if (rule.status === "published") campaign.published_rules += 1;
       if (rule.status === "draft" || rule.status === "submitted") campaign.draft_rules += 1;
       if (rule.status === "archived") campaign.archived_rules += 1;
+      const approvalStatus = rule.metadata?.approval?.status || rule.status || "draft";
+      if (campaign.review_status[approvalStatus] !== undefined) campaign.review_status[approvalStatus] += 1;
       campaign.decision_keys.push(rule.decision_key);
       decisionCampaigns.set(rule.decision_key, campaign.campaign);
+      const hydratedRule = this.getRuleSet(rule.decision_key) || rule;
+      const summary = campaignRuleSummary({ ...rule, draft: hydratedRule.draft || {} });
+      ruleSummaries.set(rule.decision_key, summary);
+      if (rule.type === "experiment") campaign.assets.experiments.push(summary);
+      else campaign.assets.rules.push(summary);
       touch(campaign, rule.updated_at);
     }
     for (const message of this.listMessages()) {
       const campaign = ensure(campaignLabel(message.metadata) || "Unassigned");
       campaign.messages += 1;
       if (message.surface && !campaign.surfaces.includes(message.surface)) campaign.surfaces.push(message.surface);
+      const summary = campaignMessageSummary(message);
+      messageSummaries.set(message.id, summary);
+      campaign.assets.messages.push(summary);
       touch(campaign, message.updated_at);
     }
     const requestRows = this.db
@@ -280,6 +295,30 @@ export class Store {
       if (!campaign.decision_keys.includes(row.decision_key)) campaign.decision_keys.push(row.decision_key);
       touch(campaign, row.last_seen_at);
     }
+    const recentRows = this.db
+      .prepare(
+        `SELECT decision_key, event_json, occurred_at
+         FROM client_events
+         WHERE occurred_at >= ?
+         ORDER BY occurred_at DESC
+         LIMIT 200`
+      )
+      .all(since);
+    for (const row of recentRows) {
+      const campaign = campaigns.get(decisionCampaigns.get(row.decision_key) || "Unassigned");
+      if (!campaign || campaign.recent_events.length >= 12) continue;
+      const event = parse(row.event_json);
+      campaign.recent_events.push({
+        occurred_at: event.occurred_at || row.occurred_at,
+        event_type: event.event_type || event.type || "",
+        decision_key: row.decision_key,
+        profile_key: event.profile_key || "",
+        variant_key: event.variant_key || "",
+        message_id: event.message_id || "",
+        surface: event.surface || "",
+        object_key: event.variant_key || event.message_id || ""
+      });
+    }
     return [...campaigns.values()]
       .map((campaign) => {
         const exposures = Number(campaign.client_events.exposure || 0);
@@ -289,7 +328,15 @@ export class Store {
           client_event_total: Object.values(campaign.client_events).reduce((sum, value) => sum + Number(value || 0), 0),
           conversion_rate: exposures > 0 ? conversions / exposures : 0,
           decision_keys: campaign.decision_keys.slice(0, 12),
-          surfaces: campaign.surfaces.slice(0, 8)
+          surfaces: campaign.surfaces.slice(0, 8),
+          assets: {
+            experiments: campaign.assets.experiments.slice(0, 20),
+            rules: campaign.assets.rules.slice(0, 30),
+            messages: campaign.assets.messages.slice(0, 30)
+          },
+          dependencies: campaignDependencies(campaign.assets, messageSummaries),
+          review_status: campaign.review_status,
+          recent_events: campaign.recent_events
         };
       })
       .sort((left, right) =>
@@ -2858,6 +2905,68 @@ function campaignLabel(metadata = {}) {
   const campaign = typeof metadata?.campaign === "string" ? metadata.campaign : metadata?.campaign?.name || "";
   const folder = metadata?.campaign?.folder || metadata?.folder || "";
   return [campaign, folder].filter(Boolean).join(" / ");
+}
+
+function campaignRuleSummary(rule = {}) {
+  const experiment = rule.metadata?.experiment || {};
+  const approval = rule.metadata?.approval || {};
+  return {
+    id: rule.decision_key,
+    name: rule.name || rule.decision_key,
+    type: rule.type || "decision",
+    status: rule.status || "draft",
+    surface: rule.surface || "",
+    priority: Number(rule.priority || 0),
+    updated_at: rule.updated_at || "",
+    approval_status: approval.status || rule.status || "draft",
+    variant_count: Array.isArray(experiment.variants) ? experiment.variants.length : 0,
+    message_ids: referencedMessageIds(rule.draft || {})
+  };
+}
+
+function campaignMessageSummary(message = {}) {
+  return {
+    id: message.id,
+    name: message.name || message.id,
+    status: message.status || "active",
+    surface: message.surface || "",
+    template_type: message.metadata?.template_type || "",
+    placement: message.metadata?.placement || "",
+    updated_at: message.updated_at || ""
+  };
+}
+
+function campaignDependencies(assets = {}, messagesById = new Map()) {
+  const links = [];
+  for (const rule of [...(assets.rules || []), ...(assets.experiments || [])]) {
+    for (const messageId of rule.message_ids || []) {
+      links.push({
+        rule_id: rule.id,
+        rule_name: rule.name,
+        message_id: messageId,
+        message_name: messagesById.get(messageId)?.name || messageId,
+        resolved: messagesById.has(messageId)
+      });
+    }
+  }
+  return links.slice(0, 50);
+}
+
+function referencedMessageIds(definition = {}) {
+  const ids = new Set();
+  const inspect = (value) => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(inspect);
+      return;
+    }
+    if (typeof value.message_id === "string" && value.message_id) ids.add(value.message_id);
+    if (value.outputs) inspect(value.outputs);
+    if (value.branches) inspect(value.branches);
+    if (value.fallback) inspect(value.fallback);
+  };
+  inspect(definition);
+  return [...ids];
 }
 
 function portableSettings(settings) {

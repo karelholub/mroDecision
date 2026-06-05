@@ -437,6 +437,58 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(store.deleteMessageAsset(asset.id, { force: true }).deleted, true);
   assert.equal(store.listMessageAssets().length, 0);
 
+  store.upsertMessage(
+    "campaign_message",
+    {
+      name: "Campaign Message",
+      surface: "homepage",
+      default_content: { title: "Campaign", body: "Launch copy" },
+      metadata: { campaign: { name: "Spring Launch", folder: "Web" }, template_type: "banner" }
+    },
+    "tester"
+  );
+  store.createRuleSet(
+    {
+      name: "Campaign Experiment",
+      decision_key: "campaign_experiment",
+      type: "experiment",
+      surface: "homepage",
+      metadata: {
+        campaign: { name: "Spring Launch", folder: "Web" },
+        experiment: {
+          status: "running",
+          variants: [
+            { key: "control", weight: 50 },
+            { key: "message", weight: 50 }
+          ]
+        }
+      },
+      draft: {
+        fallback: { result: "eligible", outputs: { message_id: "campaign_message" } },
+        branches: []
+      }
+    },
+    "tester"
+  );
+  store.addClientEvent({
+    event_id: "evt-campaign-detail-1",
+    event_type: "impression",
+    occurred_at: new Date().toISOString(),
+    decision_key: "campaign_experiment",
+    profile_key: "p-campaign",
+    rule_version: 0,
+    message_id: "campaign_message",
+    surface: "homepage"
+  });
+  const campaignDetail = store.listCampaignOperations({ window_hours: 300 }).find((item) => item.campaign === "Spring Launch / Web");
+  assert.equal(campaignDetail.experiments, 1);
+  assert.equal(campaignDetail.messages, 1);
+  assert.equal(campaignDetail.assets.experiments[0].id, "campaign_experiment");
+  assert.deepEqual(campaignDetail.assets.experiments[0].message_ids, ["campaign_message"]);
+  assert.equal(campaignDetail.assets.messages[0].id, "campaign_message");
+  assert.equal(campaignDetail.dependencies[0].resolved, true);
+  assert.equal(campaignDetail.recent_events[0].message_id, "campaign_message");
+
   const savedProfile = store.upsertEvaluationProfile(
     "nbo_green_profile",
     {
@@ -619,11 +671,11 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
 
   const bundle = store.exportBundle();
   assert.equal(bundle.kind, "meiro-dee-config-bundle");
-  assert.equal(bundle.rule_sets.length, 4);
+  assert.equal(bundle.rule_sets.length, 5);
   assert.equal(bundle.rule_sets.find((item) => item.decision_key === "campaign_suppression").type, "inapp_message");
   assert.equal(bundle.rule_sets.find((item) => item.decision_key === "hero_asset_rule").type, "inapp_message");
   assert.equal(bundle.lookup_tables.length, 1);
-  assert.equal(bundle.messages.length, 1);
+  assert.equal(bundle.messages.length, 2);
   assert.ok(bundle.condition_blocks.some((block) => block.id === "high_intent"));
   assert.equal(bundle.settings.environment_label, "staging");
   assert.equal(bundle.settings.meiro_feedback_url, "https://example.test/collect/feedback");
