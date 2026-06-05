@@ -24,7 +24,10 @@ test("assistant provider stays deterministic when disabled", async () => {
 
 test("assistant provider accepts draft-only allowed LLM plan", async () => {
   assistantProviderMetrics.reset();
-  const fetcher = async () => new Response(JSON.stringify({
+  let requestBody = {};
+  const fetcher = async (url, options) => {
+    requestBody = JSON.parse(options.body);
+    return new Response(JSON.stringify({
     choices: [
       {
         message: {
@@ -51,7 +54,8 @@ test("assistant provider accepts draft-only allowed LLM plan", async () => {
       }
     ],
     usage: { prompt_tokens: 11, completion_tokens: 13, total_tokens: 24 }
-  }), { status: 200, headers: { "content-type": "application/json" } });
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
 
   const plan = await createAssistantPlanWithProvider(
     { prompt: "Create a homepage banner", type: "inapp_message", decision_key: "homepage_banner" },
@@ -60,18 +64,26 @@ test("assistant provider accepts draft-only allowed LLM plan", async () => {
       assistant_llm_enabled: true,
       assistant_llm_base_url: "https://provider.example/v1",
       assistant_llm_model: "test-model",
-      assistant_llm_api_key: "secret"
+      assistant_llm_api_key: "secret",
+      assistant_llm_policy: "conservative"
     },
     fetcher
   );
 
   assert.equal(plan.provider.status, "used");
   assert.equal(plan.provider.mode, "llm");
+  assert.equal(plan.provider.policy, "conservative");
+  assert.equal(plan.provider.contract_version, "assistant-plan-v2");
   assert.equal(plan.summary, "Provider draft");
   assert.equal(plan.governance.provider_mode, "llm");
+  assert.equal(plan.governance.provider_policy, "conservative");
+  assert.equal(plan.governance.contract_version, "assistant-plan-v2");
   assert.equal(plan.governance.secret_finding_count, 0);
   assert.ok(plan.governance.checks.some((item) => item.key === "actions" && item.passed));
   assert.deepEqual(plan.actions.map((item) => item.action), ["create_rule_draft"]);
+  assert.ok(requestBody.messages[0].content.includes("assistant-plan-v2"));
+  assert.ok(requestBody.messages[0].content.includes("minimal assumptions"));
+  assert.equal(JSON.parse(requestBody.messages[1].content).policy, "conservative");
   const metrics = assistantProviderMetrics.metrics();
   assert.equal(metrics.calls.total, 1);
   assert.equal(metrics.calls.statuses.used, 1);
@@ -124,11 +136,13 @@ test("assistant provider defaults OpenAI base URL for private API keys", () => {
     assistant_llm_enabled: true,
     assistant_llm_provider: "openai",
     assistant_llm_model: "gpt-test",
-    assistant_llm_api_key: "secret"
+    assistant_llm_api_key: "secret",
+    assistant_llm_policy: "very_loose"
   });
 
   assert.equal(settings.base_url, "https://api.openai.com/v1");
   assert.equal(settings.provider, "openai");
+  assert.equal(settings.policy, "balanced");
 });
 
 test("assistant provider test connection calls chat completions safely", async () => {

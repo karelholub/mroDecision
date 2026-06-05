@@ -1840,6 +1840,11 @@ components:
               type: string
             provider_status:
               type: string
+            provider_policy:
+              type: string
+              enum: [conservative, balanced, creative]
+            contract_version:
+              type: string
             action_count:
               type: integer
             unsupported_action_count:
@@ -3999,6 +4004,10 @@ components:
           description: Provider API key. Redacted from GET settings and exports.
         assistant_llm_api_key_configured:
           type: boolean
+        assistant_llm_policy:
+          type: string
+          enum: [conservative, balanced, creative]
+          description: Provider prompt policy preset. Server-side draft-only guardrails are enforced regardless of preset.
         assistant_llm_timeout_ms:
           type: integer
         schema_sync_interval_minutes:

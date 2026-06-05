@@ -1063,7 +1063,7 @@ function renderAssistantGovernance(governance = {}) {
     <div class="assistant-governance-card">
       <div>
         <strong>${escapeHtml(governance.summary || "Governance checks")}</strong>
-        <span>${escapeHtml(governance.contract || "draft_only")} · ${escapeHtml(governance.provider_mode || "deterministic")}</span>
+        <span>${escapeHtml(governance.contract || "draft_only")} · ${escapeHtml(governance.provider_mode || "deterministic")} · ${escapeHtml(assistantProviderPolicyLabel(governance.provider_policy))} · ${escapeHtml(governance.contract_version || "assistant-plan-v2")}</span>
       </div>
       <div class="assistant-governance-checks">
         ${checks.map((item) => `
@@ -8436,6 +8436,7 @@ async function loadSettings() {
     document.querySelector("#setting-assistant-llm-model").value = settings.assistant_llm_model || "";
     document.querySelector("#setting-assistant-llm-api-key").value = "";
     document.querySelector("#setting-assistant-llm-api-key").placeholder = settings.assistant_llm_api_key_configured ? "Configured" : "";
+    document.querySelector("#setting-assistant-llm-policy").value = settings.assistant_llm_policy || "balanced";
     document.querySelector("#setting-assistant-llm-timeout").value = settings.assistant_llm_timeout_ms || 15000;
     renderSchemaSyncStatus(settings, body.runtime?.schema_sync || {});
     renderSettingsSummary(settings, body.runtime || {});
@@ -8490,6 +8491,7 @@ async function testAssistantProviderConnection() {
         assistant_llm_base_url: document.querySelector("#setting-assistant-llm-base-url").value.trim(),
         assistant_llm_model: document.querySelector("#setting-assistant-llm-model").value.trim(),
         assistant_llm_api_key: document.querySelector("#setting-assistant-llm-api-key").value.trim(),
+        assistant_llm_policy: document.querySelector("#setting-assistant-llm-policy").value,
         assistant_llm_timeout_ms: Number(document.querySelector("#setting-assistant-llm-timeout").value || 15000)
       })
     });
@@ -8523,6 +8525,7 @@ async function saveSettings(event) {
       assistant_llm_provider: document.querySelector("#setting-assistant-llm-provider").value,
       assistant_llm_base_url: document.querySelector("#setting-assistant-llm-base-url").value.trim(),
       assistant_llm_model: document.querySelector("#setting-assistant-llm-model").value.trim(),
+      assistant_llm_policy: document.querySelector("#setting-assistant-llm-policy").value,
       assistant_llm_timeout_ms: Number(document.querySelector("#setting-assistant-llm-timeout").value || 15000)
     };
     const apiToken = document.querySelector("#setting-meiro-api-token").value.trim();
@@ -8886,6 +8889,12 @@ function renderAssistantProviderStatus(settings = {}, runtime = {}) {
       ok: !enabled || Boolean(settings.assistant_llm_model && settings.assistant_llm_api_key_configured)
     },
     {
+      label: "Policy",
+      value: assistantProviderPolicyLabel(settings.assistant_llm_policy),
+      detail: "Controls provider prompt strictness; server guardrails still enforce draft-only actions.",
+      ok: true
+    },
+    {
       label: "Plan calls",
       value: formatNumber(calls.total || 0),
       detail: `${formatPercent(calls.error_rate || 0)} fallback/error rate · ${formatNumber(calls.p95_ms || 0)}ms p95`,
@@ -8939,6 +8948,7 @@ function assistantProviderChangeSummary(changes = {}) {
     assistant_llm_base_url: "Base URL",
     assistant_llm_model: "Model",
     assistant_llm_api_key: "API key",
+    assistant_llm_policy: "Policy",
     assistant_llm_timeout_ms: "Timeout"
   };
   const items = Object.entries(changes).map(([key, change]) => {
@@ -8953,6 +8963,12 @@ function assistantProviderLabel(provider) {
   if (provider === "openai") return "OpenAI / ChatGPT API";
   if (provider === "openai_compatible") return "OpenAI-compatible endpoint";
   return provider || "OpenAI / ChatGPT API";
+}
+
+function assistantProviderPolicyLabel(policy) {
+  if (policy === "conservative") return "Conservative";
+  if (policy === "creative") return "Creative";
+  return "Balanced";
 }
 
 async function importSchema() {

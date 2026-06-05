@@ -40,6 +40,7 @@ const portableSettingKeys = [
   "assistant_llm_provider",
   "assistant_llm_base_url",
   "assistant_llm_model",
+  "assistant_llm_policy",
   "assistant_llm_timeout_ms"
 ];
 const redactedBundleSettingKeys = ["meiro_api_token", "meiro_cli_token", "assistant_llm_api_key"];
@@ -49,6 +50,7 @@ const assistantProviderSettingKeys = [
   "assistant_llm_base_url",
   "assistant_llm_model",
   "assistant_llm_api_key",
+  "assistant_llm_policy",
   "assistant_llm_timeout_ms"
 ];
 
@@ -1750,6 +1752,7 @@ export class Store {
       "assistant_llm_base_url",
       "assistant_llm_model",
       "assistant_llm_api_key",
+      "assistant_llm_policy",
       "assistant_llm_timeout_ms",
       "schema_last_synced_at",
       "schema_last_sync_status",
@@ -2296,6 +2299,7 @@ function seedSettings(db) {
     assistant_llm_base_url: "",
     assistant_llm_model: "",
     assistant_llm_api_key: "",
+    assistant_llm_policy: "balanced",
     assistant_llm_timeout_ms: 15000,
     schema_last_synced_at: "",
     schema_last_sync_status: "never",
@@ -3454,6 +3458,7 @@ function assistantProviderSnapshot(settings = {}) {
     provider: String(settings.assistant_llm_provider || "openai"),
     base_url: String(settings.assistant_llm_base_url || ""),
     model: String(settings.assistant_llm_model || ""),
+    policy: String(settings.assistant_llm_policy || "balanced"),
     api_key: assistantProviderSettingValue("assistant_llm_api_key", settings.assistant_llm_api_key),
     timeout_ms: Number(settings.assistant_llm_timeout_ms || 0)
   };

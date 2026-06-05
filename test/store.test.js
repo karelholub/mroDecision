@@ -504,6 +504,7 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
     assistant_llm_provider: "openai",
     assistant_llm_model: "gpt-4.1-mini",
     assistant_llm_api_key: "sk-secret",
+    assistant_llm_policy: "conservative",
     assistant_llm_timeout_ms: 12000
   }, "tester");
   const providerEvents = store.listAssistantProviderConfigEvents();
@@ -511,7 +512,9 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(providerEvents[0].changed_by, "tester");
   assert.equal(providerEvents[0].changes.assistant_llm_api_key.to, "configured");
   assert.equal(providerEvents[0].changes.assistant_llm_api_key.from, "not_configured");
+  assert.equal(providerEvents[0].changes.assistant_llm_policy.to, "conservative");
   assert.equal(providerEvents[0].snapshot.api_key, "configured");
+  assert.equal(providerEvents[0].snapshot.policy, "conservative");
   assert.equal(JSON.stringify(providerEvents[0]).includes("sk-secret"), false);
 
   assert.ok(store.listConditionBlocks().some((block) => block.id === "high_intent"));

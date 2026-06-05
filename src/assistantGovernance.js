@@ -64,6 +64,8 @@ export function createAssistantGovernanceReport(plan = {}, provider = plan.provi
     contract: isAdvice ? "advice_only" : "draft_only",
     provider_mode: provider.mode || "deterministic",
     provider_status: provider.status || "unknown",
+    provider_policy: provider.policy || "balanced",
+    contract_version: provider.contract_version || "assistant-plan-v2",
     action_count: actions.length,
     unsupported_action_count: unsupportedActions.length,
     secret_finding_count: secretFindings.length,
