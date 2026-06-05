@@ -1451,6 +1451,7 @@ function experimentBanditDetail(experiment = {}) {
           <strong>Assignment history</strong>
           <span>${escapeHtml(formatNumber(history.total || 0))} assignments in the last ${escapeHtml(formatNumber(history.window_hours || 24))} hours</span>
         </div>
+        ${banditAssignmentTrend(history.trend)}
         <div class="bandit-history-grid">
           ${banditHistoryGroup("Variants", history.by_variant)}
           ${banditHistoryGroup("Reasons", history.by_reason)}
@@ -1462,6 +1463,65 @@ function experimentBanditDetail(experiment = {}) {
       </div>
     </div>
   `;
+}
+
+function banditAssignmentTrend(trend = []) {
+  const rows = Array.isArray(trend) ? trend : [];
+  const max = Math.max(...rows.map((item) => Number(item.total || 0)), 0);
+  const variantKeys = [...new Set(rows.flatMap((item) => (item.variants || []).map((variant) => variant.key || "(empty)")))].slice(0, 6);
+  if (!rows.length || max <= 0) {
+    return `
+      <section class="bandit-trend-panel">
+        <div class="editor-title">Allocation trend</div>
+        <div class="status-line">No assignment trend yet.</div>
+      </section>
+    `;
+  }
+  return `
+    <section class="bandit-trend-panel">
+      <div class="bandit-trend-head">
+        <div class="editor-title">Allocation trend</div>
+        <span>Hourly assignments by variant</span>
+      </div>
+      <div class="bandit-trend-bars" aria-label="Hourly assignment trend">
+        ${rows.map((item) => banditTrendBar(item, max, variantKeys)).join("")}
+      </div>
+      <div class="bandit-trend-legend">
+        ${variantKeys.map((key, index) => `<span><i style="background:${banditTrendColor(index)}"></i>${escapeHtml(key)}</span>`).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function banditTrendBar(item, max, variantKeys) {
+  const total = Number(item.total || 0);
+  const height = Math.max(4, Math.round((total / Math.max(max, 1)) * 100));
+  const variants = Array.isArray(item.variants) ? item.variants : [];
+  return `
+    <div class="bandit-trend-column" title="${escapeHtml(`${formatHourLabel(item.bucket)} · ${formatNumber(total)} assignments`)}">
+      <div class="bandit-trend-track">
+        <div class="bandit-trend-stack" style="height:${height}%">
+          ${variants.length ? variants.map((variant) => {
+            const index = Math.max(0, variantKeys.indexOf(variant.key || "(empty)"));
+            const segmentHeight = Math.max(8, Math.round(Number(variant.share || 0) * 100));
+            return `<em style="height:${segmentHeight}%;background:${banditTrendColor(index)}" title="${escapeHtml(`${variant.key}: ${formatNumber(variant.count || 0)}`)}"></em>`;
+          }).join("") : `<em style="height:100%;background:#d6dee9"></em>`}
+        </div>
+      </div>
+      <small>${escapeHtml(formatHourLabel(item.bucket))}</small>
+    </div>
+  `;
+}
+
+function banditTrendColor(index) {
+  return ["#0e9a8e", "#2563eb", "#7c3aed", "#f59e0b", "#dc2626", "#64748b"][index % 6];
+}
+
+function formatHourLabel(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
 function banditHistoryGroup(title, items = []) {

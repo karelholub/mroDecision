@@ -335,6 +335,10 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
     assert.equal(history.by_strategy[0].key, "bandit");
     assert.equal(history.by_reason.find((item) => item.key === "exploitation").count, 1);
     assert.equal(history.by_variant.find((item) => item.key === "treatment").count, 1);
+    assert.equal(history.trend.length, 24);
+    const activeBucket = history.trend.find((item) => item.bucket === "2026-05-27T02:00:00.000Z");
+    assert.equal(activeBucket.total, 2);
+    assert.equal(activeBucket.variants.find((item) => item.key === "treatment").share, 0.5);
     assert.equal(history.recent[0].profile_key, "bandit-profile-2");
   } finally {
     Date.now = originalDateNowForAssignments;

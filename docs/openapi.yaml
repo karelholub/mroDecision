@@ -3642,6 +3642,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ExperimentAssignmentGroup"
+        trend:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentAssignmentTrendBucket"
         recent:
           type: array
           items:
@@ -3653,6 +3657,27 @@ components:
           type: string
         count:
           type: integer
+    ExperimentAssignmentTrendBucket:
+      type: object
+      properties:
+        bucket:
+          type: string
+          format: date-time
+        total:
+          type: integer
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentAssignmentTrendVariant"
+    ExperimentAssignmentTrendVariant:
+      type: object
+      properties:
+        key:
+          type: string
+        count:
+          type: integer
+        share:
+          type: number
     ExperimentAssignment:
       type: object
       properties:

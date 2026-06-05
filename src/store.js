@@ -1121,8 +1121,14 @@ export class Store {
   }
 
   getExperimentAssignmentHistory(decisionKey, options = {}) {
-    const since = options.since || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const rows = this.db
+    const windowHours = Math.max(1, Math.min(Number(options.window_hours || 24), 168));
+    const end = floorToHour(new Date(Date.now()));
+    const start = options.since ? new Date(options.since) : new Date(end.getTime() - (windowHours - 1) * 60 * 60 * 1000);
+    const since = start.toISOString();
+    const total = this.db
+      .prepare("SELECT COUNT(*) AS count FROM experiment_assignments WHERE decision_key = ? AND assigned_at >= ?")
+      .get(decisionKey, since)?.count || 0;
+    const recent = this.db
       .prepare(
         `SELECT *
          FROM experiment_assignments
@@ -1132,14 +1138,42 @@ export class Store {
       )
       .all(decisionKey, since, Math.min(Number(options.limit || 100), 500))
       .map(rowToExperimentAssignment);
+    const trendRows = this.db
+      .prepare(
+        `SELECT
+          strftime('%Y-%m-%dT%H:00:00.000Z', assigned_at) AS bucket,
+          COALESCE(NULLIF(variant_key, ''), '(empty)') AS variant_key,
+          COUNT(*) AS count
+         FROM experiment_assignments
+         WHERE decision_key = ? AND assigned_at >= ?
+         GROUP BY bucket, variant_key
+         ORDER BY bucket ASC, variant_key ASC`
+      )
+      .all(decisionKey, since);
     return {
-      window_hours: 24,
-      total: rows.length,
-      by_variant: assignmentGroup(rows, "variant_key"),
-      by_strategy: assignmentGroup(rows, "strategy"),
-      by_reason: assignmentGroup(rows, "reason"),
-      recent: rows.slice(0, 12)
+      window_hours: windowHours,
+      total: Number(total || 0),
+      by_variant: this.assignmentGroup(decisionKey, since, "variant_key"),
+      by_strategy: this.assignmentGroup(decisionKey, since, "strategy"),
+      by_reason: this.assignmentGroup(decisionKey, since, "reason"),
+      trend: assignmentTrend(trendRows, start, windowHours),
+      recent: recent.slice(0, 12)
     };
+  }
+
+  assignmentGroup(decisionKey, since, column) {
+    const allowed = new Set(["variant_key", "strategy", "reason"]);
+    if (!allowed.has(column)) return [];
+    return this.db
+      .prepare(
+        `SELECT COALESCE(NULLIF(${column}, ''), '(empty)') AS key, COUNT(*) AS count
+         FROM experiment_assignments
+         WHERE decision_key = ? AND assigned_at >= ?
+         GROUP BY key
+         ORDER BY count DESC, key ASC`
+      )
+      .all(decisionKey, since)
+      .map((row) => ({ key: row.key, count: Number(row.count || 0) }));
   }
 
   getRuleMetrics(decisionKey) {
@@ -2987,15 +3021,36 @@ function rowToExperimentAssignment(row) {
   };
 }
 
-function assignmentGroup(rows = [], key) {
-  const counts = new Map();
-  for (const row of rows) {
-    const value = row[key] || "(empty)";
-    counts.set(value, (counts.get(value) || 0) + 1);
+function assignmentTrend(rows = [], start, windowHours) {
+  const buckets = new Map();
+  const startDate = floorToHour(start instanceof Date ? start : new Date(start));
+  for (let index = 0; index < windowHours; index += 1) {
+    const bucket = new Date(startDate.getTime() + index * 60 * 60 * 1000).toISOString();
+    buckets.set(bucket, { bucket, total: 0, variants: [] });
   }
-  return [...counts.entries()]
-    .map(([value, count]) => ({ key: value, count }))
-    .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key));
+  for (const row of rows) {
+    const bucket = row.bucket;
+    if (!buckets.has(bucket)) buckets.set(bucket, { bucket, total: 0, variants: [] });
+    const item = buckets.get(bucket);
+    const count = Number(row.count || 0);
+    item.total += count;
+    item.variants.push({ key: row.variant_key || "(empty)", count });
+  }
+  return [...buckets.values()].map((item) => ({
+    ...item,
+    variants: item.variants
+      .map((variant) => ({
+        ...variant,
+        share: item.total ? variant.count / item.total : 0
+      }))
+      .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key))
+  }));
+}
+
+function floorToHour(value) {
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  date.setUTCMinutes(0, 0, 0);
+  return date;
 }
 
 function normalizeMetricsWindowHours(value) {
