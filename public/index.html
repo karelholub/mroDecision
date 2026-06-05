@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Meiro DEE</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=20260605-inline-rule-editor" />
   </head>
   <body>
     <aside>
@@ -227,7 +227,7 @@
             <div id="rule-list" class="table"></div>
           </div>
         </div>
-        <div id="rule-detail-modal" class="rule-detail-modal" hidden>
+        <div id="rule-detail-modal" class="rule-editor-detail-panel editor" hidden>
           <form id="rule-editor" class="rule-detail-dialog">
             <div class="rule-detail-header">
               <div>
@@ -235,8 +235,7 @@
                 <span>Edit rule attributes, inspect draft shape, and open logic authoring.</span>
               </div>
               <div class="modal-header-actions">
-                <button type="button" id="toggle-rule-fullscreen">Full Screen</button>
-                <button type="button" id="close-rule-detail">Close</button>
+                <button type="button" id="close-rule-detail">Collapse</button>
               </div>
             </div>
             <div class="rule-editor-pane">
@@ -1920,6 +1919,6 @@
       </div>
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
-  <script src="/app.js?v=20260605-inline-message-editor"></script>
+  <script src="/app.js?v=20260605-inline-rule-editor"></script>
 </body>
 </html>

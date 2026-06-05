@@ -325,7 +325,6 @@ document.querySelector("#sync-json").addEventListener("click", syncJsonFromBuild
 document.querySelector("#sync-json-modal").addEventListener("click", syncJsonFromBuilder);
 document.querySelector("#open-rule-builder").addEventListener("click", openRuleBuilder);
 document.querySelector("#close-rule-detail").addEventListener("click", closeRuleDetail);
-document.querySelector("#toggle-rule-fullscreen")?.addEventListener("click", toggleRuleFullscreen);
 document.querySelector("#close-rule-builder").addEventListener("click", closeRuleBuilder);
 document.querySelector("#done-rule-builder").addEventListener("click", () => {
   syncJsonFromBuilder();
@@ -1984,20 +1983,14 @@ function statusItem(label, value) {
 function openRuleDetail() {
   if (!ruleDetailModal) return;
   ruleDetailModal.hidden = false;
+  ruleDetailModal.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function closeRuleDetail() {
   if (!ruleDetailModal) return;
+  closeRuleBuilder();
+  closePublishConfirm();
   ruleDetailModal.hidden = true;
-  ruleDetailModal.classList.remove("fullscreen");
-  const toggle = document.querySelector("#toggle-rule-fullscreen");
-  if (toggle) toggle.textContent = "Full Screen";
-}
-
-function toggleRuleFullscreen() {
-  if (!ruleDetailModal) return;
-  const expanded = ruleDetailModal.classList.toggle("fullscreen");
-  document.querySelector("#toggle-rule-fullscreen").textContent = expanded ? "Exit Full Screen" : "Full Screen";
 }
 
 function openRuleBuilder() {

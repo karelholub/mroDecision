@@ -199,7 +199,7 @@ Status: started with experiment significance calculations, confidence labels, mi
 2. Improve message authoring: support non-URL image assets, live preview syncing, richer CTA/footer content, "used by rules" backlinks, and durable version history. Initial upload/drop, live sync, richer content, backlinks, message version snapshots, path diffs, visual version comparisons, managed image asset storage, and unused-asset cleanup are implemented.
 3. Improve experiment operations: validate allocation weights to 100%, explain significance methodology, and add a Declare Winner flow that prepares a 100% allocation draft. Implemented.
 4. Improve governance: capture review assignee, submission comment, approval comment, approval history, and a compact rule governance timeline. Implemented; notifications and task assignment integrations remain pending.
-5. Improve information architecture: typed rule creation, sortable rule list, raw audit payload collapsed by default, optional full-screen rule editing, and campaign/folder grouping for rules, messages, experiments, audit, and overview. Implemented; page-mode editing remains pending.
+5. Improve information architecture: typed rule creation, sortable rule list, raw audit payload collapsed by default, page-level rule editing, and campaign/folder grouping for rules, messages, experiments, audit, and overview. Implemented; deeper workbench navigation polish remains pending.
 6. Improve marketer setup flows: add form-based profile builders for Evaluate, reusable frequency-cap blocks, campaign folders, clearer campaign-level change logs, and bulk campaign operations. Evaluate Profile Builder, Frequency Cap Helper, campaign/folder fields, an Overview platform change log, campaign-level operational rollups, and guarded campaign bulk review/archive/duplicate actions are implemented.
 
 ## Recommended Next Sprint
@@ -209,5 +209,5 @@ Status: started with experiment significance calculations, confidence labels, mi
 3. Add deeper personalization helpers such as content-variant previews and audience-specific copy comparisons.
 4. Add assistant provider usage analytics and configuration audit history. Redacted configuration history is implemented.
 5. Add external delivery hints for managed assets, such as CDN host validation and downstream render diagnostics. Downstream rule-output asset usage reporting is implemented.
-6. Remove modal-heavy editor flows. Overview rule detail, Evaluate payload JSON, Reference Data Details, Message Editor, Rule Builder, and publish review have been converted to inline panels; the main Rule Set editor remains.
+6. Remove modal-heavy editor flows. Overview rule detail, Evaluate payload JSON, Reference Data Details, Message Editor, Rule Set editor, Rule Builder, and publish review have been converted to inline panels.
 7. Add adaptive multi-armed bandit experiments after fixed-split reporting and website feedback are stable.
