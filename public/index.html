@@ -521,6 +521,32 @@
                 </div>
               </div>
             </div>
+            <div id="publish-confirm-modal" class="publish-review-inline" hidden>
+              <div class="publish-confirm-dialog">
+                <div class="rule-builder-header">
+                  <div>
+                    <strong>Review Publish</strong>
+                    <span>Validate the draft before replacing the published rule.</span>
+                  </div>
+                  <button type="button" id="cancel-publish-rule">Close</button>
+                </div>
+                <div class="publish-review-body">
+                  <div id="publish-confirm-summary" class="publish-summary-grid"></div>
+                  <div class="publish-review-panel">
+                    <h3>Changed Areas</h3>
+                    <div id="publish-confirm-diff" class="publish-diff-list"></div>
+                  </div>
+                  <div class="publish-review-panel">
+                    <h3>Validation</h3>
+                    <div id="publish-confirm-validation" class="publish-validation-list"></div>
+                  </div>
+                </div>
+                <div class="rule-builder-footer">
+                  <button type="button" id="approve-publish-rule">Approve Draft</button>
+                  <button type="button" id="confirm-publish-rule">Publish Rule</button>
+                </div>
+              </div>
+            </div>
             <div class="actions left workbench-actions">
               <button type="button" id="sync-json">Sync JSON</button>
               <button type="submit" id="save-draft">Save Draft</button>
@@ -625,32 +651,6 @@
                 <div data-role="conditions" class="condition-list"></div>
               </section>
             </template>
-            <div id="publish-confirm-modal" class="rule-builder-modal" hidden>
-              <div class="publish-confirm-dialog">
-                <div class="rule-builder-header">
-                  <div>
-                    <strong>Review Publish</strong>
-                    <span>Validate the draft before replacing the published rule.</span>
-                  </div>
-                  <button type="button" id="cancel-publish-rule">Close</button>
-                </div>
-                <div class="publish-review-body">
-                  <div id="publish-confirm-summary" class="publish-summary-grid"></div>
-                  <div class="publish-review-panel">
-                    <h3>Changed Areas</h3>
-                    <div id="publish-confirm-diff" class="publish-diff-list"></div>
-                  </div>
-                  <div class="publish-review-panel">
-                    <h3>Validation</h3>
-                    <div id="publish-confirm-validation" class="publish-validation-list"></div>
-                  </div>
-                </div>
-                <div class="rule-builder-footer">
-                  <button type="button" id="approve-publish-rule">Approve Draft</button>
-                  <button type="button" id="confirm-publish-rule">Publish Rule</button>
-                </div>
-              </div>
-            </div>
             <template id="condition-template">
               <div class="condition-row">
                 <label>

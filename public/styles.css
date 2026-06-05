@@ -2955,6 +2955,15 @@ header {
   overflow: auto;
 }
 
+.rule-editor-pane.publish-open {
+  grid-template-rows: minmax(280px, auto) minmax(360px, auto) auto minmax(230px, auto);
+  overflow: auto;
+}
+
+.rule-editor-pane.logic-open.publish-open {
+  grid-template-rows: minmax(280px, auto) minmax(560px, auto) minmax(360px, auto) auto minmax(230px, auto);
+}
+
 .rule-editor-pane.logic-open .rule-editor-main {
   min-height: 280px;
 }
@@ -3058,19 +3067,6 @@ header {
   font-size: 18px;
 }
 
-.rule-builder-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  display: grid;
-  padding: 22px;
-  background: rgba(17, 24, 39, 0.5);
-}
-
-.rule-builder-modal[hidden] {
-  display: none;
-}
-
 .rule-builder-panel {
   display: grid;
   min-height: 0;
@@ -3094,19 +3090,26 @@ header {
   overflow: hidden;
 }
 
+.publish-review-inline {
+  display: grid;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.publish-review-inline[hidden] {
+  display: none;
+}
+
 .publish-confirm-dialog {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
-  width: min(980px, 100%);
-  max-height: min(760px, 100%);
-  align-self: center;
-  justify-self: center;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  box-shadow: 0 20px 45px rgba(16, 24, 40, 0.24);
+  max-height: min(720px, 70vh);
   overflow: hidden;
 }
 
@@ -5254,6 +5257,7 @@ textarea {
 }
 
 .status-item {
+  min-width: 0;
   min-height: 72px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -5269,6 +5273,9 @@ textarea {
 }
 
 .status-item strong {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 18px;
 }
 

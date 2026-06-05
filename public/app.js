@@ -2014,13 +2014,14 @@ function closeRuleBuilder() {
 }
 
 function openPublishConfirm() {
+  document.querySelector(".rule-editor-pane")?.classList.add("publish-open");
   publishConfirmModal.hidden = false;
-  document.body.classList.add("modal-open");
+  publishConfirmModal.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function closePublishConfirm() {
   publishConfirmModal.hidden = true;
-  document.body.classList.remove("modal-open");
+  document.querySelector(".rule-editor-pane")?.classList.remove("publish-open");
 }
 
 function renderRuleInspector() {
