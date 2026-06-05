@@ -54,6 +54,7 @@ const schemaOutput = document.querySelector("#schema-output");
 const settingsHealthSummary = document.querySelector("#settings-health-summary");
 const assistantProviderStatus = document.querySelector("#assistant-provider-status");
 const assistantProviderConfigHistory = document.querySelector("#assistant-provider-config-history");
+const assistantProviderPlanHistory = document.querySelector("#assistant-provider-plan-history");
 const assistantProviderTestOutput = document.querySelector("#assistant-provider-test-output");
 const integrationTemplate = document.querySelector("#integration-template");
 const integrationResponse = document.querySelector("#integration-response");
@@ -8442,6 +8443,7 @@ async function loadSettings() {
     renderSettingsSummary(settings, body.runtime || {});
     renderAssistantProviderStatus(settings, body.runtime || {});
     renderAssistantProviderConfigHistory(body.runtime?.assistant_provider_config_events || []);
+    renderAssistantProviderPlanHistory(body.runtime?.assistant_provider_plan_events || []);
     await loadMeiroDeliveries();
     settingsOutput.textContent = JSON.stringify(body, null, 2);
     renderIntegration();
@@ -8543,6 +8545,7 @@ async function saveSettings(event) {
     renderSettingsSummary(body.settings || {}, body.runtime || {});
     renderAssistantProviderStatus(body.settings || {}, body.runtime || {});
     renderAssistantProviderConfigHistory(body.runtime?.assistant_provider_config_events || []);
+    renderAssistantProviderPlanHistory(body.runtime?.assistant_provider_plan_events || []);
     renderIntegration();
     settingsOutput.textContent = JSON.stringify(body, null, 2);
   } catch (error) {
@@ -8941,6 +8944,32 @@ function renderAssistantProviderConfigHistory(events = []) {
     : `<div class="timeline-empty">No assistant provider configuration changes recorded yet.</div>`;
 }
 
+function renderAssistantProviderPlanHistory(events = []) {
+  if (!assistantProviderPlanHistory) return;
+  assistantProviderPlanHistory.innerHTML = events.length
+    ? `<div class="governance-timeline">${events.map((event) => `
+      <div class="timeline-item assistant-plan-audit-item">
+        <span>${escapeHtml(event.planned_at ? formatTime(event.planned_at) : "-")} · ${escapeHtml(event.planned_by || "system")}</span>
+        <strong>${escapeHtml(event.mode || "deterministic")} · ${escapeHtml(event.status || "unknown")} · ${escapeHtml(event.governance_status || "unknown")}</strong>
+        <small>${escapeHtml(assistantProviderPlanSummary(event))}</small>
+      </div>
+    `).join("")}</div>`
+    : `<div class="timeline-empty">No assistant plan audit events recorded yet.</div>`;
+}
+
+function assistantProviderPlanSummary(event = {}) {
+  return [
+    event.provider || "deterministic",
+    event.model || "no model",
+    assistantProviderPolicyLabel(event.policy),
+    event.contract_version || "assistant-plan-v2",
+    `${formatNumber(event.duration_ms || 0)}ms`,
+    `${formatNumber(event.action_count || 0)} actions`,
+    `${formatNumber(event.warning_count || 0)} warnings`,
+    `prompt ${shortHash(event.prompt_hash)} (${formatNumber(event.prompt_length || 0)} chars)`
+  ].join(" · ");
+}
+
 function assistantProviderChangeSummary(changes = {}) {
   const labels = {
     assistant_llm_enabled: "Mode",
@@ -8957,6 +8986,10 @@ function assistantProviderChangeSummary(changes = {}) {
     return `${labels[key] || key}: ${from} -> ${to}`;
   });
   return escapeHtml(items.join(" · ") || "No visible changes");
+}
+
+function shortHash(value) {
+  return value ? `${String(value).slice(0, 10)}...` : "none";
 }
 
 function assistantProviderLabel(provider) {

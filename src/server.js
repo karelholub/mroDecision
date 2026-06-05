@@ -204,6 +204,7 @@ async function routeApi(req, res, url) {
   if (req.method === "POST" && pathname === "/v1/assistant/plan") {
     requireScope(req, "editor");
     const body = await readJson(req, config.requestBodyLimitBytes);
+    const planStartedAt = Date.now();
     const context = {
       ruleExists: (key) => Boolean(store.getRuleSet(key)),
       schemaItems: store.listSchemaItems(),
@@ -213,6 +214,13 @@ async function routeApi(req, res, url) {
     const plan = await createAssistantPlanWithProvider(body, context, store.getSettings());
     validateAssistantPlan(plan);
     plan.governance = createAssistantGovernanceReport(plan, plan.provider);
+    store.recordAssistantProviderPlanEvent({
+      request: body,
+      plan,
+      planned_by: req.auth.name,
+      duration_ms: Date.now() - planStartedAt
+    });
+    await store.save();
     sendJson(res, 200, { plan });
     return;
   }
@@ -361,6 +369,7 @@ async function routeApi(req, res, url) {
         profile_cache: meiroProfileCache.metrics(),
         assistant_provider: assistantProviderMetrics.metrics(),
         assistant_provider_config_events: store.listAssistantProviderConfigEvents({ limit: 8 }),
+        assistant_provider_plan_events: store.listAssistantProviderPlanEvents({ limit: 8 }),
         meiro_deliveries: store.listMeiroDeliveries({ limit: 10 })
       }
     });
@@ -377,7 +386,8 @@ async function routeApi(req, res, url) {
       runtime: {
         schema_sync: schemaSyncRuntime(),
         assistant_provider: assistantProviderMetrics.metrics(),
-        assistant_provider_config_events: store.listAssistantProviderConfigEvents({ limit: 8 })
+        assistant_provider_config_events: store.listAssistantProviderConfigEvents({ limit: 8 }),
+        assistant_provider_plan_events: store.listAssistantProviderPlanEvents({ limit: 8 })
       }
     });
     return;

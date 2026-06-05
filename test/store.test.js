@@ -517,6 +517,40 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(providerEvents[0].snapshot.policy, "conservative");
   assert.equal(JSON.stringify(providerEvents[0]).includes("sk-secret"), false);
 
+  const planEvent = store.recordAssistantProviderPlanEvent({
+    planned_by: "tester",
+    duration_ms: 321,
+    request: {
+      prompt: "Create a secret retention rule",
+      type: "decision",
+      decision_key: "retention_rule",
+      surface: "homepage"
+    },
+    plan: {
+      mode: "draft_only",
+      provider: {
+        mode: "llm",
+        status: "used",
+        provider: "openai",
+        model: "gpt-4.1-mini",
+        policy: "conservative",
+        contract_version: "assistant-plan-v2"
+      },
+      governance: { status: "review" },
+      guardrails: { warnings: ["Review assumptions."], errors: [] },
+      actions: [{ action: "create_rule_draft", id: "retention_rule", object: {} }]
+    }
+  });
+  assert.equal(planEvent.planned_by, "tester");
+  assert.equal(planEvent.prompt_length, "Create a secret retention rule".length);
+  assert.notEqual(planEvent.prompt_hash, "");
+  assert.equal(JSON.stringify(planEvent).includes("Create a secret retention rule"), false);
+  const planEvents = store.listAssistantProviderPlanEvents();
+  assert.equal(planEvents.length, 1);
+  assert.equal(planEvents[0].decision_key, "retention_rule");
+  assert.equal(planEvents[0].prompt_hash, planEvent.prompt_hash);
+  assert.equal(JSON.stringify(planEvents[0]).includes("Create a secret retention rule"), false);
+
   assert.ok(store.listConditionBlocks().some((block) => block.id === "high_intent"));
   const conditionBlock = store.upsertConditionBlock(
     "utility_safe_profile",

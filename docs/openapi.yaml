@@ -1610,6 +1610,12 @@ paths:
                     properties:
                       schema_sync:
                         $ref: "#/components/schemas/SchemaSyncRuntime"
+                      assistant_provider:
+                        $ref: "#/components/schemas/AssistantProviderMetrics"
+                      assistant_provider_plan_events:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AssistantProviderPlanEvent"
     put:
       summary: Update operational settings
       requestBody:
@@ -3657,6 +3663,54 @@ components:
               type: integer
             total_tokens:
               type: integer
+    AssistantProviderPlanEvent:
+      type: object
+      description: Durable redacted audit event for an assistant plan call. Raw prompts and API keys are not stored.
+      properties:
+        id:
+          type: string
+        planned_at:
+          type: string
+          format: date-time
+        planned_by:
+          type: string
+        mode:
+          type: string
+        status:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        policy:
+          type: string
+        contract_version:
+          type: string
+        governance_status:
+          type: string
+        prompt_hash:
+          type: string
+        prompt_length:
+          type: integer
+        request_type:
+          type: string
+        decision_key:
+          type: string
+        surface:
+          type: string
+        action_count:
+          type: integer
+        warning_count:
+          type: integer
+        error_count:
+          type: integer
+        duration_ms:
+          type: integer
+        fallback_reason:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
     ExperimentOperation:
       type: object
       properties:

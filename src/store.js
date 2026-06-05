@@ -1800,6 +1800,80 @@ export class Store {
       }));
   }
 
+  recordAssistantProviderPlanEvent(input = {}) {
+    const event = assistantProviderPlanEvent(input);
+    this.db
+      .prepare(
+        `INSERT INTO assistant_provider_plan_events (
+          id, planned_at, planned_by, mode, status, provider, model, policy, contract_version,
+          governance_status, prompt_hash, prompt_length, request_type, decision_key, surface,
+          action_count, warning_count, error_count, duration_ms, fallback_reason, metadata_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        event.id,
+        event.planned_at,
+        event.planned_by,
+        event.mode,
+        event.status,
+        event.provider,
+        event.model,
+        event.policy,
+        event.contract_version,
+        event.governance_status,
+        event.prompt_hash,
+        event.prompt_length,
+        event.request_type,
+        event.decision_key,
+        event.surface,
+        event.action_count,
+        event.warning_count,
+        event.error_count,
+        event.duration_ms,
+        event.fallback_reason,
+        stringify(event.metadata)
+      );
+    return event;
+  }
+
+  listAssistantProviderPlanEvents(params = {}) {
+    const requestedLimit = Number(params.limit || 10);
+    const limit = Math.min(Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 10, 50);
+    return this.db
+      .prepare(
+        `SELECT id, planned_at, planned_by, mode, status, provider, model, policy, contract_version,
+                governance_status, prompt_hash, prompt_length, request_type, decision_key, surface,
+                action_count, warning_count, error_count, duration_ms, fallback_reason, metadata_json
+         FROM assistant_provider_plan_events
+         ORDER BY planned_at DESC
+         LIMIT ?`
+      )
+      .all(limit)
+      .map((row) => ({
+        id: row.id,
+        planned_at: row.planned_at,
+        planned_by: row.planned_by,
+        mode: row.mode,
+        status: row.status,
+        provider: row.provider,
+        model: row.model,
+        policy: row.policy,
+        contract_version: row.contract_version,
+        governance_status: row.governance_status,
+        prompt_hash: row.prompt_hash,
+        prompt_length: Number(row.prompt_length || 0),
+        request_type: row.request_type,
+        decision_key: row.decision_key,
+        surface: row.surface,
+        action_count: Number(row.action_count || 0),
+        warning_count: Number(row.warning_count || 0),
+        error_count: Number(row.error_count || 0),
+        duration_ms: Number(row.duration_ms || 0),
+        fallback_reason: row.fallback_reason,
+        metadata: parse(row.metadata_json)
+      }));
+  }
+
   recordAssistantProviderConfigEvent(input, before, after, author, now = createdAtNow()) {
     const touched = assistantProviderSettingKeys.filter((key) => Object.hasOwn(input, key));
     if (!touched.length) return;
@@ -2210,6 +2284,30 @@ function migrate(db) {
       snapshot_json TEXT NOT NULL DEFAULT '{}'
     );
 
+    CREATE TABLE IF NOT EXISTS assistant_provider_plan_events (
+      id TEXT PRIMARY KEY,
+      planned_at TEXT NOT NULL,
+      planned_by TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      status TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      policy TEXT NOT NULL,
+      contract_version TEXT NOT NULL,
+      governance_status TEXT NOT NULL,
+      prompt_hash TEXT NOT NULL,
+      prompt_length INTEGER NOT NULL DEFAULT 0,
+      request_type TEXT NOT NULL DEFAULT '',
+      decision_key TEXT NOT NULL DEFAULT '',
+      surface TEXT NOT NULL DEFAULT '',
+      action_count INTEGER NOT NULL DEFAULT 0,
+      warning_count INTEGER NOT NULL DEFAULT 0,
+      error_count INTEGER NOT NULL DEFAULT 0,
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      fallback_reason TEXT NOT NULL DEFAULT '',
+      metadata_json TEXT NOT NULL DEFAULT '{}'
+    );
+
     CREATE TABLE IF NOT EXISTS schema_items (
       kind TEXT NOT NULL CHECK (kind IN ('attribute', 'segment', 'context')),
       name TEXT NOT NULL,
@@ -2256,6 +2354,7 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_condition_blocks_name ON condition_blocks(name, id);
     CREATE INDEX IF NOT EXISTS idx_meiro_deliveries_time ON meiro_deliveries(attempted_at);
     CREATE INDEX IF NOT EXISTS idx_assistant_provider_config_events_time ON assistant_provider_config_events(changed_at);
+    CREATE INDEX IF NOT EXISTS idx_assistant_provider_plan_events_time ON assistant_provider_plan_events(planned_at);
   `);
   migrateClientEventsForConversions(db);
   ensureColumn(db, "rule_sets", "type", "TEXT NOT NULL DEFAULT 'decision'");
@@ -3469,6 +3568,45 @@ function assistantProviderSettingValue(key, value) {
   if (key === "assistant_llm_enabled") return value === true ? "enabled" : "disabled";
   if (value == null || value === "") return "";
   return String(value);
+}
+
+function assistantProviderPlanEvent(input = {}) {
+  const plan = input.plan || {};
+  const provider = plan.provider || {};
+  const guardrails = plan.guardrails || {};
+  const governance = plan.governance || {};
+  const request = input.request || {};
+  const prompt = String(request.prompt || "");
+  const warnings = Array.isArray(guardrails.warnings) ? guardrails.warnings : [];
+  const errors = Array.isArray(guardrails.errors) ? guardrails.errors : [];
+  return {
+    id: randomId(),
+    planned_at: input.planned_at || createdAtNow(),
+    planned_by: String(input.planned_by || "system"),
+    mode: String(provider.mode || plan.mode || "deterministic"),
+    status: String(provider.status || "unknown"),
+    provider: String(provider.provider || ""),
+    model: String(provider.model || ""),
+    policy: String(provider.policy || governance.provider_policy || "balanced"),
+    contract_version: String(provider.contract_version || governance.contract_version || "assistant-plan-v2"),
+    governance_status: String(governance.status || "unknown"),
+    prompt_hash: prompt ? createHash("sha256").update(prompt).digest("hex") : "",
+    prompt_length: prompt.length,
+    request_type: String(request.type || plan.mode || ""),
+    decision_key: String(request.decision_key || ""),
+    surface: String(request.surface || ""),
+    action_count: Array.isArray(plan.actions) ? plan.actions.length : 0,
+    warning_count: warnings.length,
+    error_count: errors.length,
+    duration_ms: Number(input.duration_ms || 0),
+    fallback_reason: provider.status === "fallback" ? String(provider.message || "") : "",
+    metadata: {
+      has_history: Array.isArray(request.history) && request.history.length > 0,
+      schema_available: Number(plan.schema?.available || 0),
+      recommendation_count: Array.isArray(plan.recommendations) ? plan.recommendations.length : 0,
+      clarification_count: Array.isArray(plan.clarifications) ? plan.clarifications.length : 0
+    }
+  };
 }
 
 function hashToken(plaintext) {

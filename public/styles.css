@@ -4511,6 +4511,11 @@ header {
   overflow: auto;
 }
 
+.assistant-plan-audit-item strong,
+.assistant-plan-audit-item small {
+  overflow-wrap: anywhere;
+}
+
 .timeline-item,
 .timeline-empty {
   display: grid;
