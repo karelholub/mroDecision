@@ -159,15 +159,12 @@
             <div id="overview-change-log" class="change-log-list"></div>
           </div>
           <div id="overview-service-footer" class="overview-service-footer"></div>
-        </div>
-        <div id="overview-rule-detail-modal" class="overview-rule-detail-modal" hidden>
-          <div class="overview-rule-detail-dialog">
-            <div class="overview-rule-detail-header">
+          <div id="overview-rule-detail-panel" class="editor overview-card overview-rule-detail-card">
+            <div class="overview-card-head">
               <div>
-                <strong>Rule Detail</strong>
-                <span>Recent decisions, fallback rate, and matched branch frequency.</span>
+                <div class="editor-title">Rule Detail</div>
+                <p>Recent decisions, fallback rate, and matched branch frequency.</p>
               </div>
-              <button type="button" id="close-overview-rule-detail">Close</button>
             </div>
             <div id="metrics-rule-detail" class="rule-detail-panel"></div>
           </div>
@@ -1933,6 +1930,6 @@
       </div>
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
-  <script src="/app.js?v=20260605-store-adapter"></script>
+  <script src="/app.js?v=20260605-inline-overview-detail"></script>
 </body>
 </html>

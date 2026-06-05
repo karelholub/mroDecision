@@ -72,7 +72,7 @@ const overviewAnomalyHistory = document.querySelector("#overview-anomaly-history
 const overviewServiceFooter = document.querySelector("#overview-service-footer");
 const overviewChangeLog = document.querySelector("#overview-change-log");
 const overviewCampaignRollups = document.querySelector("#overview-campaign-rollups");
-const overviewRuleDetailModal = document.querySelector("#overview-rule-detail-modal");
+const overviewRuleDetailPanel = document.querySelector("#overview-rule-detail-panel");
 const experimentKpis = document.querySelector("#experiment-kpis");
 const experimentList = document.querySelector("#experiment-list");
 const experimentDetail = document.querySelector("#experiment-detail");
@@ -320,7 +320,6 @@ document.querySelector("#close-lookup-detail").addEventListener("click", closeLo
 document.querySelector("#close-message-detail").addEventListener("click", closeMessageDetail);
 document.querySelector("#cancel-message-detail").addEventListener("click", closeMessageDetail);
 document.querySelector("#duplicate-message").addEventListener("click", duplicateSelectedMessage);
-document.querySelector("#close-overview-rule-detail")?.addEventListener("click", closeOverviewRuleDetail);
 document.querySelector("#export-config")?.addEventListener("click", exportConfig);
 document.querySelector("#download-config")?.addEventListener("click", downloadConfig);
 document.querySelector("#preview-config-import")?.addEventListener("click", previewConfigImport);
@@ -503,7 +502,6 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && document.body.classList.contains("assistant-open")) closeAssistantPanel();
   if (event.key === "Escape" && lookupDetailModal && !lookupDetailModal.hidden) closeLookupDetail();
   if (event.key === "Escape" && messageDetailModal && !messageDetailModal.hidden) closeMessageDetail();
-  if (event.key === "Escape" && overviewRuleDetailModal && !overviewRuleDetailModal.hidden) closeOverviewRuleDetail();
   if (event.key === "Escape" && evalPayloadModal && !evalPayloadModal.hidden) closeEvalPayload();
 });
 
@@ -1705,7 +1703,7 @@ function renderRuleUsage(items) {
   target.querySelectorAll("[data-metric-rule-key]").forEach((element) => {
     element.addEventListener("click", async () => {
       await loadRuleMetrics(element.dataset.metricRuleKey);
-      openOverviewRuleDetail();
+      overviewRuleDetailPanel?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
   });
 }
@@ -1747,16 +1745,6 @@ async function loadRuleMetrics(key) {
   } catch (error) {
     ruleDetailPanel.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
   }
-}
-
-function openOverviewRuleDetail() {
-  if (!overviewRuleDetailModal) return;
-  overviewRuleDetailModal.hidden = false;
-}
-
-function closeOverviewRuleDetail() {
-  if (!overviewRuleDetailModal) return;
-  overviewRuleDetailModal.hidden = true;
 }
 
 function renderRuleMetricsDetail(metrics) {
