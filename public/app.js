@@ -16,7 +16,7 @@ const ruleGraph = document.querySelector("#rule-graph");
 const graphEditor = document.querySelector("#graph-editor");
 const graphNodeEditor = document.querySelector("#graph-node-editor");
 const lookupOutput = document.querySelector("#lookup-output");
-const lookupDetailModal = document.querySelector("#lookup-detail-modal");
+const lookupDetailPanel = document.querySelector("#lookup-editor");
 const messageOutput = document.querySelector("#message-output");
 const messagePreview = document.querySelector("#message-preview");
 const messageDetailModal = document.querySelector("#message-detail-modal");
@@ -316,7 +316,6 @@ evalInput.addEventListener("input", () => renderEvaluateValidation());
 document.querySelector("#new-rule").addEventListener("click", () => newRule({ type: document.querySelector("#new-rule-type")?.value || "decision" }));
 document.querySelector("#new-lookup").addEventListener("click", newLookup);
 document.querySelector("#new-message").addEventListener("click", newMessage);
-document.querySelector("#close-lookup-detail").addEventListener("click", closeLookupDetail);
 document.querySelector("#close-message-detail").addEventListener("click", closeMessageDetail);
 document.querySelector("#cancel-message-detail").addEventListener("click", closeMessageDetail);
 document.querySelector("#duplicate-message").addEventListener("click", duplicateSelectedMessage);
@@ -500,7 +499,6 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !ruleBuilderModal.hidden) closeRuleBuilder();
   else if (event.key === "Escape" && ruleDetailModal && !ruleDetailModal.hidden) closeRuleDetail();
   if (event.key === "Escape" && document.body.classList.contains("assistant-open")) closeAssistantPanel();
-  if (event.key === "Escape" && lookupDetailModal && !lookupDetailModal.hidden) closeLookupDetail();
   if (event.key === "Escape" && messageDetailModal && !messageDetailModal.hidden) closeMessageDetail();
 });
 
@@ -6581,13 +6579,9 @@ function slug(value) {
 }
 
 function openLookupDetail() {
-  if (!lookupDetailModal) return;
-  lookupDetailModal.hidden = false;
-}
-
-function closeLookupDetail() {
-  if (!lookupDetailModal) return;
-  lookupDetailModal.hidden = true;
+  if (!lookupDetailPanel) return;
+  lookupDetailPanel.hidden = false;
+  lookupDetailPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function newLookup(options = {}) {

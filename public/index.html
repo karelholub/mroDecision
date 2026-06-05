@@ -1269,15 +1269,12 @@
             </div>
             <div id="lookup-list" class="table lookup-list"></div>
           </div>
-        </div>
-        <div id="lookup-detail-modal" class="lookup-detail-modal" hidden>
-          <form id="lookup-editor" class="lookup-detail-dialog">
-            <div class="lookup-detail-header">
+          <form id="lookup-editor" class="lookup-detail-panel editor" hidden>
+            <div class="lookup-detail-head">
               <div>
-                <strong>Reference Table Details</strong>
-                <span>Edit rows, import CSV, inspect usage, and review versions.</span>
+                <div class="editor-title">Reference Table Details</div>
+                <p>Edit rows, import CSV, inspect usage, and review versions.</p>
               </div>
-              <button type="button" id="close-lookup-detail">Close</button>
             </div>
             <div class="lookup-editor-pane">
               <div class="lookup-editor-main">
@@ -1927,6 +1924,6 @@
       </div>
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
-  <script src="/app.js?v=20260605-inline-eval-payload"></script>
+  <script src="/app.js?v=20260605-inline-lookup-detail"></script>
 </body>
 </html>

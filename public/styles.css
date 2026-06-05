@@ -4919,6 +4919,8 @@ header {
 }
 
 .lookup-workbench {
+  display: grid;
+  gap: 16px;
   min-height: calc(100vh - 184px);
   min-width: 0;
 }
@@ -4934,15 +4936,15 @@ header {
 }
 
 .lookup-list {
-  height: 100%;
+  max-height: 360px;
+  overflow: auto;
 }
 
 .lookup-list-pane {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, auto);
   gap: 12px;
-  height: calc(100vh - 184px);
-  min-height: 520px;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -4978,73 +4980,49 @@ header {
   overflow-wrap: anywhere;
 }
 
-.lookup-detail-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  display: grid;
-  padding: 22px;
-  background: rgba(17, 24, 39, 0.5);
-}
-
-.lookup-detail-modal[hidden] {
-  display: none;
-}
-
-.lookup-detail-dialog {
+.lookup-detail-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
-  width: min(1220px, 100%);
-  height: 100%;
-  justify-self: center;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  box-shadow: 0 20px 45px rgba(16, 24, 40, 0.24);
   overflow: hidden;
 }
 
-.lookup-detail-header,
+.lookup-detail-panel[hidden] {
+  display: none;
+}
+
+.lookup-detail-head,
 .lookup-detail-footer {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   align-items: center;
-  padding: 14px 16px;
+  padding: 0 0 14px;
   border-bottom: 1px solid var(--line);
-  background: var(--panel-soft);
 }
 
 .lookup-detail-footer {
   justify-content: flex-end;
+  padding: 14px 0 0;
   border-top: 1px solid var(--line);
   border-bottom: 0;
 }
 
-.lookup-detail-header div {
+.lookup-detail-head div {
   display: grid;
   gap: 3px;
   min-width: 0;
-}
-
-.lookup-detail-header strong {
-  font-size: 18px;
-}
-
-.lookup-detail-header span {
-  color: var(--muted);
-  font-size: 13px;
 }
 
 .lookup-editor-pane {
   display: grid;
   grid-template-rows: minmax(0, 1fr) minmax(230px, 0.38fr);
   gap: 12px;
-  height: 100%;
+  min-height: 0;
+  max-height: 980px;
   overflow: hidden;
-  padding: 16px;
+  padding: 14px 0;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -6205,19 +6183,11 @@ pre {
     padding: 10px;
   }
 
-  .lookup-detail-modal {
-    padding: 10px;
-  }
-
   .rule-detail-modal {
     padding: 10px;
   }
 
   .message-detail-dialog {
-    height: min(100%, 900px);
-  }
-
-  .lookup-detail-dialog {
     height: min(100%, 900px);
   }
 
@@ -6227,7 +6197,6 @@ pre {
 
   .message-detail-header,
   .message-detail-footer,
-  .lookup-detail-header,
   .lookup-detail-footer,
   .rule-detail-header {
     align-items: stretch;
@@ -6297,10 +6266,6 @@ pre {
   .message-bottom-drawer {
     height: auto;
     max-height: none;
-  }
-
-  .lookup-detail-dialog .lookup-editor-pane {
-    overflow: auto;
   }
 
   .rule-detail-dialog .rule-editor-pane {

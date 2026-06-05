@@ -209,5 +209,5 @@ Status: started with experiment significance calculations, confidence labels, mi
 3. Add deeper personalization helpers such as content-variant previews and audience-specific copy comparisons.
 4. Add assistant provider usage analytics and configuration audit history. Redacted configuration history is implemented.
 5. Add external delivery hints for managed assets, such as CDN host validation and downstream render diagnostics. Downstream rule-output asset usage reporting is implemented.
-6. Remove modal-heavy editor flows. Overview rule detail and Evaluate payload JSON have been converted to inline panels; Rule Builder, Message Editor, Reference Data Details, and publish review remain.
+6. Remove modal-heavy editor flows. Overview rule detail, Evaluate payload JSON, and Reference Data Details have been converted to inline panels; Rule Builder, Message Editor, and publish review remain.
 7. Add adaptive multi-armed bandit experiments after fixed-split reporting and website feedback are stable.
