@@ -59,6 +59,14 @@ Persistent data is stored in `data/dee.sqlite` by default. Override with:
 DEE_DB_PATH=/path/to/dee.sqlite npm start
 ```
 
+The store adapter is explicit and defaults to SQLite:
+
+```bash
+DEE_STORE_ADAPTER=sqlite npm start
+```
+
+Only `sqlite` is implemented today. Unsupported adapter values fail startup with a clear error so production deployments do not silently fall back to local-file storage.
+
 ## API
 
 - `GET /v1/health`

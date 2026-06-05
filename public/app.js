@@ -8267,6 +8267,9 @@ function renderSettingsSummary(settings, runtime, error = null) {
   const assistantProvider = runtime?.assistant_provider || {};
   const assistantCalls = assistantProvider.calls || {};
   const assistantLast = assistantProvider.last_call || null;
+  const storeAdapter = runtime?.store_adapter || {};
+  const adapterInfo = storeAdapter.adapter_info || {};
+  const multiInstance = adapterInfo.capabilities?.multi_instance === true;
   const schemaStatus = settings?.schema_last_sync_status || "never";
   const schemaHealthy = ["ok", "success"].includes(schemaStatus);
   const schemaDetail = settings?.schema_last_synced_at
@@ -8279,6 +8282,12 @@ function renderSettingsSummary(settings, runtime, error = null) {
       value: settings?.environment_label || "local",
       detail: `${Number(settings?.audit_retention_days || 90)}d audit · ${Number(settings?.client_event_retention_days || 180)}d client events`,
       ok: true
+    },
+    {
+      label: "Persistence",
+      value: adapterInfo.label || storeAdapter.adapter || "SQLite",
+      detail: adapterInfo.production_notes || "Store adapter metadata unavailable",
+      ok: multiInstance
     },
     {
       label: "Meiro Collector",

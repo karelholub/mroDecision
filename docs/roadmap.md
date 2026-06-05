@@ -155,7 +155,7 @@ Goal: make the service deployable beyond local demo.
 - Add traffic guardrails for high-volume client endpoints.
 - Add idempotent client feedback ingestion for retry-safe website integrations.
 
-Status: readiness, request IDs, request logs, runtime request telemetry, guarded bootstrap-token disablement, CI checks, production Compose/nginx examples, backup guidance, managed database migration guidance, a p50/p95/p99 benchmark harness with throughput/error reporting and optional SLO gates, SQLite retention controls for audits and client events, portable config bundles with reusable condition blocks plus non-secret settings, Settings UI export/import for those bundles, configurable body/request/socket limits, client endpoint rate limiting with metrics, scoped client-token origin/environment/app constraints, client API traffic observability, and idempotent client feedback ingestion are implemented. A managed database adapter remains.
+Status: readiness, request IDs, request logs, runtime request telemetry, guarded bootstrap-token disablement, CI checks, production Compose/nginx examples, backup guidance, managed database migration guidance, explicit `DEE_STORE_ADAPTER` registry with SQLite capability reporting, a p50/p95/p99 benchmark harness with throughput/error reporting and optional SLO gates, SQLite retention controls for audits and client events, portable config bundles with reusable condition blocks plus non-secret settings, Settings UI export/import for those bundles, configurable body/request/socket limits, client endpoint rate limiting with metrics, scoped client-token origin/environment/app constraints, client API traffic observability, and idempotent client feedback ingestion are implemented. A managed database implementation remains.
 
 ## Phase 7: Guardrailed Configuration Assistant
 
@@ -203,7 +203,7 @@ Status: started with experiment significance calculations, confidence labels, mi
 ## Recommended Next Sprint
 
 1. Add deeper production prompt hardening and provider governance for the optional LLM-backed assistant. Provider latency/error observability and admin test connection are implemented.
-2. Add a managed-database adapter path for enterprise deployments.
+2. Add a managed-database adapter implementation for enterprise deployments. The adapter registry and SQLite capability reporting are implemented.
 3. Add deeper personalization helpers such as content-variant previews and audience-specific copy comparisons.
 4. Add assistant provider usage analytics and configuration audit history. Redacted configuration history is implemented.
 5. Add external delivery hints for managed assets, such as CDN host validation and downstream render diagnostics. Downstream rule-output asset usage reporting is implemented.

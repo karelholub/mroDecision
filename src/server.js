@@ -14,7 +14,7 @@ import { createProfileCache, profileCacheKey } from "./profileCache.js";
 import { profileCacheWithDiagnostics } from "./profileDiagnostics.js";
 import { createRateLimiter } from "./rateLimiter.js";
 import { createRequestMetrics } from "./requestMetrics.js";
-import { Store } from "./store.js";
+import { listStoreAdapters, loadStoreAdapter } from "./storeAdapter.js";
 import {
   validateBundle,
   validateClientEventRequest,
@@ -25,7 +25,7 @@ import {
   validateRuleSetPayload
 } from "./validation.js";
 
-const store = await Store.load();
+const store = await loadStoreAdapter();
 const clientResultCache = createClientResultCache();
 const meiroProfileCache = createProfileCache();
 const clientRateLimiter = createRateLimiter({
@@ -337,6 +337,8 @@ async function routeApi(req, res, url) {
         direct_url: `http://localhost:${config.port}`,
         docker_url: "http://localhost:8090",
         db_path: config.dbPath,
+        store_adapter: store.health(),
+        store_adapters: listStoreAdapters(),
         client_rate_limit: clientRateLimiter.metrics(),
         client_traffic: clientTrafficMetrics.metrics(),
         runtime_requests: requestMetrics.metrics(),

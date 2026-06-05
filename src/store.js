@@ -39,19 +39,21 @@ const assistantProviderSettingKeys = [
 ];
 
 export class Store {
-  constructor(db) {
+  constructor(db, options = {}) {
     this.db = db;
     this.transactionDepth = 0;
+    this.adapter = options.adapter || "sqlite";
+    this.adapterInfo = options.adapterInfo || null;
   }
 
-  static async load() {
+  static async load(options = {}) {
     await ensureDataDir();
     const db = new DatabaseSync(databaseFile());
     db.exec("PRAGMA foreign_keys = ON");
     db.exec("PRAGMA journal_mode = WAL");
     migrate(db);
     await seedIfEmpty(db);
-    return new Store(db);
+    return new Store(db, { adapter: options.adapter || "sqlite", adapterInfo: options.adapterInfo || null });
   }
 
   async save() {
@@ -65,9 +67,20 @@ export class Store {
   health() {
     try {
       const row = this.db.prepare("SELECT 1 AS ok").get();
-      return { ok: row?.ok === 1, path: config.dbPath };
+      return {
+        ok: row?.ok === 1,
+        adapter: this.adapter || "sqlite",
+        adapter_info: this.adapterInfo,
+        path: config.dbPath
+      };
     } catch (error) {
-      return { ok: false, path: config.dbPath, error: error.message };
+      return {
+        ok: false,
+        adapter: this.adapter || "sqlite",
+        adapter_info: this.adapterInfo,
+        path: config.dbPath,
+        error: error.message
+      };
     }
   }
 

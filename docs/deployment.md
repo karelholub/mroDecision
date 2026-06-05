@@ -82,15 +82,23 @@ Restore by stopping the service, replacing the database files, and starting the 
 
 ## Managed Database Migration Path
 
-The current code uses Node's SQLite driver directly in `src/store.js`. A managed database migration should be an explicit adapter change, not a connection-string-only switch.
+The app now starts through an explicit store adapter registry controlled by `DEE_STORE_ADAPTER`. The only implemented adapter is currently:
+
+```bash
+DEE_STORE_ADAPTER=sqlite
+```
+
+Unsupported adapter values fail startup with a clear error. This is deliberate: production deployments should not silently fall back to local-file storage when a managed database was expected. `/v1/ready` and Settings runtime metadata report the active adapter and its capabilities.
+
+A managed database migration should add a real adapter implementation, not a connection-string-only switch.
 
 Recommended path:
 
-1. Introduce a `Store` interface boundary for rule sets, versions, audits, lookup tables, messages, schema items, tokens, settings, and client events.
-2. Keep `SqliteStore` as the default implementation.
-3. Add `PostgresStore` or another managed-store implementation behind `DEE_STORE_ADAPTER`.
-4. Add migrations for the SQL schema instead of relying on inline `CREATE TABLE IF NOT EXISTS`.
-5. Add integration tests that run against both SQLite and the managed adapter.
+1. Keep the SQLite adapter as the default implementation.
+2. Add `PostgresStore` or another managed-store implementation behind `DEE_STORE_ADAPTER`.
+3. Add a migration runner for the managed SQL schema instead of relying on SQLite inline `CREATE TABLE IF NOT EXISTS`.
+4. Add integration tests that run against both SQLite and the managed adapter.
+5. Add readiness checks for connection pool health, migration version, and read/write probes.
 6. Only then scale horizontally.
 
 Until that adapter exists, run one service replica per SQLite database volume. Multiple service replicas pointed at the same SQLite file over network storage are not recommended.
