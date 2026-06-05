@@ -19,7 +19,7 @@ const lookupOutput = document.querySelector("#lookup-output");
 const lookupDetailPanel = document.querySelector("#lookup-editor");
 const messageOutput = document.querySelector("#message-output");
 const messagePreview = document.querySelector("#message-preview");
-const messageDetailModal = document.querySelector("#message-detail-modal");
+const messageDetailPanel = document.querySelector("#message-editor");
 const messageInspectorSummary = document.querySelector("#message-inspector-summary");
 const messageRuleLinks = document.querySelector("#message-rule-links");
 const messagePreviewHealth = document.querySelector("#message-preview-health");
@@ -316,8 +316,6 @@ evalInput.addEventListener("input", () => renderEvaluateValidation());
 document.querySelector("#new-rule").addEventListener("click", () => newRule({ type: document.querySelector("#new-rule-type")?.value || "decision" }));
 document.querySelector("#new-lookup").addEventListener("click", newLookup);
 document.querySelector("#new-message").addEventListener("click", newMessage);
-document.querySelector("#close-message-detail").addEventListener("click", closeMessageDetail);
-document.querySelector("#cancel-message-detail").addEventListener("click", closeMessageDetail);
 document.querySelector("#duplicate-message").addEventListener("click", duplicateSelectedMessage);
 document.querySelector("#export-config")?.addEventListener("click", exportConfig);
 document.querySelector("#download-config")?.addEventListener("click", downloadConfig);
@@ -499,7 +497,6 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !ruleBuilderModal.hidden) closeRuleBuilder();
   else if (event.key === "Escape" && ruleDetailModal && !ruleDetailModal.hidden) closeRuleDetail();
   if (event.key === "Escape" && document.body.classList.contains("assistant-open")) closeAssistantPanel();
-  if (event.key === "Escape" && messageDetailModal && !messageDetailModal.hidden) closeMessageDetail();
 });
 
 loadMetrics();
@@ -3890,13 +3887,9 @@ function renderMessageSurfaceOptions() {
 }
 
 function openMessageDetail() {
-  if (!messageDetailModal) return;
-  messageDetailModal.hidden = false;
-}
-
-function closeMessageDetail() {
-  if (!messageDetailModal) return;
-  messageDetailModal.hidden = true;
+  if (!messageDetailPanel) return;
+  messageDetailPanel.hidden = false;
+  messageDetailPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function newMessage(options = {}) {
@@ -4699,7 +4692,6 @@ function renderMessageRuleLinks() {
   `;
   messageRuleLinks.querySelectorAll("[data-message-rule-key]").forEach((button) => {
     button.addEventListener("click", () => {
-      closeMessageDetail();
       loadRule(button.dataset.messageRuleKey);
     });
   });

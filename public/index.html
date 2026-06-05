@@ -1017,15 +1017,12 @@
             <datalist id="message-surface-options"></datalist>
             <div id="message-list" class="table message-list"></div>
           </div>
-        </div>
-        <div id="message-detail-modal" class="message-detail-modal" hidden>
-          <form id="message-editor" class="message-detail-dialog">
-            <div class="message-detail-header">
+          <form id="message-editor" class="message-detail-panel editor" hidden>
+            <div class="message-detail-head">
               <div>
-                <strong>Message Editor</strong>
-                <span>Edit content, schema, metadata, and preview.</span>
+                <div class="editor-title">Message Editor</div>
+                <p>Edit content, schema, metadata, and preview.</p>
               </div>
-              <button type="button" id="close-message-detail" class="icon-button" aria-label="Close message editor">×</button>
             </div>
             <div class="message-editor-pane">
               <div class="message-editor-main">
@@ -1224,7 +1221,6 @@
               </div>
             </div>
             <div class="message-detail-footer">
-              <button type="button" id="cancel-message-detail">Cancel</button>
               <button type="button" id="duplicate-message">Duplicate</button>
               <button type="button" id="sync-message-json">Sync JSON</button>
               <button type="submit" class="primary">Save Message</button>
@@ -1924,6 +1920,6 @@
       </div>
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
-  <script src="/app.js?v=20260605-inline-lookup-detail"></script>
+  <script src="/app.js?v=20260605-inline-message-editor"></script>
 </body>
 </html>
