@@ -1640,7 +1640,7 @@ async function routeRuleSet(req, res, key, suffix) {
     const version = store.publish(key, req.auth.name);
     await store.save();
     clientResultCache.clear();
-    sendJson(res, 200, { version });
+    sendJson(res, 200, { version, conflicts: ruleConflictsFor(key) });
     return;
   }
 
@@ -1657,7 +1657,7 @@ async function routeRuleSet(req, res, key, suffix) {
       draft_hash: draftHash(ruleSet.draft)
     }, req.auth.name);
     await store.save();
-    sendJson(res, 200, { rule_set: publicRuleSet(updated), approval: updated.metadata.approval });
+    sendJson(res, 200, { rule_set: publicRuleSet(updated), approval: updated.metadata.approval, conflicts: ruleConflictsFor(key) });
     return;
   }
 
@@ -1675,7 +1675,7 @@ async function routeRuleSet(req, res, key, suffix) {
       draft_hash: draftHash(ruleSet.draft)
     }, req.auth.name);
     await store.save();
-    sendJson(res, 200, { rule_set: publicRuleSet(updated), approval: updated.metadata.approval });
+    sendJson(res, 200, { rule_set: publicRuleSet(updated), approval: updated.metadata.approval, conflicts: ruleConflictsFor(key) });
     return;
   }
 
@@ -2985,6 +2985,10 @@ function publicRuleSet(ruleSet) {
 
 function draftHash(draft) {
   return createHash("sha256").update(JSON.stringify(draft || {})).digest("hex");
+}
+
+function ruleConflictsFor(key) {
+  return store.listRuleConflicts().by_rule?.[key] || [];
 }
 
 function requireApprovedDraft(ruleSet) {

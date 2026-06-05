@@ -673,6 +673,10 @@ paths:
                     $ref: "#/components/schemas/RuleDefinition"
                   version:
                     $ref: "#/components/schemas/RuleVersion"
+                  conflicts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CampaignRuleConflict"
   /v1/rule-sets/{key}/draft:
     put:
       summary: Replace the mutable draft for a rule set

@@ -3373,6 +3373,26 @@ function ruleConflictBadge(conflicts = []) {
   `;
 }
 
+async function refreshRuleConflictsFor(ruleKey) {
+  try {
+    const body = await api("/v1/rule-conflicts");
+    cachedRuleConflicts = {
+      conflicts: body.conflicts || [],
+      by_rule: body.by_rule || {}
+    };
+    renderRuleList();
+    return ruleConflictsFor(ruleKey);
+  } catch {
+    return ruleConflictsFor(ruleKey);
+  }
+}
+
+function confirmRuleConflictProceed(conflicts = [], actionLabel = "continue") {
+  if (!conflicts.length) return true;
+  const summary = conflicts.slice(0, 3).map((conflict) => `${conflict.campaign}: ${conflict.summary}`).join("\n");
+  return window.confirm(`This rule has ${conflicts.length} conflict${conflicts.length === 1 ? "" : "s"}:\n${summary}\n\nContinue to ${actionLabel}?`);
+}
+
 async function runRuleAction(action, key) {
   try {
     if (action === "archive") {
@@ -3599,12 +3619,14 @@ async function submitSelectedRuleForReview() {
     validateDraft(payload.draft);
     const warnings = schemaReferenceWarnings(payload.draft);
     if (warnings.length) throw new Error(`Cannot submit with broken schema references:\n${warnings.map((item) => `- ${item}`).join("\n")}`);
-    const assignedTo = window.prompt("Assign review to (name or email)", "") || "";
-    const note = window.prompt("Submission comment", "Please review this draft.") || "";
     await api(`/v1/rule-sets/${encodeURIComponent(selectedRuleKey)}/draft`, {
       method: "PUT",
       body: JSON.stringify(payload)
     });
+    const conflicts = await refreshRuleConflictsFor(selectedRuleKey);
+    if (!confirmRuleConflictProceed(conflicts, "submit this draft for review")) return;
+    const assignedTo = window.prompt("Assign review to (name or email)", "") || "";
+    const note = window.prompt("Submission comment", "Please review this draft.") || "";
     const body = await api(`/v1/rule-sets/${encodeURIComponent(selectedRuleKey)}/submit-review`, {
       method: "POST",
       body: JSON.stringify({ note, assigned_to: assignedTo })
@@ -3623,6 +3645,8 @@ async function approveSelectedRuleDraft() {
     return;
   }
   try {
+    const conflicts = await refreshRuleConflictsFor(selectedRuleKey);
+    if (!confirmRuleConflictProceed(conflicts, "approve this draft")) return;
     const note = window.prompt("Approval comment", "Approved for publish.") || "";
     const body = await api(`/v1/rule-sets/${encodeURIComponent(selectedRuleKey)}/approve`, {
       method: "POST",
@@ -3651,6 +3675,7 @@ async function publishSelectedRule() {
     const payload = readEditorPayload();
     validateDraft(payload.draft);
     const warnings = schemaReferenceWarnings(payload.draft);
+    await refreshRuleConflictsFor(selectedRuleKey);
     renderPublishReview(payload, warnings);
     openPublishConfirm();
   } catch (error) {
@@ -3668,6 +3693,8 @@ async function confirmPublishSelectedRule() {
     validateDraft(payload.draft);
     const warnings = schemaReferenceWarnings(payload.draft);
     if (warnings.length) throw new Error(`Cannot publish with broken schema references:\n${warnings.map((item) => `- ${item}`).join("\n")}`);
+    const conflicts = await refreshRuleConflictsFor(selectedRuleKey);
+    if (!confirmRuleConflictProceed(conflicts, "publish this rule")) return;
     const body = await api(`/v1/rule-sets/${encodeURIComponent(selectedRuleKey)}/publish`, { method: "POST", body: "{}" });
     editorOutput.textContent = JSON.stringify(body, null, 2);
     selectedPublishedDefinition = payload.draft;
@@ -3761,6 +3788,7 @@ function publishValidationItems(payload, schemaWarnings = []) {
   }
   const branchWarnings = branchPublishWarnings(draft);
   const experimentWarnings = experimentPublishWarnings(payload);
+  const conflictWarnings = ruleConflictsFor(selectedRuleKey);
   const selected = cachedRuleSets.find((item) => item.decision_key === selectedRuleKey);
   const approval = selected?.metadata?.approval || {};
   if (approval.status === "approved") {
@@ -3772,6 +3800,13 @@ function publishValidationItems(payload, schemaWarnings = []) {
   }
   if (schemaWarnings.length) {
     items.push({ title: "Publish blocked", detail: "Fix schema reference warnings before publishing this rule.", level: "warn" });
+  }
+  if (conflictWarnings.length) {
+    items.push({
+      title: "Rule conflict",
+      detail: `${conflictWarnings.length} cross-surface eligibility conflict${conflictWarnings.length === 1 ? "" : "s"} detected. Review campaign and rule inventory before launch.`,
+      level: "warn"
+    });
   }
   [...schemaWarnings, ...branchWarnings, ...experimentWarnings].forEach((warning) => {
     items.push({ title: "Review warning", detail: warning, level: "warn" });
