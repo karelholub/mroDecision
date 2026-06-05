@@ -866,6 +866,7 @@ function campaignRollupItem(item) {
       <small>${escapeHtml(item.last_activity_at ? formatTime(item.last_activity_at) : "-")}</small>
       <div class="campaign-rollup-actions">
         <button type="button" data-campaign-action="submit_review" data-campaign="${escapeHtml(item.campaign || "Unassigned")}">Review</button>
+        <button type="button" data-campaign-action="move" data-campaign="${escapeHtml(item.campaign || "Unassigned")}">Move</button>
         <button type="button" data-campaign-action="duplicate" data-campaign="${escapeHtml(item.campaign || "Unassigned")}">Duplicate</button>
         <button type="button" data-campaign-action="archive" data-campaign="${escapeHtml(item.campaign || "Unassigned")}">Archive</button>
       </div>
@@ -1066,26 +1067,48 @@ async function handleCampaignNavigation(event) {
 async function runCampaignBulkAction(campaign, action) {
   try {
     const suffix = action === "duplicate" ? slug(window.prompt("Duplicate suffix", "copy") || "copy") : "";
+    const target = action === "move" ? promptCampaignMoveTarget(campaign) : null;
+    if (action === "move" && !target) return;
     const preview = await api("/v1/campaigns/actions", {
       method: "POST",
-      body: JSON.stringify({ campaign, action, dry_run: true, suffix })
+      body: JSON.stringify({ campaign, action, dry_run: true, suffix, ...(target || {}) })
     });
     const summary = preview.summary || {};
-    const label = action === "submit_review" ? "submit for review" : action;
+    const label = campaignActionLabel(action);
     const targetText = action === "duplicate" ? ` using suffix "${suffix || "copy"}"` : "";
-    const ok = window.confirm(`${label} ${summary.affected || 0} asset(s) in campaign "${campaign}"${targetText}? ${summary.skipped || 0} item(s) will be skipped.`);
+    const moveText = action === "move" ? ` to "${preview.target_campaign || "Unassigned"}"` : "";
+    const ok = window.confirm(`${label} ${summary.affected || 0} asset(s) in campaign "${campaign}"${targetText}${moveText}? ${summary.skipped || 0} item(s) will be skipped.`);
     if (!ok) return;
     const note = action === "submit_review" ? window.prompt("Submission comment", `Please review campaign ${campaign}.`) || "" : "";
     const assignedTo = action === "submit_review" ? window.prompt("Assign review to", "") || "" : "";
     const result = await api("/v1/campaigns/actions", {
       method: "POST",
-      body: JSON.stringify({ campaign, action, dry_run: false, note, assigned_to: assignedTo, suffix })
+      body: JSON.stringify({ campaign, action, dry_run: false, note, assigned_to: assignedTo, suffix, ...(target || {}) })
     });
     overviewCampaignRollups.innerHTML = `<div class="status-line">Campaign action complete: ${escapeHtml(formatNumber(result.summary?.affected || 0))} affected, ${escapeHtml(formatNumber(result.summary?.skipped || 0))} skipped.</div>`;
     await Promise.all([loadRules(), loadMessages(), loadMetrics()]);
   } catch (error) {
     overviewCampaignRollups.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
   }
+}
+
+function promptCampaignMoveTarget(campaign) {
+  const currentParts = String(campaign || "").split(" / ");
+  const currentCampaign = currentParts[0] === "Unassigned" ? "" : currentParts[0] || "";
+  const campaignName = window.prompt("Move to campaign", currentCampaign);
+  if (campaignName === null) return null;
+  const folderName = window.prompt("Move to folder", currentParts.slice(1).join(" / ") || "");
+  if (folderName === null) return null;
+  return {
+    target_campaign: campaignName.trim(),
+    target_folder: folderName.trim()
+  };
+}
+
+function campaignActionLabel(action) {
+  if (action === "submit_review") return "submit for review";
+  if (action === "move") return "move";
+  return action;
 }
 
 function renderChangeLog(changes) {

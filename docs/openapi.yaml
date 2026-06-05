@@ -617,7 +617,7 @@ paths:
   /v1/campaigns/actions:
     post:
       summary: Preview or apply a campaign bulk action
-      description: Supports dry-run previews and guarded execution for campaign-scoped review submission and archive actions.
+      description: Supports dry-run previews and guarded execution for campaign-scoped review submission, archive, duplicate, and campaign/folder move actions.
       requestBody:
         required: true
         content:
@@ -4064,7 +4064,7 @@ components:
           type: string
         action:
           type: string
-          enum: [submit_review, archive, duplicate]
+          enum: [submit_review, archive, duplicate, move]
         dry_run:
           type: boolean
           default: true
@@ -4075,6 +4075,12 @@ components:
         suffix:
           type: string
           description: Deterministic suffix used for campaign duplicate target IDs.
+        target_campaign:
+          type: string
+          description: Campaign name to assign when action is move. Empty with an empty folder moves assets to Unassigned.
+        target_folder:
+          type: string
+          description: Folder name to assign when action is move.
     CampaignActionResult:
       type: object
       properties:
@@ -4084,6 +4090,8 @@ components:
           type: string
         dry_run:
           type: boolean
+        target_campaign:
+          type: string
         affected:
           type: array
           items:

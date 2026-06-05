@@ -1409,13 +1409,20 @@ function applyCampaignAction(body = {}, author = "admin") {
   const campaign = body.campaign || "Unassigned";
   const action = body.action || "";
   const dryRun = body.dry_run !== false;
-  if (!["submit_review", "archive", "duplicate"].includes(action)) badRequest("Unsupported campaign action");
+  if (!["submit_review", "archive", "duplicate", "move"].includes(action)) badRequest("Unsupported campaign action");
   const assets = store.listCampaignAssets(campaign);
   const duplicateSuffix = normalizeCampaignDuplicateSuffix(body.suffix || "copy");
+  const targetCampaign = typeof body.target_campaign === "string" ? body.target_campaign.trim() : "";
+  const targetFolder = typeof body.target_folder === "string" ? body.target_folder.trim() : "";
+  if (action === "move" && !("target_campaign" in body) && !("target_folder" in body)) {
+    badRequest("target_campaign or target_folder is required");
+  }
+  const targetLabel = campaignLabelFromParts(targetCampaign, targetFolder) || "Unassigned";
   const result = {
     campaign: assets.campaign,
     action,
     dry_run: dryRun,
+    target_campaign: action === "move" ? targetLabel : undefined,
     affected: [],
     skipped: []
   };
@@ -1495,6 +1502,31 @@ function applyCampaignAction(body = {}, author = "admin") {
     }
   }
 
+  if (action === "move") {
+    if (targetLabel === assets.campaign) {
+      for (const rule of assets.rules) {
+        skip({ object_type: rule.type === "experiment" ? "experiment" : "rule", object_id: rule.decision_key, reason: "already_in_target_campaign" });
+      }
+      for (const message of assets.messages) {
+        skip({ object_type: "message", object_id: message.id, reason: "already_in_target_campaign" });
+      }
+    } else {
+      for (const rule of assets.rules) {
+        affect({
+          object_type: rule.type === "experiment" ? "experiment" : "rule",
+          object_id: rule.decision_key,
+          action: "move",
+          target_campaign: targetLabel
+        });
+        if (!dryRun) store.setRuleCampaign(rule.decision_key, { campaign: targetCampaign, folder: targetFolder }, author);
+      }
+      for (const message of assets.messages) {
+        affect({ object_type: "message", object_id: message.id, action: "move", target_campaign: targetLabel });
+        if (!dryRun) store.setMessageCampaign(message.id, { campaign: targetCampaign, folder: targetFolder }, author);
+      }
+    }
+  }
+
   return {
     ...result,
     summary: {
@@ -1509,6 +1541,10 @@ function applyCampaignAction(body = {}, author = "admin") {
 
 function normalizeCampaignDuplicateSuffix(value) {
   return normalizeCampaignDuplicateId(value || "copy", "").replace(/^_+|_+$/g, "") || "copy";
+}
+
+function campaignLabelFromParts(campaign = "", folder = "") {
+  return [String(campaign || "").trim(), String(folder || "").trim()].filter(Boolean).join(" / ");
 }
 
 function normalizeCampaignDuplicateId(base, suffix) {

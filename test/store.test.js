@@ -488,6 +488,14 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(campaignDetail.assets.messages[0].id, "campaign_message");
   assert.equal(campaignDetail.dependencies[0].resolved, true);
   assert.equal(campaignDetail.recent_events[0].message_id, "campaign_message");
+  store.setRuleCampaign("campaign_experiment", { campaign: "Spring Refresh", folder: "App" }, "tester");
+  store.setMessageCampaign("campaign_message", { campaign: "Spring Refresh", folder: "App" }, "tester");
+  const movedCampaignDetail = store.listCampaignOperations({ window_hours: 300 }).find((item) => item.campaign === "Spring Refresh / App");
+  assert.equal(movedCampaignDetail.experiments, 1);
+  assert.equal(movedCampaignDetail.messages, 1);
+  assert.equal(movedCampaignDetail.assets.experiments[0].message_ids[0], "campaign_message");
+  assert.equal(store.getRuleSet("campaign_experiment").metadata.campaign.folder, "App");
+  assert.equal(store.getMessage("campaign_message").metadata.campaign.name, "Spring Refresh");
 
   const savedProfile = store.upsertEvaluationProfile(
     "nbo_green_profile",

@@ -537,6 +537,19 @@ export class Store {
     return updated;
   }
 
+  setRuleCampaign(key, input = {}, author) {
+    const ruleSet = this.getRuleSet(key);
+    if (!ruleSet) notFound(`Rule set not found: ${key}`);
+    const updated = {
+      ...ruleSet,
+      metadata: assignCampaignMetadata(ruleSet.metadata || {}, input.campaign || "", input.folder || ""),
+      author,
+      updated_at: createdAtNow()
+    };
+    updateRuleSet(this.db, updated);
+    return updated;
+  }
+
   duplicateRuleSet(key, input, author) {
     const ruleSet = this.getRuleSet(key);
     if (!ruleSet) notFound(`Rule set not found: ${key}`);
@@ -1573,6 +1586,15 @@ export class Store {
   getMessage(id) {
     const row = this.db.prepare("SELECT * FROM messages WHERE id = ?").get(id);
     return row ? rowToMessage(row) : null;
+  }
+
+  setMessageCampaign(id, input = {}, author) {
+    const message = this.getMessage(id);
+    if (!message) notFound(`Message not found: ${id}`);
+    return this.upsertMessage(id, {
+      ...message,
+      metadata: assignCampaignMetadata(message.metadata || {}, input.campaign || "", input.folder || "")
+    }, author);
   }
 
   latestMessageVersion(id) {
@@ -2905,6 +2927,19 @@ function campaignLabel(metadata = {}) {
   const campaign = typeof metadata?.campaign === "string" ? metadata.campaign : metadata?.campaign?.name || "";
   const folder = metadata?.campaign?.folder || metadata?.folder || "";
   return [campaign, folder].filter(Boolean).join(" / ");
+}
+
+function assignCampaignMetadata(metadata = {}, campaign = "", folder = "") {
+  const next = isPlainObject(metadata) ? structuredClone(metadata) : {};
+  delete next.folder;
+  const name = String(campaign || "").trim();
+  const folderName = String(folder || "").trim();
+  if (name || folderName) {
+    next.campaign = { name, folder: folderName };
+  } else {
+    delete next.campaign;
+  }
+  return next;
 }
 
 function campaignRuleSummary(rule = {}) {
