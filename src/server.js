@@ -7,6 +7,7 @@ import { assistantProviderMetrics } from "./assistantProviderMetrics.js";
 import { applyAssistantPlan } from "./assistantPlanner.js";
 import { config } from "./config.js";
 import { createClientResultCache } from "./clientCache.js";
+import { createClientTrafficMetrics } from "./clientTrafficMetrics.js";
 import { evaluateDecision } from "./evaluator.js";
 import { notFound, readJson, sendBuffer, sendError, sendJson, sendText, serveStatic } from "./http.js";
 import { createProfileCache, profileCacheKey } from "./profileCache.js";
@@ -32,6 +33,7 @@ const clientRateLimiter = createRateLimiter({
   max: config.clientRateLimitMax
 });
 const requestMetrics = createRequestMetrics();
+const clientTrafficMetrics = createClientTrafficMetrics();
 setAuthStore(store);
 let schemaSyncTimer = null;
 let schemaSyncNextRunAt = "";
@@ -221,6 +223,7 @@ async function routeApi(req, res, url) {
         client_cache: clientResultCache.metrics(),
         profile_cache: meiroProfileCache.metrics(),
         client_rate_limit: clientRateLimiter.metrics(),
+        client_traffic: clientTrafficMetrics.metrics(),
         runtime_requests: requestMetrics.metrics(),
         assistant_provider: assistantProviderMetrics.metrics()
       }
@@ -335,6 +338,7 @@ async function routeApi(req, res, url) {
         docker_url: "http://localhost:8090",
         db_path: config.dbPath,
         client_rate_limit: clientRateLimiter.metrics(),
+        client_traffic: clientTrafficMetrics.metrics(),
         runtime_requests: requestMetrics.metrics(),
         schema_sync: schemaSyncRuntime(),
         profile_cache: meiroProfileCache.metrics(),
@@ -1220,7 +1224,35 @@ function logRequest(req, res, startedAt, error) {
     status: statusCode,
     duration_ms: durationMs
   });
+  recordClientTraffic(req, record.path, statusCode, durationMs);
   console.log(JSON.stringify(record));
+}
+
+function recordClientTraffic(req, path, statusCode, durationMs) {
+  const action = clientTrafficAction(req.method, path);
+  if (!action) return;
+  clientTrafficMetrics.record({
+    action,
+    route: path,
+    token: req.auth?.name || "anonymous",
+    token_id: req.auth?.token_id || "",
+    origin: req.headers.origin || "server",
+    environment: req.client_context?.environment || clientContextValue(req, {}, ["environment", "environment_label", "env"]),
+    app_id: req.client_context?.app_id || clientContextValue(req, {}, ["app_id", "application_id", "app"]),
+    status: statusCode,
+    duration_ms: durationMs
+  });
+}
+
+function clientTrafficAction(method, path) {
+  if (!String(path || "").startsWith("/v1/client/")) return "";
+  const cleanPath = String(path || "").split("?")[0];
+  if (method === "POST" && cleanPath === "/v1/client/evaluate") return "evaluate";
+  if (method === "GET" && cleanPath === "/v1/client/rule-catalog") return "rule_catalog";
+  if (method === "POST" && cleanPath === "/v1/client/surface") return "surface";
+  const eventMatch = cleanPath.match(/^\/v1\/client\/(impression|exposure|conversion)$/);
+  if (method === "POST" && eventMatch) return eventMatch[1];
+  return "client";
 }
 
 function enforceClientRateLimit(req, res, action) {
@@ -2415,6 +2447,11 @@ function enforceAllowedDecision(req, decisionKey) {
 
 function enforceClientTokenContext(req, body = {}) {
   const metadata = req.auth?.metadata || {};
+  req.client_context = {
+    origin: req.headers.origin || "",
+    environment: clientContextValue(req, body, ["environment", "environment_label", "env"]),
+    app_id: clientContextValue(req, body, ["app_id", "application_id", "app"])
+  };
   const allowedOrigins = Array.isArray(metadata.allowed_origins) ? metadata.allowed_origins : [];
   const requestOrigin = req.headers.origin || "";
   if (allowedOrigins.length && !originAllowed(requestOrigin, allowedOrigins)) {
@@ -2422,12 +2459,12 @@ function enforceClientTokenContext(req, body = {}) {
   }
   const expectedEnvironment = String(metadata.environment || "").trim();
   if (expectedEnvironment) {
-    const requestEnvironment = clientContextValue(req, body, ["environment", "environment_label", "env"]);
+    const requestEnvironment = req.client_context.environment;
     if (requestEnvironment !== expectedEnvironment) forbidden(`Client token is scoped to environment: ${expectedEnvironment}`);
   }
   const expectedAppId = String(metadata.app_id || "").trim();
   if (expectedAppId) {
-    const requestAppId = clientContextValue(req, body, ["app_id", "application_id", "app"]);
+    const requestAppId = req.client_context.app_id;
     if (requestAppId !== expectedAppId) forbidden(`Client token is scoped to app: ${expectedAppId}`);
   }
 }

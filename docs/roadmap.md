@@ -136,7 +136,7 @@ Goal: support feedback loops and operational reporting for client surfaces.
 - Add exposure, impression, conversion, and conversion-rate reports by rule set, variant, message, surface, and profile.
 - Add optional export format for downstream analytics or Meiro ingestion.
 
-Status: first-pass feedback ingestion is implemented with client-scoped impression, exposure, and conversion endpoints, service metrics, event reports by rule, variant, message, surface, and profile, a `frequency_cap` graph node backed by impression events, a reusable message library, surface-level priority evaluation, flexible message templates, message lifecycle/TTL metadata, an experiment operations dashboard with variant feedback, conversion-rate rollups, baseline/winner analysis, lift, CSV export, and a reusable website SDK helper for declared placements with safe fallback rendering, exposure/conversion feedback, and forced-variant QA.
+Status: first-pass feedback ingestion is implemented with client-scoped impression, exposure, and conversion endpoints, service metrics, event reports by rule, variant, message, surface, and profile, browser API traffic monitoring by endpoint/token/origin/environment/app, a `frequency_cap` graph node backed by impression events, a reusable message library, surface-level priority evaluation, flexible message templates, message lifecycle/TTL metadata, an experiment operations dashboard with variant feedback, conversion-rate rollups, baseline/winner analysis, lift, CSV export, and a reusable website SDK helper for declared placements with safe fallback rendering, exposure/conversion feedback, and forced-variant QA.
 
 Open decision: defer mutual exclusion groups until basic experiment evaluation and exposure feedback are proven.
 
@@ -155,7 +155,7 @@ Goal: make the service deployable beyond local demo.
 - Add traffic guardrails for high-volume client endpoints.
 - Add idempotent client feedback ingestion for retry-safe website integrations.
 
-Status: readiness, request IDs, request logs, runtime request telemetry, guarded bootstrap-token disablement, CI checks, production Compose/nginx examples, backup guidance, managed database migration guidance, a p50/p95/p99 benchmark harness with throughput/error reporting and optional SLO gates, SQLite retention controls for audits and client events, portable config bundles with reusable condition blocks plus non-secret settings, Settings UI export/import for those bundles, configurable body/request/socket limits, client endpoint rate limiting with metrics, and idempotent client feedback ingestion are implemented. A managed database adapter remains.
+Status: readiness, request IDs, request logs, runtime request telemetry, guarded bootstrap-token disablement, CI checks, production Compose/nginx examples, backup guidance, managed database migration guidance, a p50/p95/p99 benchmark harness with throughput/error reporting and optional SLO gates, SQLite retention controls for audits and client events, portable config bundles with reusable condition blocks plus non-secret settings, Settings UI export/import for those bundles, configurable body/request/socket limits, client endpoint rate limiting with metrics, scoped client-token origin/environment/app constraints, client API traffic observability, and idempotent client feedback ingestion are implemented. A managed database adapter remains.
 
 ## Phase 7: Guardrailed Configuration Assistant
 

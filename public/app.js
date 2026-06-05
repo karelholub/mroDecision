@@ -64,6 +64,7 @@ const conditionBlockOutput = document.querySelector("#condition-block-output");
 const metricCards = document.querySelector("#metric-cards");
 const ruleDetailPanel = document.querySelector("#metrics-rule-detail");
 const clientEventsPanel = document.querySelector("#metrics-client-events");
+const clientTrafficPanel = document.querySelector("#metrics-client-traffic");
 const requestTrendPanel = document.querySelector("#metrics-request-trend");
 const overviewAlerts = document.querySelector("#overview-alerts");
 const overviewAnomalyHistory = document.querySelector("#overview-anomaly-history");
@@ -682,6 +683,7 @@ function renderMetrics(metrics) {
   loadChangeLog();
   loadCampaignRollups(metrics.window_hours);
   renderRequestTrend(metrics);
+  renderClientTraffic(metrics.client_traffic || {});
   renderResultDistribution(metrics);
   renderRulesInventory(rules);
   renderOverviewFooter(metrics);
@@ -1580,6 +1582,76 @@ function clientEventStatusItems(items) {
     statusItem("Impressions", formatNumber(counts.impression || 0)),
     statusItem("Conversions", formatNumber(counts.conversion || 0))
   ];
+}
+
+function renderClientTraffic(metrics = {}) {
+  if (!clientTrafficPanel) return;
+  const total = Number(metrics.total || 0);
+  clientTrafficPanel.innerHTML = `
+    <div class="client-traffic-summary">
+      ${trafficKpi("Client calls", formatNumber(total), "All /v1/client endpoints")}
+      ${trafficKpi("Error rate", formatPercent(metrics.error_rate || 0), `${formatNumber(metrics.errors || 0)} rejected or failed`)}
+      ${trafficKpi("P95 latency", `${formatNumber(metrics.p95_ms || 0)}ms`, "Recent in-memory sample")}
+      ${trafficKpi("Active origins", formatNumber((metrics.by_origin || []).filter((item) => item.requests).length), "Browser sources seen")}
+    </div>
+    <div class="client-traffic-groups">
+      ${trafficGroup("Endpoints", metrics.by_action)}
+      ${trafficGroup("Tokens", metrics.by_token)}
+      ${trafficGroup("Origins", metrics.by_origin)}
+      ${trafficGroup("Environments", metrics.by_environment)}
+      ${trafficGroup("Apps", metrics.by_app)}
+    </div>
+    <div class="client-traffic-recent">
+      <div class="editor-title">Recent Client Calls</div>
+      <div class="traffic-call-list">${trafficRecentRows(metrics.recent)}</div>
+    </div>
+  `;
+}
+
+function trafficKpi(label, value, detail) {
+  return `
+    <div class="traffic-kpi">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(detail)}</small>
+    </div>
+  `;
+}
+
+function trafficGroup(title, items = []) {
+  return `
+    <section class="traffic-group">
+      <div class="editor-title">${escapeHtml(title)}</div>
+      <div class="traffic-group-list">${
+        items.length
+          ? items.map((item) => `
+            <div class="traffic-group-row">
+              <strong title="${escapeHtml(item.key || "-")}">${escapeHtml(item.key || "-")}</strong>
+              <span>${formatNumber(item.requests || 0)} calls</span>
+              <em>${formatPercent(item.error_rate || 0)} errors</em>
+              <small>${formatNumber(item.avg_ms || 0)}ms avg${item.last_seen_at ? ` · ${escapeHtml(formatTime(item.last_seen_at))}` : ""}</small>
+            </div>
+          `).join("")
+          : `<div class="status-line">No client traffic yet</div>`
+      }</div>
+    </section>
+  `;
+}
+
+function trafficRecentRows(items = []) {
+  return items?.length
+    ? items.map((item) => `
+      <div class="traffic-call-row ${Number(item.status || 0) >= 400 ? "warn" : "ok"}">
+        <span>${escapeHtml(item.at ? formatTime(item.at) : "-")}</span>
+        <strong>${escapeHtml(item.action || "-")}</strong>
+        <em>${escapeHtml(String(item.status || "-"))}</em>
+        <small title="${escapeHtml(item.token || "-")}">${escapeHtml(item.token || "-")}</small>
+        <small title="${escapeHtml(item.origin || "-")}">${escapeHtml(item.origin || "-")}</small>
+        <small>${escapeHtml([item.environment, item.app_id].filter(Boolean).join(" / ") || "-")}</small>
+        <small>${formatNumber(item.duration_ms || 0)}ms</small>
+      </div>
+    `).join("")
+    : `<div class="status-line">No recent client calls yet</div>`;
 }
 
 function readinessChecklist(metrics = {}) {
