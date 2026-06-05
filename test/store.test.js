@@ -255,6 +255,8 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(treatmentVariant.lift_vs_baseline, 1);
   assert.equal(treatmentVariant.significance.status, "needs_sample");
   assert.equal(experimentOps.experiments[0].significant_winner_variant, "");
+  assert.equal(experimentOps.experiments[0].winner_recommendation.status, "not_ready");
+  assert.equal(experimentOps.experiments[0].winner_recommendation.eligible, false);
 
   for (let index = 0; index < 100; index += 1) {
     store.addClientEvent({
@@ -307,6 +309,10 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(significantTreatment.significance.significant, true);
   assert.equal(significantTreatment.significance.status, "significant_95");
   assert.equal(significantOps.experiments[0].significant_winner_variant, "treatment");
+  assert.equal(significantOps.experiments[0].winner_recommendation.status, "ready");
+  assert.equal(significantOps.experiments[0].winner_recommendation.action, "prepare_winner_draft");
+  assert.equal(significantOps.experiments[0].winner_recommendation.variant_key, "treatment");
+  assert.equal(significantOps.experiments[0].winner_recommendation.checks.every((check) => check.passed), true);
   store.addExperimentAssignment({
     assigned_at: "2026-05-27T02:00:00.000Z",
     decision_key: "hero_experiment",

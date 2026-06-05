@@ -1077,6 +1077,13 @@ export class Store {
         const winner = winnerVariant(variantMetrics);
         const significantWinner = significantWinnerVariant(variantMetrics);
         const assignmentHistory = this.getExperimentAssignmentHistory(rule.decision_key);
+        const winnerRecommendation = experimentWinnerRecommendation({
+          rule,
+          experiment: activeExperiment,
+          variants: variantMetrics,
+          winner,
+          significantWinner
+        });
         return {
           name: rule.name,
           decision_key: rule.decision_key,
@@ -1101,6 +1108,7 @@ export class Store {
           winner_lift_vs_baseline: winner?.lift_vs_baseline ?? null,
           significant_winner_variant: significantWinner?.key || "",
           significant_winner_confidence: significantWinner?.significance?.confidence || 0,
+          winner_recommendation: winnerRecommendation,
           assignment_history: assignmentHistory
         };
       });
@@ -3134,6 +3142,68 @@ function significantWinnerVariant(variants = []) {
         Number(right.significance.confidence || 0) - Number(left.significance.confidence || 0) ||
         Number(right.lift_vs_baseline || 0) - Number(left.lift_vs_baseline || 0)
     )[0] || null;
+}
+
+function experimentWinnerRecommendation({ rule = {}, experiment = {}, variants = [], winner = null, significantWinner = null } = {}) {
+  const baseline = baselineVariant(variants);
+  const candidate = significantWinner || null;
+  const candidateWeight = candidate ? Number(candidate.weight || 0) : 0;
+  const checks = [
+    {
+      key: "published",
+      passed: rule.status === "published",
+      label: "Rule is published",
+      detail: rule.status === "published" ? "Live traffic can use this experiment." : "Publish the experiment before winner automation."
+    },
+    {
+      key: "running",
+      passed: experiment.status === "running",
+      label: "Experiment is running",
+      detail: experiment.status === "running" ? "Assignments are active." : "Start the experiment before declaring a winner."
+    },
+    {
+      key: "baseline",
+      passed: Boolean(baseline),
+      label: "Baseline exists",
+      detail: baseline ? `Baseline is ${baseline.key}.` : "A baseline variant is required for significance comparison."
+    },
+    {
+      key: "significance",
+      passed: Boolean(candidate),
+      label: "95% significant winner",
+      detail: candidate
+        ? `${candidate.key} is significant at ${Math.round(Number(candidate.significance?.confidence || 0) * 100)}% confidence.`
+        : winner?.key
+          ? `${winner.key} leads on conversion rate but is not yet a significant positive winner.`
+          : "No winner candidate has exposure yet."
+    },
+    {
+      key: "not_already_promoted",
+      passed: !candidate || candidateWeight < 100,
+      label: "Winner draft still needed",
+      detail: candidate
+        ? candidateWeight >= 100
+          ? `${candidate.key} already has 100% allocation.`
+          : "A winner draft can change allocation."
+        : "Waiting for a significant winner before preparing a draft."
+    }
+  ];
+  const eligible = checks.every((check) => check.passed);
+  return {
+    status: eligible ? "ready" : candidate && candidateWeight >= 100 ? "already_promoted" : "not_ready",
+    action: eligible ? "prepare_winner_draft" : "monitor",
+    eligible,
+    variant_key: candidate?.key || "",
+    observed_winner_variant: winner?.key || "",
+    confidence: candidate?.significance?.confidence || 0,
+    lift_vs_baseline: candidate?.lift_vs_baseline ?? null,
+    checks,
+    message: eligible
+      ? `Prepare a guarded draft that shifts ${candidate.key} to 100% allocation.`
+      : candidate && candidateWeight >= 100
+        ? `${candidate.key} is already allocated at 100%.`
+        : "Keep monitoring until the experiment has a significant positive winner."
+  };
 }
 
 function experimentSignificance(variant = {}, baseline = null) {

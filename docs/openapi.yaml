@@ -3620,8 +3620,52 @@ components:
         winner_lift_vs_baseline:
           type: number
           nullable: true
+        significant_winner_variant:
+          type: string
+        significant_winner_confidence:
+          type: number
+        winner_recommendation:
+          $ref: "#/components/schemas/ExperimentWinnerRecommendation"
         assignment_history:
           $ref: "#/components/schemas/ExperimentAssignmentHistory"
+    ExperimentWinnerRecommendation:
+      type: object
+      description: Guarded recommendation for preparing a winner-allocation draft.
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready, already_promoted]
+        action:
+          type: string
+          enum: [prepare_winner_draft, monitor]
+        eligible:
+          type: boolean
+        variant_key:
+          type: string
+        observed_winner_variant:
+          type: string
+        confidence:
+          type: number
+        lift_vs_baseline:
+          type: number
+          nullable: true
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentWinnerRecommendationCheck"
+        message:
+          type: string
+    ExperimentWinnerRecommendationCheck:
+      type: object
+      properties:
+        key:
+          type: string
+        passed:
+          type: boolean
+        label:
+          type: string
+        detail:
+          type: string
     ExperimentAssignmentHistory:
       type: object
       description: Recent server-side assignment activity for adaptive/bandit experiments.

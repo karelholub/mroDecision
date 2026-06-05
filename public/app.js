@@ -1349,7 +1349,8 @@ function renderExperimentDetail(experiment) {
     return;
   }
   const warnings = experimentOpsWarnings(experiment);
-  const winnerKey = experiment.significant_winner_variant || experiment.winner_variant || "";
+  const recommendation = experiment.winner_recommendation || {};
+  const winnerKey = recommendation.eligible ? recommendation.variant_key : "";
   const mode = experimentMode(experiment);
   experimentDetail.innerHTML = `
     <div class="experiment-detail-summary">
@@ -1370,10 +1371,11 @@ function renderExperimentDetail(experiment) {
       <strong>How significance is calculated</strong>
       <span>DEE compares each non-baseline variant against the baseline with a two-sided z-test for conversion-rate difference. The confidence label is 1 - p-value; "95% significant" requires at least 95% confidence and the minimum exposure guardrail.</span>
     </div>
+    ${experimentWinnerAutomationPanel(experiment)}
     <div class="experiment-detail-actions">
       <button type="button" data-experiment-action="declare-winner" data-rule-key="${escapeHtml(experiment.decision_key)}" data-winner-key="${escapeHtml(winnerKey)}" ${winnerKey ? "" : "disabled"}>Declare Winner</button>
       <button type="button" data-experiment-action="copy-snippet" data-rule-key="${escapeHtml(experiment.decision_key)}">Copy Website Snippet</button>
-      <span>${escapeHtml(winnerKey ? `Prepare a draft with ${winnerKey} at 100% allocation.` : "No winner candidate available yet.")}</span>
+      <span>${escapeHtml(recommendation.message || "No winner recommendation available yet.")}</span>
     </div>
     <details class="experiment-snippet-panel">
       <summary>Website install snippet</summary>
@@ -1429,6 +1431,37 @@ function experimentWebsiteSnippet(experiment) {
 
   dee.init();
 </script>`;
+}
+
+function experimentWinnerAutomationPanel(experiment = {}) {
+  const recommendation = experiment.winner_recommendation || {};
+  const checks = Array.isArray(recommendation.checks) ? recommendation.checks : [];
+  const statusLabel = recommendation.eligible ? "Ready" : recommendation.status === "already_promoted" ? "Complete" : "Monitoring";
+  return `
+    <section class="winner-automation-panel ${escapeHtml(recommendation.status || "not_ready")}">
+      <div class="winner-automation-head">
+        <div>
+          <strong>Winner automation</strong>
+          <span>${escapeHtml(recommendation.message || "DEE will recommend a winner draft after significance and governance checks pass.")}</span>
+        </div>
+        <mark>${escapeHtml(statusLabel)}</mark>
+      </div>
+      <div class="winner-automation-metrics">
+        ${statusItem("Recommended variant", recommendation.variant_key || "-")}
+        ${statusItem("Observed leader", recommendation.observed_winner_variant || "-")}
+        ${statusItem("Confidence", recommendation.confidence ? formatPercent(recommendation.confidence) : "-")}
+        ${statusItem("Lift", formatLift(recommendation.lift_vs_baseline))}
+      </div>
+      <div class="winner-check-list">
+        ${checks.length ? checks.map((check) => `
+          <div class="${check.passed ? "passed" : "pending"}">
+            <strong>${escapeHtml(check.label || check.key || "Check")}</strong>
+            <span>${escapeHtml(check.detail || "")}</span>
+          </div>
+        `).join("") : `<div class="pending"><strong>No checks available</strong><span>Refresh experiments to recalculate recommendation state.</span></div>`}
+      </div>
+    </section>
+  `;
 }
 
 function experimentBanditDetail(experiment = {}) {
