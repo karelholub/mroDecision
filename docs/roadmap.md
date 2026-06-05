@@ -170,7 +170,7 @@ Goal: let business users ask DEE to create rules, messages, and experiments whil
 - Keep publish as a separate explicit user action.
 - Add optional LLM provider integration behind the deterministic planner contract.
 
-Status: first-pass deterministic assistant planner, draft-only apply endpoint, conversational Assistant panel, message/rule/experiment draft generation, allocation checks, shared rule validation, schema-aware field matching, schema diagnostics, generated draft evaluation previews, affected-draft summaries, publish-review handoff, non-blocking prompt disambiguation, optional LLM provider settings, a disabled-by-default OpenAI-compatible provider adapter behind the draft-only contract, and provider observability for calls, fallbacks, connection tests, latency, and token usage are implemented. Deeper production prompt hardening remains.
+Status: first-pass deterministic assistant planner, draft-only apply endpoint, conversational Assistant panel, message/rule/experiment draft generation, allocation checks, shared rule validation, schema-aware field matching, schema diagnostics, generated draft evaluation previews, affected-draft summaries, publish-review handoff, non-blocking prompt disambiguation, optional LLM provider settings, a disabled-by-default OpenAI-compatible provider adapter behind the draft-only contract, provider observability for calls, fallbacks, connection tests, latency, and token usage, and redacted assistant provider configuration history are implemented. Deeper production prompt hardening remains.
 
 ## Phase 8: Marketer Readiness and Governance
 
@@ -205,5 +205,5 @@ Status: started with experiment significance calculations, confidence labels, mi
 1. Add deeper production prompt hardening and provider governance for the optional LLM-backed assistant. Provider latency/error observability and admin test connection are implemented.
 2. Add a managed-database adapter path for enterprise deployments.
 3. Add deeper personalization helpers such as content-variant previews and audience-specific copy comparisons.
-4. Add assistant provider usage analytics and configuration audit history.
+4. Add assistant provider usage analytics and configuration audit history. Redacted configuration history is implemented.
 5. Add external delivery hints for managed assets, such as CDN host validation and downstream render diagnostics. Downstream rule-output asset usage reporting is implemented.

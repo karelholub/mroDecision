@@ -4086,6 +4086,11 @@ header {
   min-width: 0;
 }
 
+.assistant-config-history {
+  max-height: 280px;
+  overflow: auto;
+}
+
 .timeline-item,
 .timeline-empty {
   display: grid;

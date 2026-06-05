@@ -343,6 +343,7 @@ async function routeApi(req, res, url) {
         schema_sync: schemaSyncRuntime(),
         profile_cache: meiroProfileCache.metrics(),
         assistant_provider: assistantProviderMetrics.metrics(),
+        assistant_provider_config_events: store.listAssistantProviderConfigEvents({ limit: 8 }),
         meiro_deliveries: store.listMeiroDeliveries({ limit: 10 })
       }
     });
@@ -358,7 +359,8 @@ async function routeApi(req, res, url) {
       settings: publicSettings(settings),
       runtime: {
         schema_sync: schemaSyncRuntime(),
-        assistant_provider: assistantProviderMetrics.metrics()
+        assistant_provider: assistantProviderMetrics.metrics(),
+        assistant_provider_config_events: store.listAssistantProviderConfigEvents({ limit: 8 })
       }
     });
     return;

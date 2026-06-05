@@ -29,6 +29,14 @@ const portableSettingKeys = [
   "assistant_llm_timeout_ms"
 ];
 const redactedBundleSettingKeys = ["meiro_api_token", "meiro_cli_token", "assistant_llm_api_key"];
+const assistantProviderSettingKeys = [
+  "assistant_llm_enabled",
+  "assistant_llm_provider",
+  "assistant_llm_base_url",
+  "assistant_llm_model",
+  "assistant_llm_api_key",
+  "assistant_llm_timeout_ms"
+];
 
 export class Store {
   constructor(db) {
@@ -1566,6 +1574,7 @@ export class Store {
       "schema_last_sync_count"
     ]);
     const now = createdAtNow();
+    const before = this.getSettings();
     const upsert = this.db.prepare(
       `INSERT INTO settings (key, value_json, updated_at, updated_by)
        VALUES (?, ?, ?, ?)
@@ -1580,7 +1589,47 @@ export class Store {
       }
       if (allowed.has(key)) upsert.run(key, stringify(value), now, author);
     }
-    return this.getSettings();
+    const updated = this.getSettings();
+    this.recordAssistantProviderConfigEvent(input, before, updated, author, now);
+    return updated;
+  }
+
+  listAssistantProviderConfigEvents(params = {}) {
+    const requestedLimit = Number(params.limit || 10);
+    const limit = Math.min(Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 10, 50);
+    return this.db
+      .prepare(
+        `SELECT id, changed_at, changed_by, changes_json, snapshot_json
+         FROM assistant_provider_config_events
+         ORDER BY changed_at DESC
+         LIMIT ?`
+      )
+      .all(limit)
+      .map((row) => ({
+        id: row.id,
+        changed_at: row.changed_at,
+        changed_by: row.changed_by,
+        changes: parse(row.changes_json),
+        snapshot: parse(row.snapshot_json)
+      }));
+  }
+
+  recordAssistantProviderConfigEvent(input, before, after, author, now = createdAtNow()) {
+    const touched = assistantProviderSettingKeys.filter((key) => Object.hasOwn(input, key));
+    if (!touched.length) return;
+    const changes = {};
+    for (const key of touched) {
+      const previous = assistantProviderSettingValue(key, before[key]);
+      const current = assistantProviderSettingValue(key, after[key]);
+      if (previous !== current) changes[key] = { from: previous, to: current };
+    }
+    if (!Object.keys(changes).length) return;
+    this.db
+      .prepare(
+        `INSERT INTO assistant_provider_config_events (id, changed_at, changed_by, changes_json, snapshot_json)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .run(randomId(), now, author || "system", stringify(changes), stringify(assistantProviderSnapshot(after)));
   }
 
   bootstrapTokensEnabled() {
@@ -1940,6 +1989,14 @@ function migrate(db) {
       updated_by TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS assistant_provider_config_events (
+      id TEXT PRIMARY KEY,
+      changed_at TEXT NOT NULL,
+      changed_by TEXT NOT NULL,
+      changes_json TEXT NOT NULL DEFAULT '{}',
+      snapshot_json TEXT NOT NULL DEFAULT '{}'
+    );
+
     CREATE TABLE IF NOT EXISTS schema_items (
       kind TEXT NOT NULL CHECK (kind IN ('attribute', 'segment', 'context')),
       name TEXT NOT NULL,
@@ -1981,6 +2038,7 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_evaluation_profiles_rule ON evaluation_profiles(decision_key, updated_at);
     CREATE INDEX IF NOT EXISTS idx_condition_blocks_name ON condition_blocks(name, id);
     CREATE INDEX IF NOT EXISTS idx_meiro_deliveries_time ON meiro_deliveries(attempted_at);
+    CREATE INDEX IF NOT EXISTS idx_assistant_provider_config_events_time ON assistant_provider_config_events(changed_at);
   `);
   migrateClientEventsForConversions(db);
   ensureColumn(db, "rule_sets", "type", "TEXT NOT NULL DEFAULT 'decision'");
@@ -2908,6 +2966,28 @@ function collectAssetReferences(references, pattern, payload, reference) {
     if (existing.some((item) => item.reference_key === key)) continue;
     existing.push({ ...reference, reference_key: key });
   }
+}
+
+function randomId() {
+  return randomBytes(8).toString("hex");
+}
+
+function assistantProviderSnapshot(settings = {}) {
+  return {
+    enabled: settings.assistant_llm_enabled === true,
+    provider: String(settings.assistant_llm_provider || "openai"),
+    base_url: String(settings.assistant_llm_base_url || ""),
+    model: String(settings.assistant_llm_model || ""),
+    api_key: assistantProviderSettingValue("assistant_llm_api_key", settings.assistant_llm_api_key),
+    timeout_ms: Number(settings.assistant_llm_timeout_ms || 0)
+  };
+}
+
+function assistantProviderSettingValue(key, value) {
+  if (key === "assistant_llm_api_key") return value ? "configured" : "not_configured";
+  if (key === "assistant_llm_enabled") return value === true ? "enabled" : "disabled";
+  if (value == null || value === "") return "";
+  return String(value);
 }
 
 function hashToken(plaintext) {
