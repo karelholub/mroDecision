@@ -93,7 +93,7 @@ const ruleGovernanceTimeline = document.querySelector("#rule-governance-timeline
 const experimentPanel = document.querySelector("#experiment-panel");
 const experimentSummary = document.querySelector("#experiment-summary");
 const ruleDetailModal = document.querySelector("#rule-detail-modal");
-const ruleBuilderModal = document.querySelector("#rule-builder-modal");
+const ruleBuilderPanel = document.querySelector("#rule-builder-panel");
 const publishConfirmModal = document.querySelector("#publish-confirm-modal");
 const publishConfirmSummary = document.querySelector("#publish-confirm-summary");
 const publishConfirmDiff = document.querySelector("#publish-confirm-diff");
@@ -494,7 +494,7 @@ document.querySelector("#lookup-key-column").addEventListener("change", () => {
 document.querySelector("#settings-form").addEventListener("submit", saveSettings);
 document.querySelector("#token-form").addEventListener("submit", createToken);
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !ruleBuilderModal.hidden) closeRuleBuilder();
+  if (event.key === "Escape" && ruleBuilderPanel && !ruleBuilderPanel.hidden) closeRuleBuilder();
   else if (event.key === "Escape" && ruleDetailModal && !ruleDetailModal.hidden) closeRuleDetail();
   if (event.key === "Escape" && document.body.classList.contains("assistant-open")) closeAssistantPanel();
 });
@@ -2002,13 +2002,14 @@ function toggleRuleFullscreen() {
 
 function openRuleBuilder() {
   renderRuleInspector();
-  ruleBuilderModal.hidden = false;
-  document.body.classList.add("modal-open");
+  document.querySelector(".rule-editor-pane")?.classList.add("logic-open");
+  ruleBuilderPanel.hidden = false;
+  ruleBuilderPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function closeRuleBuilder() {
-  ruleBuilderModal.hidden = true;
-  document.body.classList.remove("modal-open");
+  ruleBuilderPanel.hidden = true;
+  document.querySelector(".rule-editor-pane")?.classList.remove("logic-open");
   renderRuleInspector();
 }
 
