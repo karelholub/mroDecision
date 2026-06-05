@@ -1034,15 +1034,18 @@ async function applyAssistantPlan() {
 
 function renderAssistantPlan(plan) {
   const guardrails = plan.guardrails || {};
+  const governance = plan.governance || {};
   const result = document.querySelector("#assistant-result");
   if (result) result.hidden = false;
   document.querySelector("#assistant-plan-output").textContent = JSON.stringify(plan, null, 2);
   document.querySelector("#assistant-guardrails").innerHTML = [
     statusItem("Status", guardrails.status || "review"),
     statusItem("Planner", plan.provider?.status ? `${plan.provider.mode || "deterministic"} · ${plan.provider.status}` : "deterministic"),
+    statusItem("Governance", governance.status ? `${governance.status} · ${governance.risk_level || "low"} risk` : "not reported"),
     statusItem("Actions", plan.actions?.length || 0),
     statusItem("Errors", guardrails.errors?.length || 0),
     statusItem("Warnings", guardrails.warnings?.length || 0),
+    renderAssistantGovernance(governance),
     ...(guardrails.errors || []).map((item) => statusItem("Error", item)),
     ...(guardrails.warnings || []).slice(0, 4).map((item) => statusItem("Warning", item))
   ].join("");
@@ -1051,6 +1054,28 @@ function renderAssistantPlan(plan) {
   renderAssistantHandoff(plan, [], { applied: false });
   document.querySelector("#assistant-apply").disabled = plan.mode !== "draft_only" || Boolean(guardrails.errors?.length);
   scrollAssistantConversation();
+}
+
+function renderAssistantGovernance(governance = {}) {
+  const checks = Array.isArray(governance.checks) ? governance.checks : [];
+  if (!checks.length) return "";
+  return `
+    <div class="assistant-governance-card">
+      <div>
+        <strong>${escapeHtml(governance.summary || "Governance checks")}</strong>
+        <span>${escapeHtml(governance.contract || "draft_only")} · ${escapeHtml(governance.provider_mode || "deterministic")}</span>
+      </div>
+      <div class="assistant-governance-checks">
+        ${checks.map((item) => `
+          <div class="assistant-governance-check ${escapeHtml(item.level || "ok")}">
+            <span>${escapeHtml(item.label || item.key || "Check")}</span>
+            <strong>${escapeHtml(item.level || "ok")}</strong>
+            <small>${escapeHtml(item.detail || "")}</small>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
 }
 
 function renderAssistantPreview(plan) {

@@ -17,6 +17,8 @@ test("assistant provider stays deterministic when disabled", async () => {
   assert.equal(plan.mode, "draft_only");
   assert.equal(plan.provider.status, "disabled");
   assert.equal(plan.provider.mode, "deterministic");
+  assert.equal(plan.governance.contract, "draft_only");
+  assert.equal(plan.governance.provider_status, "disabled");
   assert.ok(plan.actions.some((item) => item.action === "create_rule_draft"));
 });
 
@@ -66,6 +68,9 @@ test("assistant provider accepts draft-only allowed LLM plan", async () => {
   assert.equal(plan.provider.status, "used");
   assert.equal(plan.provider.mode, "llm");
   assert.equal(plan.summary, "Provider draft");
+  assert.equal(plan.governance.provider_mode, "llm");
+  assert.equal(plan.governance.secret_finding_count, 0);
+  assert.ok(plan.governance.checks.some((item) => item.key === "actions" && item.passed));
   assert.deepEqual(plan.actions.map((item) => item.action), ["create_rule_draft"]);
   const metrics = assistantProviderMetrics.metrics();
   assert.equal(metrics.calls.total, 1);
@@ -103,6 +108,8 @@ test("assistant provider falls back on unsupported LLM action", async () => {
 
   assert.equal(plan.provider.status, "fallback");
   assert.equal(plan.provider.mode, "deterministic");
+  assert.equal(plan.governance.provider_status, "fallback");
+  assert.equal(plan.governance.status, "review");
   assert.ok(plan.guardrails.warnings.some((item) => item.includes("unsupported action")));
   assert.ok(plan.actions.every((item) => item.action !== "publish_rule"));
   const metrics = assistantProviderMetrics.metrics();
@@ -189,6 +196,7 @@ test("assistant provider returns deterministic advice for broad experiment quest
   assert.equal(plan.actions.length, 0);
   assert.ok(plan.answer.includes("experiments"));
   assert.ok(plan.recommendations.length >= 3);
+  assert.equal(plan.governance.contract, "advice_only");
   assert.equal(plan.provider.status, "disabled");
 });
 
@@ -234,6 +242,7 @@ test("assistant provider accepts LLM advice without draft actions", async () => 
   assert.equal(plan.mode, "advice");
   assert.equal(plan.actions.length, 0);
   assert.equal(plan.provider.status, "used");
+  assert.equal(plan.governance.provider_mode, "llm");
   assert.equal(plan.recommendations[0].title, "CTA personalization");
 });
 

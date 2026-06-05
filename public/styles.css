@@ -893,6 +893,65 @@ aside input {
   overflow-wrap: anywhere;
 }
 
+.assistant-governance-card {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel);
+  min-width: 0;
+}
+
+.assistant-governance-card > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.assistant-governance-card strong {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.assistant-governance-card span,
+.assistant-governance-card small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.assistant-governance-checks {
+  display: grid;
+  gap: 8px;
+}
+
+.assistant-governance-check {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: var(--panel-soft);
+  min-width: 0;
+}
+
+.assistant-governance-check.warn {
+  border-left-color: #d97706;
+}
+
+.assistant-governance-check.error {
+  border-left-color: var(--danger);
+}
+
+.assistant-governance-check small {
+  grid-column: 1 / -1;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
 .assistant-clarifications {
   border: 1px solid var(--line);
   border-radius: 8px;

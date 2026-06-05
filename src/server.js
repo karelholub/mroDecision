@@ -2,6 +2,7 @@ import http from "node:http";
 import { URL } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
 import { requireScope, setAuthStore } from "./auth.js";
+import { createAssistantGovernanceReport } from "./assistantGovernance.js";
 import { createAssistantPlanWithProvider, testAssistantProviderConnection } from "./assistantProvider.js";
 import { assistantProviderMetrics } from "./assistantProviderMetrics.js";
 import { applyAssistantPlan } from "./assistantPlanner.js";
@@ -211,6 +212,7 @@ async function routeApi(req, res, url) {
     };
     const plan = await createAssistantPlanWithProvider(body, context, store.getSettings());
     validateAssistantPlan(plan);
+    plan.governance = createAssistantGovernanceReport(plan, plan.provider);
     sendJson(res, 200, { plan });
     return;
   }

@@ -1,4 +1,5 @@
 import { createAssistantPlan } from "./assistantPlanner.js";
+import { createAssistantGovernanceReport } from "./assistantGovernance.js";
 import { assistantProviderMetrics } from "./assistantProviderMetrics.js";
 
 const allowedActions = new Set(["upsert_message", "create_rule_draft", "update_rule_draft"]);
@@ -74,6 +75,7 @@ export async function createAssistantPlanWithProvider(input = {}, context = {}, 
       ...(fallback.guardrails.warnings || []),
       `LLM provider fallback: ${error.message || "provider failed"}`
     ];
+    fallback.governance = createAssistantGovernanceReport(fallback, fallback.provider);
     return fallback;
   }
 }
@@ -181,13 +183,17 @@ export async function testAssistantProviderConnection(input = {}, storedSettings
 }
 
 function annotatePlan(plan, provider) {
-  return {
+  const annotated = {
     ...plan,
     provider,
     guardrails: {
       ...(plan.guardrails || {}),
       provider
     }
+  };
+  return {
+    ...annotated,
+    governance: createAssistantGovernanceReport(annotated, provider)
   };
 }
 

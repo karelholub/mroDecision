@@ -1752,7 +1752,7 @@ components:
       properties:
         mode:
           type: string
-          enum: [draft_only]
+          enum: [draft_only, advice]
         prompt:
           type: string
         summary:
@@ -1821,6 +1821,38 @@ components:
               type: array
               items:
                 type: string
+        provider:
+          type: object
+          additionalProperties: true
+        governance:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [pass, review, block]
+            risk_level:
+              type: string
+              enum: [low, medium, high]
+            contract:
+              type: string
+              enum: [draft_only, advice_only]
+            provider_mode:
+              type: string
+            provider_status:
+              type: string
+            action_count:
+              type: integer
+            unsupported_action_count:
+              type: integer
+            secret_finding_count:
+              type: integer
+            summary:
+              type: string
+            checks:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
         actions:
           type: array
           items:
