@@ -534,6 +534,62 @@ aside input {
   overflow-wrap: anywhere;
 }
 
+.bandit-history-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.bandit-history-head {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.bandit-history-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.bandit-recent-list {
+  display: grid;
+  gap: 6px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.bandit-recent-row {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) minmax(90px, 0.8fr) minmax(110px, 1fr) minmax(120px, 0.8fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #ffffff;
+  font-size: 12px;
+}
+
+.bandit-recent-row strong,
+.bandit-recent-row span,
+.bandit-recent-row em,
+.bandit-recent-row small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bandit-recent-row span,
+.bandit-recent-row em,
+.bandit-recent-row small {
+  color: var(--muted);
+  font-style: normal;
+}
+
 .variant-builder-panel {
   display: grid;
   gap: 10px;

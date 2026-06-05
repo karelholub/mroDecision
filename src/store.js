@@ -596,6 +596,44 @@ export class Store {
     return run;
   }
 
+  addExperimentAssignment(input = {}) {
+    const assignedAt = input.assigned_at || createdAtNow();
+    const assignment = {
+      id: input.id || randomBytes(16).toString("hex"),
+      assigned_at: assignedAt,
+      decision_key: input.decision_key || "",
+      profile_key: input.profile_key || "",
+      rule_version: Number(input.rule_version || 0),
+      variant_key: input.variant_key || "",
+      strategy: input.strategy || "",
+      reason: input.reason || "",
+      bucket: input.bucket == null ? null : Number(input.bucket),
+      assignment_json: isPlainObject(input.assignment) ? input.assignment : {}
+    };
+    this.db
+      .prepare(
+        `INSERT INTO experiment_assignments (
+          id, assigned_at, decision_key, profile_key, rule_version, variant_key,
+          strategy, reason, bucket, assignment_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        assignment.id,
+        assignment.assigned_at,
+        assignment.decision_key,
+        assignment.profile_key,
+        assignment.rule_version,
+        assignment.variant_key,
+        assignment.strategy,
+        assignment.reason,
+        assignment.bucket,
+        stringify(assignment.assignment_json)
+      );
+    const cutoff = new Date(Date.now() - this.getClientEventRetentionDays() * 24 * 60 * 60 * 1000).toISOString();
+    this.db.prepare("DELETE FROM experiment_assignments WHERE assigned_at < ?").run(cutoff);
+    return assignment;
+  }
+
   addClientEvent(input) {
     const event = {
       event_id: input.event_id || `evt_${randomBytes(16).toString("hex")}`,
@@ -1038,6 +1076,7 @@ export class Store {
         }
         const winner = winnerVariant(variantMetrics);
         const significantWinner = significantWinnerVariant(variantMetrics);
+        const assignmentHistory = this.getExperimentAssignmentHistory(rule.decision_key);
         return {
           name: rule.name,
           decision_key: rule.decision_key,
@@ -1061,7 +1100,8 @@ export class Store {
           winner_variant: winner?.key || "",
           winner_lift_vs_baseline: winner?.lift_vs_baseline ?? null,
           significant_winner_variant: significantWinner?.key || "",
-          significant_winner_confidence: significantWinner?.significance?.confidence || 0
+          significant_winner_confidence: significantWinner?.significance?.confidence || 0,
+          assignment_history: assignmentHistory
         };
       });
     return {
@@ -1077,6 +1117,28 @@ export class Store {
         conversions: experiments.reduce((sum, item) => sum + Number(item.events.conversion?.count || 0), 0)
       },
       experiments
+    };
+  }
+
+  getExperimentAssignmentHistory(decisionKey, options = {}) {
+    const since = options.since || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const rows = this.db
+      .prepare(
+        `SELECT *
+         FROM experiment_assignments
+         WHERE decision_key = ? AND assigned_at >= ?
+         ORDER BY assigned_at DESC
+         LIMIT ?`
+      )
+      .all(decisionKey, since, Math.min(Number(options.limit || 100), 500))
+      .map(rowToExperimentAssignment);
+    return {
+      window_hours: 24,
+      total: rows.length,
+      by_variant: assignmentGroup(rows, "variant_key"),
+      by_strategy: assignmentGroup(rows, "strategy"),
+      by_reason: assignmentGroup(rows, "reason"),
+      recent: rows.slice(0, 12)
     };
   }
 
@@ -2045,6 +2107,19 @@ function migrate(db) {
       run_json TEXT NOT NULL DEFAULT '{}'
     );
 
+    CREATE TABLE IF NOT EXISTS experiment_assignments (
+      id TEXT PRIMARY KEY,
+      assigned_at TEXT NOT NULL,
+      decision_key TEXT NOT NULL,
+      profile_key TEXT NOT NULL DEFAULT '',
+      rule_version INTEGER NOT NULL DEFAULT 0,
+      variant_key TEXT NOT NULL DEFAULT '',
+      strategy TEXT NOT NULL DEFAULT '',
+      reason TEXT NOT NULL DEFAULT '',
+      bucket REAL,
+      assignment_json TEXT NOT NULL DEFAULT '{}'
+    );
+
     CREATE TABLE IF NOT EXISTS api_tokens (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -2108,6 +2183,8 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_client_events_type_time ON client_events(event_type, occurred_at);
     CREATE INDEX IF NOT EXISTS idx_precompute_runs_time ON precompute_runs(received_at);
     CREATE INDEX IF NOT EXISTS idx_precompute_runs_surface_time ON precompute_runs(surface, received_at);
+    CREATE INDEX IF NOT EXISTS idx_experiment_assignments_rule_time ON experiment_assignments(decision_key, assigned_at);
+    CREATE INDEX IF NOT EXISTS idx_experiment_assignments_variant_time ON experiment_assignments(decision_key, variant_key, assigned_at);
     CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash);
     CREATE INDEX IF NOT EXISTS idx_schema_items_kind ON schema_items(kind, name);
     CREATE INDEX IF NOT EXISTS idx_lookup_table_versions ON lookup_table_versions(id, version);
@@ -2893,6 +2970,32 @@ function rowToPrecomputeRun(row) {
     error_count: Number(row.error_count || 0),
     diagnostics: payload.diagnostics || null
   };
+}
+
+function rowToExperimentAssignment(row) {
+  return {
+    id: row.id,
+    assigned_at: row.assigned_at,
+    decision_key: row.decision_key,
+    profile_key: row.profile_key,
+    rule_version: Number(row.rule_version || 0),
+    variant_key: row.variant_key,
+    strategy: row.strategy,
+    reason: row.reason,
+    bucket: row.bucket == null ? null : Number(row.bucket),
+    assignment: parse(row.assignment_json || "{}")
+  };
+}
+
+function assignmentGroup(rows = [], key) {
+  const counts = new Map();
+  for (const row of rows) {
+    const value = row[key] || "(empty)";
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([value, count]) => ({ key: value, count }))
+    .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key));
 }
 
 function normalizeMetricsWindowHours(value) {

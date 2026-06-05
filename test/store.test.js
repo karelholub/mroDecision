@@ -307,6 +307,38 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(significantTreatment.significance.significant, true);
   assert.equal(significantTreatment.significance.status, "significant_95");
   assert.equal(significantOps.experiments[0].significant_winner_variant, "treatment");
+  store.addExperimentAssignment({
+    assigned_at: "2026-05-27T02:00:00.000Z",
+    decision_key: "hero_experiment",
+    profile_key: "bandit-profile-1",
+    rule_version: 1,
+    variant_key: "treatment",
+    strategy: "bandit",
+    reason: "exploitation",
+    assignment: { bandit: { exploration_rate: 10 } }
+  });
+  store.addExperimentAssignment({
+    assigned_at: "2026-05-27T02:01:00.000Z",
+    decision_key: "hero_experiment",
+    profile_key: "bandit-profile-2",
+    rule_version: 1,
+    variant_key: "control",
+    strategy: "bandit",
+    reason: "exploration"
+  });
+  const originalDateNowForAssignments = Date.now;
+  Date.now = () => Date.parse("2026-05-27T03:00:00.000Z");
+  try {
+    const assignmentOps = store.getExperimentOperations();
+    const history = assignmentOps.experiments[0].assignment_history;
+    assert.equal(history.total, 2);
+    assert.equal(history.by_strategy[0].key, "bandit");
+    assert.equal(history.by_reason.find((item) => item.key === "exploitation").count, 1);
+    assert.equal(history.by_variant.find((item) => item.key === "treatment").count, 1);
+    assert.equal(history.recent[0].profile_key, "bandit-profile-2");
+  } finally {
+    Date.now = originalDateNowForAssignments;
+  }
 
   const table = store.replaceLookupTable("tiers", {
     key_column: "country",

@@ -3620,6 +3620,64 @@ components:
         winner_lift_vs_baseline:
           type: number
           nullable: true
+        assignment_history:
+          $ref: "#/components/schemas/ExperimentAssignmentHistory"
+    ExperimentAssignmentHistory:
+      type: object
+      description: Recent server-side assignment activity for adaptive/bandit experiments.
+      properties:
+        window_hours:
+          type: integer
+        total:
+          type: integer
+        by_variant:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentAssignmentGroup"
+        by_strategy:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentAssignmentGroup"
+        by_reason:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentAssignmentGroup"
+        recent:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentAssignment"
+    ExperimentAssignmentGroup:
+      type: object
+      properties:
+        key:
+          type: string
+        count:
+          type: integer
+    ExperimentAssignment:
+      type: object
+      properties:
+        id:
+          type: string
+        assigned_at:
+          type: string
+          format: date-time
+        decision_key:
+          type: string
+        profile_key:
+          type: string
+        rule_version:
+          type: integer
+        variant_key:
+          type: string
+        strategy:
+          type: string
+        reason:
+          type: string
+        bucket:
+          type: number
+          nullable: true
+        assignment:
+          type: object
     ExperimentVariantOperation:
       type: object
       properties:

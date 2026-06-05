@@ -1891,6 +1891,31 @@ async function evaluateClientRequest(body) {
   const finalErrors = [...evaluated.errors, ...messageResolved.errors];
   const profileCache = profileCacheWithDiagnostics(hydrated.cache, baseRequest, request, schemaItems, finalErrors);
   const ttlSeconds = Number(ruleSet.cache_policy?.client_ttl || 0);
+  if (assigned && !assigned.holdout) {
+    store.addExperimentAssignment({
+      assigned_at: evaluated.evaluated_at,
+      decision_key: evaluated.decision_key,
+      profile_key: evaluated.profile_key,
+      rule_version: evaluated.rule_version,
+      variant_key: assigned.key,
+      strategy: assigned.strategy || "fixed",
+      reason: assigned.reason || "",
+      bucket: assigned.bucket,
+      assignment: assigned.bandit ? { bandit: assigned.bandit } : {}
+    });
+  } else if (assigned?.holdout) {
+    store.addExperimentAssignment({
+      assigned_at: evaluated.evaluated_at,
+      decision_key: evaluated.decision_key,
+      profile_key: evaluated.profile_key,
+      rule_version: evaluated.rule_version,
+      variant_key: "",
+      strategy: "holdout",
+      reason: assigned.reason || "forced_holdout",
+      bucket: null,
+      assignment: {}
+    });
+  }
   store.addAudit({
     ...evaluated,
     result: finalResult,

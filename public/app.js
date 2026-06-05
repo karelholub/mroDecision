@@ -1433,6 +1433,7 @@ function experimentWebsiteSnippet(experiment) {
 
 function experimentBanditDetail(experiment = {}) {
   const bandit = experiment.bandit || {};
+  const history = experiment.assignment_history || {};
   return `
     <div class="experiment-bandit-detail">
       <div>
@@ -1445,8 +1446,51 @@ function experimentBanditDetail(experiment = {}) {
         ${statusItem("Window", bandit.window_days ? `${formatNumber(bandit.window_days)}d` : "All feedback")}
         ${statusItem("Frozen winner", bandit.freeze_variant || "-")}
       </div>
+      <div class="bandit-history-panel">
+        <div class="bandit-history-head">
+          <strong>Assignment history</strong>
+          <span>${escapeHtml(formatNumber(history.total || 0))} assignments in the last ${escapeHtml(formatNumber(history.window_hours || 24))} hours</span>
+        </div>
+        <div class="bandit-history-grid">
+          ${banditHistoryGroup("Variants", history.by_variant)}
+          ${banditHistoryGroup("Reasons", history.by_reason)}
+          ${banditHistoryGroup("Strategies", history.by_strategy)}
+        </div>
+        <div class="bandit-recent-list">
+          ${banditRecentAssignments(history.recent)}
+        </div>
+      </div>
     </div>
   `;
+}
+
+function banditHistoryGroup(title, items = []) {
+  return `
+    <section class="traffic-group">
+      <div class="editor-title">${escapeHtml(title)}</div>
+      <div class="traffic-group-list">${
+        items?.length
+          ? items.map((item) => `
+            <div class="traffic-group-row">
+              <strong title="${escapeHtml(item.key || "-")}">${escapeHtml(item.key || "-")}</strong>
+              <span>${formatNumber(item.count || 0)}</span>
+            </div>
+          `).join("")
+          : `<div class="status-line">No assignments yet</div>`
+      }</div>
+    </section>
+  `;
+}
+
+function banditRecentAssignments(items = []) {
+  return items?.length ? items.map((item) => `
+    <div class="bandit-recent-row">
+      <strong>${escapeHtml(item.variant_key || item.reason || "-")}</strong>
+      <span>${escapeHtml(item.reason || item.strategy || "-")}</span>
+      <em>${escapeHtml(item.profile_key || "-")}</em>
+      <small>${item.assigned_at ? escapeHtml(formatTime(item.assigned_at)) : "-"}</small>
+    </div>
+  `).join("") : `<div class="status-line">No recent assignments yet.</div>`;
 }
 
 function deeRuntimeBaseUrl() {
