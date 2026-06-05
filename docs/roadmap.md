@@ -206,7 +206,7 @@ Status: started with experiment significance calculations, confidence labels, mi
 
 1. Add deeper production prompt hardening and provider governance for the optional LLM-backed assistant. Provider latency/error observability and admin test connection are implemented.
 2. Add a managed-database adapter implementation for enterprise deployments. The adapter registry, SQLite capability reporting, planned Postgres contract, and deployment-readiness diagnostics are implemented; the full Postgres-backed store remains.
-3. Add deeper personalization helpers such as content-variant previews and audience-specific copy comparisons.
+3. Add deeper personalization helpers such as content-variant previews and audience-specific copy comparisons. Audience comparison previews are implemented for message personalization.
 4. Add assistant provider usage analytics and configuration audit history. Redacted configuration history is implemented.
 5. Add external delivery hints for managed assets, such as CDN host validation and downstream render diagnostics. Downstream rule-output asset usage reporting is implemented.
 6. Remove modal-heavy editor flows. Overview rule detail, Evaluate payload JSON, Reference Data Details, Message Editor, Rule Set editor, Rule Builder, and publish review have been converted to inline panels.

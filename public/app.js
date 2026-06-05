@@ -28,6 +28,7 @@ const messageVersionPreview = document.querySelector("#message-version-preview")
 const messageTokenSuggestions = document.querySelector("#message-token-suggestions");
 const messageTokenSample = document.querySelector("#message-token-sample");
 const messageRenderTokens = document.querySelector("#message-render-tokens");
+const messageAudienceComparison = document.querySelector("#message-audience-comparison");
 const lookupInspectorSummary = document.querySelector("#lookup-inspector-summary");
 const lookupHelpTable = document.querySelector("#lookup-help-table");
 const lookupHelpKey = document.querySelector("#lookup-help-key");
@@ -4742,6 +4743,11 @@ function resolveSamplePath(sample, path) {
 }
 
 function messageTokenStats() {
+  const sample = parseJsonSafe(messageTokenSample?.value || "{}");
+  return messageTokenStatsForSample(sample);
+}
+
+function messageTokenStatsForSample(sample = {}) {
   const content = [
     document.querySelector("#message-preview-title")?.value || "",
     document.querySelector("#message-preview-body")?.value || "",
@@ -4752,7 +4758,6 @@ function messageTokenStats() {
     document.querySelector("#message-secondary-cta-url")?.value || ""
   ].join("\n");
   const tokens = [...content.matchAll(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g)].map((match) => match[1]);
-  const sample = parseJsonSafe(messageTokenSample?.value || "{}");
   return {
     tokens,
     missing: tokens.filter((token) => resolveSamplePath(sample, token) === undefined)
@@ -4763,13 +4768,14 @@ function renderMessagePreview() {
   if (!messagePreview) return;
   const templateType = messageTemplateType(document.querySelector("#message-template-type").value);
   const placement = document.querySelector("#message-placement").value.trim();
-  const rawTitle = document.querySelector("#message-preview-title").value.trim();
-  const rawBody = document.querySelector("#message-preview-body").value.trim();
+  const raw = messagePreviewRawContent();
+  const rawTitle = raw.title;
+  const rawBody = raw.body;
   const sample = parseJsonSafe(messageTokenSample?.value || "{}");
   const title = renderPersonalizedText(rawTitle || document.querySelector("#message-name").value.trim() || "Untitled message", sample);
   const body = renderPersonalizedText(rawBody || "No message body yet.", sample);
-  const footer = renderPersonalizedText(document.querySelector("#message-preview-footer").value.trim(), sample);
-  const imageUrl = document.querySelector("#message-preview-image").value.trim();
+  const footer = renderPersonalizedText(raw.footer, sample);
+  const imageUrl = raw.imageUrl;
   const surface = document.querySelector("#message-surface").value.trim() || "-";
   const status = document.querySelector("#message-status").value || "active";
   const ttl = Number(document.querySelector("#message-frequency-ttl").value || 0);
@@ -4777,13 +4783,13 @@ function renderMessagePreview() {
   const startsAt = document.querySelector("#message-starts-at").value;
   const ctas = [
     {
-      label: renderPersonalizedText(document.querySelector("#message-primary-cta-label").value.trim(), sample),
-      url: renderPersonalizedText(document.querySelector("#message-primary-cta-url").value.trim(), sample),
+      label: renderPersonalizedText(raw.primaryCtaLabel, sample),
+      url: renderPersonalizedText(raw.primaryCtaUrl, sample),
       style: "primary"
     },
     {
-      label: renderPersonalizedText(document.querySelector("#message-secondary-cta-label").value.trim(), sample),
-      url: renderPersonalizedText(document.querySelector("#message-secondary-cta-url").value.trim(), sample),
+      label: renderPersonalizedText(raw.secondaryCtaLabel, sample),
+      url: renderPersonalizedText(raw.secondaryCtaUrl, sample),
       style: "secondary"
     }
   ].filter((cta) => cta.label || cta.url);
@@ -4822,8 +4828,125 @@ function renderMessagePreview() {
     statusItem("Tokens", messageTokenStats().tokens.length ? `${messageTokenStats().tokens.length} used` : "None")
   ].join("");
   renderMessagePreviewHealth(health);
+  renderMessageAudienceComparison({ templateType, placement, surface, raw });
   renderMessageRuleLinks();
   renderMessageAssetList();
+}
+
+function messagePreviewRawContent() {
+  return {
+    title: document.querySelector("#message-preview-title").value.trim(),
+    body: document.querySelector("#message-preview-body").value.trim(),
+    footer: document.querySelector("#message-preview-footer").value.trim(),
+    imageUrl: document.querySelector("#message-preview-image").value.trim(),
+    primaryCtaLabel: document.querySelector("#message-primary-cta-label").value.trim(),
+    primaryCtaUrl: document.querySelector("#message-primary-cta-url").value.trim(),
+    secondaryCtaLabel: document.querySelector("#message-secondary-cta-label").value.trim(),
+    secondaryCtaUrl: document.querySelector("#message-secondary-cta-url").value.trim()
+  };
+}
+
+function renderMessageAudienceComparison({ templateType, placement, surface, raw }) {
+  if (!messageAudienceComparison) return;
+  const baseSample = parseJsonSafe(messageTokenSample?.value || "{}") || {};
+  const samples = messageAudienceSamples(baseSample);
+  messageAudienceComparison.innerHTML = `
+    <div class="message-audience-head">
+      <div>
+        <strong>Audience comparison</strong>
+        <span>Preview the same content against common profile scenarios.</span>
+      </div>
+    </div>
+    <div class="message-audience-grid">
+      ${samples.map((sample) => messageAudienceCard({ sample, templateType, placement, surface, raw })).join("")}
+    </div>
+  `;
+}
+
+function messageAudienceCard({ sample, templateType, placement, surface, raw }) {
+  const data = sample.data || {};
+  const title = renderPersonalizedText(raw.title || document.querySelector("#message-name").value.trim() || "Untitled message", data);
+  const body = renderPersonalizedText(raw.body || "No message body yet.", data);
+  const footer = renderPersonalizedText(raw.footer, data);
+  const ctas = [
+    {
+      label: renderPersonalizedText(raw.primaryCtaLabel, data),
+      url: renderPersonalizedText(raw.primaryCtaUrl, data),
+      style: "primary"
+    },
+    {
+      label: renderPersonalizedText(raw.secondaryCtaLabel, data),
+      url: renderPersonalizedText(raw.secondaryCtaUrl, data),
+      style: "secondary"
+    }
+  ].filter((cta) => cta.label || cta.url);
+  const missing = messageTokenStatsForSample(data).missing;
+  return `
+    <section class="message-audience-card">
+      <div class="message-audience-card-head">
+        <strong>${escapeHtml(sample.label)}</strong>
+        <span>${escapeHtml(sample.detail)}</span>
+      </div>
+      <div class="message-preview-card compact" data-template="${escapeHtml(templateType)}" data-has-cta="${ctas.length ? "true" : "false"}">
+        ${messagePreviewCardInnerHtml({ templateType, placement, surface, title, body, footer, imageUrl: raw.imageUrl, ctas })}
+      </div>
+      <div class="message-audience-card-foot ${missing.length ? "warn" : "ok"}">
+        ${escapeHtml(missing.length ? `Missing: ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? "..." : ""}` : "All tokens resolved")}
+      </div>
+    </section>
+  `;
+}
+
+function messageAudienceSamples(baseSample = {}) {
+  const mergedBase = mergeMessageSamples(defaultMessageTokenSample(), baseSample);
+  return [
+    {
+      label: "Current sample",
+      detail: "Custom values from the sample editor",
+      data: mergedBase
+    },
+    {
+      label: "High intent",
+      detail: "Engaged visitor with strong lead signals",
+      data: mergeMessageSamples(mergedBase, {
+        profile_key: "high-intent-profile",
+        attributes: { first_name: "Karel", lead_score: 92, web_engagement_score: 88, customer_lifetime_value: 5200 },
+        segments: { high_intent: true, retention_risk: false },
+        context: { channel: "web", surface: "homepage_hero", page_type: "homepage" }
+      })
+    },
+    {
+      label: "Retention risk",
+      detail: "Known customer who may need save-oriented copy",
+      data: mergeMessageSamples(mergedBase, {
+        profile_key: "retention-profile",
+        attributes: { first_name: "Alex", churn_risk_score: 81, customer_lifetime_value: 7600, lead_score: 48 },
+        segments: { high_intent: false, retention_risk: true },
+        context: { channel: "web", surface: "account_dashboard", page_type: "account" }
+      })
+    },
+    {
+      label: "New visitor",
+      detail: "Sparse profile with mostly context data",
+      data: mergeMessageSamples(mergedBase, {
+        profile_key: "anonymous-web-visitor",
+        attributes: { first_name: "", lead_score: 15, customer_lifetime_value: 0 },
+        segments: { high_intent: false, retention_risk: false },
+        context: { channel: "web", surface: "homepage", page_type: "landing" }
+      })
+    }
+  ];
+}
+
+function mergeMessageSamples(base = {}, overrides = {}) {
+  return {
+    ...base,
+    ...overrides,
+    attributes: { ...(base.attributes || {}), ...(overrides.attributes || {}) },
+    segments: { ...(base.segments || {}), ...(overrides.segments || {}) },
+    context: { ...(base.context || {}), ...(overrides.context || {}) },
+    identifiers: { ...(base.identifiers || {}), ...(overrides.identifiers || {}) }
+  };
 }
 
 function messagePreviewCardInnerHtml({ templateType = "banner", placement = "", surface = "", title = "Untitled message", body = "No message body yet.", footer = "", imageUrl = "", ctas = [] } = {}) {
