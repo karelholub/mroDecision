@@ -6,6 +6,7 @@ import {
   validateEvaluateRequest,
   validateRuleDefinition,
   validateRuleSetPayload,
+  validateClientSurfaceBatchRequest,
   validateClientSurfaceRequest
 } from "../src/validation.js";
 
@@ -246,4 +247,33 @@ test("validates client surface requests", () => {
   );
   assert.throws(() => validateClientSurfaceRequest({ profile_key: "p1" }), /surface/);
   assert.throws(() => validateClientSurfaceRequest({ surface: "homepage", profile_key: "p1", limit: 1.5 }), /limit/);
+});
+
+test("validates client surface batch requests", () => {
+  assert.doesNotThrow(() =>
+    validateClientSurfaceBatchRequest({
+      surface: "homepage_hero",
+      context: { channel: "web" },
+      limit: 10,
+      profiles: [
+        {
+          profile_key: "p1",
+          identifiers: [{ typeId: "email", value: "user@example.com" }],
+          attributes: {},
+          segments: {},
+          context: {}
+        }
+      ]
+    })
+  );
+  assert.throws(() => validateClientSurfaceBatchRequest({ surface: "homepage_hero", profiles: [] }), /at least one profile/);
+  assert.throws(() => validateClientSurfaceBatchRequest({ surface: "homepage_hero", profiles: [{}] }), /profile_key/);
+  assert.throws(
+    () => validateClientSurfaceBatchRequest({ surface: "homepage_hero", profiles: [{ profile_key: "p1", identifiers: {} }] }),
+    /identifiers/
+  );
+  assert.throws(
+    () => validateClientSurfaceBatchRequest({ surface: "homepage_hero", profiles: [{ profile_key: "p1", limit: 1.5 }] }),
+    /profile limit/
+  );
 });

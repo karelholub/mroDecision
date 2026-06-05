@@ -19,6 +19,7 @@ import {
   validateBundle,
   validateClientEventRequest,
   validateClientEvaluateRequest,
+  validateClientSurfaceBatchRequest,
   validateClientSurfaceRequest,
   validateEvaluateRequest,
   validateRuleDefinition,
@@ -155,6 +156,18 @@ async function routeApi(req, res, url) {
     validateClientSurfaceRequest(body);
     enforceClientTokenContext(req, body);
     const result = await evaluateClientSurface(body, req.auth);
+    await store.save();
+    sendJson(res, 200, result);
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/v1/client/surface/batch") {
+    requireScope(req, "client");
+    enforceClientRateLimit(req, res, "surface_batch");
+    const body = await readJson(req, config.batchRequestBodyLimitBytes);
+    validateClientSurfaceBatchRequest(body);
+    enforceClientTokenContext(req, body);
+    const result = await evaluateClientSurfaceBatch(req, body);
     await store.save();
     sendJson(res, 200, result);
     return;
@@ -1254,6 +1267,7 @@ function clientTrafficAction(method, path) {
   if (method === "POST" && cleanPath === "/v1/client/evaluate") return "evaluate";
   if (method === "GET" && cleanPath === "/v1/client/rule-catalog") return "rule_catalog";
   if (method === "POST" && cleanPath === "/v1/client/surface") return "surface";
+  if (method === "POST" && cleanPath === "/v1/client/surface/batch") return "surface_batch";
   const eventMatch = cleanPath.match(/^\/v1\/client\/(impression|exposure|conversion)$/);
   if (method === "POST" && eventMatch) return eventMatch[1];
   return "client";
@@ -2249,6 +2263,58 @@ async function evaluateClientSurface(body, auth) {
     profile_key: body.profile_key,
     selected,
     candidates
+  };
+}
+
+async function evaluateClientSurfaceBatch(req, body) {
+  const startedAt = new Date().toISOString();
+  const results = [];
+  let eligible = 0;
+  let suppressed = 0;
+  let errors = 0;
+  for (const profile of body.profiles) {
+    const request = {
+      ...profile,
+      surface: body.surface,
+      limit: profile.limit ?? body.limit,
+      context: {
+        ...(body.context || {}),
+        ...(profile.context || {}),
+        surface: body.surface,
+        request_source: profile.context?.request_source || body.context?.request_source || "meiro_pipes_inapp_precompute"
+      }
+    };
+    try {
+      enforceClientTokenContext(req, request);
+      const result = await evaluateClientSurface(request, req.auth);
+      results.push(result);
+      if (result.selected?.result === "eligible") eligible += 1;
+      else suppressed += 1;
+    } catch (error) {
+      errors += 1;
+      results.push({
+        surface: body.surface,
+        profile_key: profile.profile_key,
+        selected: null,
+        candidates: [],
+        error: {
+          code: error.code || "evaluation_error",
+          message: error.message || "Evaluation failed"
+        }
+      });
+    }
+  }
+
+  return {
+    surface: body.surface,
+    evaluated_at: startedAt,
+    count: results.length,
+    summary: {
+      eligible,
+      not_selected: suppressed,
+      errors
+    },
+    results
   };
 }
 

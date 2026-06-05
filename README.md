@@ -75,6 +75,7 @@ Only `sqlite` is implemented today. Unsupported adapter values fail startup with
 - `POST /v1/evaluate/batch`
 - `POST /v1/client/evaluate`
 - `POST /v1/client/surface`
+- `POST /v1/client/surface/batch`
 - `POST /v1/client/impression`
 - `POST /v1/client/exposure`
 - `POST /v1/client/conversion`

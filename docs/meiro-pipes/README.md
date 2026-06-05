@@ -27,6 +27,12 @@ https://sse-demo.eu1.pipes.meiro.io/collect/decision-engine-feedback
 
 Use [profile-destination-send.js](profile-destination-send.js) for scheduled audience/profile syncs. The function calls `/v1/evaluate` for each exported profile and forwards a compact result downstream.
 
+## In-App Message Precompute
+
+Use [inapp-precompute-send.js](inapp-precompute-send.js) when Pipes exports a full segment and DEE should precompute website in-app message eligibility and content. The function calls `/v1/client/surface/batch` once per Pipes run, evaluates all published `inapp_message` rules for the requested surface, and forwards compact profile-level records downstream.
+
+The downstream record includes `eligible`, `decision_key`, `message_id`, expanded `message_content`, TTL/cache hints, candidates, errors, and `sync_id` so Meiro can expose the latest prepared in-app response through profile attributes or a decision event.
+
 ## UI Templates
 
 The embedded DEE UI includes an Integration tab that generates a ready-to-copy request template from the saved Meiro and DEE runtime settings. Use it after creating an evaluate-only API token in Settings.

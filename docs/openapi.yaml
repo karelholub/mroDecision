@@ -231,6 +231,48 @@ paths:
           $ref: "#/components/responses/Error"
         "403":
           $ref: "#/components/responses/Error"
+  /v1/client/surface/batch:
+    post:
+      summary: Precompute in-app message eligibility and content for a batch of profiles
+      description: Requires a token with the `client` scope. Intended for Meiro Pipes segment exports. Evaluates all published `inapp_message` rules for the requested surface per profile and returns the selected message content plus compact candidate diagnostics. Individual profile failures are returned in the corresponding result item.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientSurfaceBatchRequest"
+            examples:
+              precompute:
+                value:
+                  surface: homepage_hero
+                  limit: 20
+                  context:
+                    channel: web
+                    request_source: meiro_pipes_inapp_precompute
+                  profiles:
+                    - profile_key: profile-123
+                      identifiers:
+                        - typeId: email
+                          value: user@example.com
+                      attributes: {}
+                      segments: {}
+                      context:
+                        profile_enrichment: off
+      responses:
+        "200":
+          description: Batch in-app message precompute results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientSurfaceBatchResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
   /v1/client/impression:
     post:
       summary: Record an in-app message impression
@@ -2116,6 +2158,50 @@ components:
         context:
           type: object
           additionalProperties: true
+    ClientSurfaceBatchProfile:
+      type: object
+      required: [profile_key]
+      properties:
+        profile_key:
+          type: string
+        limit:
+          type: integer
+          description: Optional per-profile override for the candidate rule limit.
+        identifiers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Identifier"
+        attributes:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/AttributeValue"
+        segments:
+          type: object
+          additionalProperties:
+            type: boolean
+        context:
+          type: object
+          additionalProperties: true
+    ClientSurfaceBatchRequest:
+      type: object
+      required: [surface, profiles]
+      properties:
+        surface:
+          type: string
+        limit:
+          type: integer
+          default: 20
+        context:
+          type: object
+          description: Shared context merged into every profile request. Profile-level context wins on key conflicts.
+          additionalProperties: true
+        profiles:
+          type: array
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/ClientSurfaceBatchProfile"
     ClientSurfaceResponse:
       type: object
       required: [surface, profile_key, candidates]
@@ -2157,6 +2243,42 @@ components:
               profile_cache:
                 type: object
                 additionalProperties: true
+    ClientSurfaceBatchResponse:
+      type: object
+      required: [surface, evaluated_at, count, summary, results]
+      properties:
+        surface:
+          type: string
+        evaluated_at:
+          type: string
+          format: date-time
+        count:
+          type: integer
+        summary:
+          type: object
+          required: [eligible, not_selected, errors]
+          properties:
+            eligible:
+              type: integer
+            not_selected:
+              type: integer
+            errors:
+              type: integer
+        results:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/ClientSurfaceResponse"
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    nullable: true
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
     ClientEventRequest:
       type: object
       required: [decision_key, profile_key]

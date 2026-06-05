@@ -65,11 +65,35 @@ export function validateClientSurfaceRequest(body) {
   if (!isPlainObject(body)) badRequest("Request body must be an object");
   requiredString(body, "surface");
   requiredString(body, "profile_key");
+  if (body.identifiers != null && !Array.isArray(body.identifiers)) badRequest("identifiers must be an array");
   optionalObject(body, "attributes");
   optionalObject(body, "segments");
   optionalObject(body, "context");
   if (body.limit != null && !Number.isInteger(Number(body.limit))) {
     badRequest("limit must be an integer when provided");
+  }
+}
+
+export function validateClientSurfaceBatchRequest(body) {
+  if (!isPlainObject(body)) badRequest("Request body must be an object");
+  requiredString(body, "surface");
+  if (!Array.isArray(body.profiles)) badRequest("profiles must be an array");
+  if (body.profiles.length === 0) badRequest("profiles must include at least one profile");
+  if (body.profiles.length > 500) badRequest("Batch limit is 500 profiles");
+  optionalObject(body, "context");
+  if (body.limit != null && !Number.isInteger(Number(body.limit))) {
+    badRequest("limit must be an integer when provided");
+  }
+  for (const profile of body.profiles) {
+    if (!isPlainObject(profile)) badRequest("Every profile must be an object");
+    requiredString(profile, "profile_key");
+    if (profile.identifiers != null && !Array.isArray(profile.identifiers)) badRequest("identifiers must be an array");
+    optionalObject(profile, "attributes");
+    optionalObject(profile, "segments");
+    optionalObject(profile, "context");
+    if (profile.limit != null && !Number.isInteger(Number(profile.limit))) {
+      badRequest("profile limit must be an integer when provided");
+    }
   }
 }
 
