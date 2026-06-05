@@ -238,6 +238,7 @@ document.querySelector("#assistant-close")?.addEventListener("click", closeAssis
 document.querySelector("#assistant-plan")?.addEventListener("click", planAssistantRequest);
 document.querySelector("#assistant-apply")?.addEventListener("click", applyAssistantPlan);
 document.querySelector("#assistant-handoff")?.addEventListener("click", handleAssistantHandoffAction);
+document.querySelector("#assistant-handoff")?.addEventListener("change", handleAssistantApprovalChange);
 document.querySelector("#assistant-prompt")?.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
@@ -1024,10 +1025,11 @@ async function applyAssistantPlan() {
       body: JSON.stringify({ plan: cachedAssistantPlan, approved_action_ids: approvedActionIds })
     });
     cachedAssistantRollback = response.rollback || [];
+    const rollbackCoverage = assistantRollbackCoverage(cachedAssistantRollback);
     document.querySelector("#assistant-guardrails").innerHTML = [
       statusItem("Applied", response.applied?.length || 0),
       statusItem("Skipped", response.skipped?.length || 0),
-      statusItem("Rollback", cachedAssistantRollback.length ? `${cachedAssistantRollback.length} prepared` : "Manual review"),
+      statusItem("Rollback", rollbackCoverage.total ? `${rollbackCoverage.automated}/${rollbackCoverage.total} automated` : "Manual review"),
       statusItem("Mode", "Draft only"),
       statusItem("Publish", "Manual review required")
     ].join("");
@@ -1068,6 +1070,11 @@ function selectedAssistantActionIds() {
   return Array.from(document.querySelectorAll("[data-assistant-action-approval]:checked"))
     .map((input) => input.value)
     .filter(Boolean);
+}
+
+function handleAssistantApprovalChange(event) {
+  if (!event.target.matches("[data-assistant-action-approval]")) return;
+  updateAssistantApprovalSummary();
 }
 
 function renderAssistantPlan(plan) {
@@ -1270,6 +1277,7 @@ function renderAssistantHandoff(plan, applied = [], options = {}) {
     return;
   }
   const appliedByKey = new Map(applied.map((item) => [item.action_key || `${item.action}:${item.id}`, item]));
+  const summary = assistantActionSummary(actions, options.rollback || []);
   target.hidden = false;
   target.innerHTML = `
     <div class="assistant-handoff-header">
@@ -1279,10 +1287,15 @@ function renderAssistantHandoff(plan, applied = [], options = {}) {
       </div>
       ${options.applied && options.rollback?.length ? `<button type="button" data-assistant-action="rollback-assistant">Rollback Applied Drafts</button>` : ""}
     </div>
+    <div class="assistant-handoff-summary" data-assistant-approval-summary>
+      ${assistantApprovalSummaryHtml(summary, options)}
+    </div>
     <div class="assistant-handoff-list">
       ${actions.map((item) => assistantHandoffRow(item, appliedByKey.get(assistantActionKey(item)), options)).join("")}
     </div>
+    ${options.applied && options.rollback?.length ? assistantRollbackDetailHtml(options.rollback) : ""}
   `;
+  updateAssistantApprovalSummary();
 }
 
 function assistantHandoffRow(action, applied, options = {}) {
@@ -1331,6 +1344,85 @@ function assistantActionLabel(action) {
   if (action === "update_rule_draft") return "Update rule draft";
   if (action === "create_rule_draft") return "Create rule draft";
   return action || "Action";
+}
+
+function assistantActionSummary(actions = [], rollback = []) {
+  const ruleActions = actions.filter((item) => ["create_rule_draft", "update_rule_draft"].includes(item.action)).length;
+  const dependencies = actions.length - ruleActions;
+  const rollbackCoverage = assistantRollbackCoverage(rollback);
+  return {
+    total: actions.length,
+    selected: actions.length,
+    ruleActions,
+    dependencies,
+    rollbackCoverage
+  };
+}
+
+function assistantRollbackCoverage(rollback = []) {
+  const total = rollback.length;
+  const manual = rollback.filter((item) => item.action === "manual_review").length;
+  return {
+    total,
+    manual,
+    automated: Math.max(0, total - manual)
+  };
+}
+
+function assistantApprovalSummaryHtml(summary, options = {}) {
+  const coverage = summary.rollbackCoverage || { total: 0, automated: 0, manual: 0 };
+  const rollbackLabel = coverage.total
+    ? `${coverage.automated}/${coverage.total} automated${coverage.manual ? ` · ${coverage.manual} manual` : ""}`
+    : options.applied ? "No rollback prepared" : "Prepared after apply";
+  return `
+    <div>
+      <span>Selected</span>
+      <strong data-assistant-selected-count>${escapeHtml(String(summary.selected))}</strong>
+      <small>of ${escapeHtml(String(summary.total))} actions</small>
+    </div>
+    <div>
+      <span>Rules</span>
+      <strong>${escapeHtml(String(summary.ruleActions))}</strong>
+      <small>draft action${summary.ruleActions === 1 ? "" : "s"}</small>
+    </div>
+    <div>
+      <span>Dependencies</span>
+      <strong>${escapeHtml(String(summary.dependencies))}</strong>
+      <small>message/content action${summary.dependencies === 1 ? "" : "s"}</small>
+    </div>
+    <div>
+      <span>Rollback</span>
+      <strong>${escapeHtml(rollbackLabel)}</strong>
+      <small>publishing remains separate</small>
+    </div>
+  `;
+}
+
+function updateAssistantApprovalSummary() {
+  const summary = document.querySelector("[data-assistant-approval-summary]");
+  if (!summary) return;
+  const checkboxes = Array.from(document.querySelectorAll("[data-assistant-action-approval]"));
+  const selected = checkboxes.filter((input) => input.checked).length;
+  const selectedTarget = summary.querySelector("[data-assistant-selected-count]");
+  if (selectedTarget) selectedTarget.textContent = String(selected);
+  const applyButton = document.querySelector("#assistant-apply");
+  if (applyButton && checkboxes.length) {
+    const guardrails = cachedAssistantPlan?.guardrails || {};
+    applyButton.disabled = cachedAssistantPlan?.mode !== "draft_only" || Boolean(guardrails.errors?.length) || selected === 0;
+  }
+}
+
+function assistantRollbackDetailHtml(rollback = []) {
+  const manual = rollback.filter((item) => item.action === "manual_review");
+  if (!manual.length) return "";
+  return `
+    <div class="assistant-rollback-detail">
+      <strong>Manual rollback review</strong>
+      ${manual.map((item) => `
+        <span>${escapeHtml(item.id || "item")} · ${escapeHtml(item.reason || "Manual review required.")}</span>
+      `).join("")}
+    </div>
+  `;
 }
 
 async function handleAssistantHandoffAction(event) {
