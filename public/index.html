@@ -798,11 +798,20 @@
             </div>
             <div class="actions left">
               <button type="button" id="load-preset-secondary">Load Preset</button>
-              <button type="button" id="open-eval-payload">Edit Profile Payload</button>
+              <button type="button" id="toggle-eval-payload">Show Payload JSON</button>
               <button type="button" id="save-eval-profile">Save Profile</button>
               <button type="button" id="delete-eval-profile">Delete</button>
               <button type="button" id="run-eval-secondary">Run</button>
               <button type="button" id="compare-eval">Compare Draft</button>
+            </div>
+            <div id="eval-payload-panel" class="eval-payload-panel" hidden>
+              <div class="builder-section-head">
+                <div>
+                  <strong>Profile Payload JSON</strong>
+                  <span>Edit the raw request body used for this evaluation.</span>
+                </div>
+              </div>
+              <textarea id="eval-input" spellcheck="false"></textarea>
             </div>
             <div class="eval-profile-builder">
               <div class="builder-section-head">
@@ -852,18 +861,6 @@
               <div id="eval-trace" class="eval-trace"></div>
               <pre id="eval-output"></pre>
             </div>
-          </div>
-        </div>
-        <div id="eval-payload-modal" class="eval-payload-modal" hidden>
-          <div class="eval-payload-dialog">
-            <div class="eval-payload-header">
-              <div>
-                <strong>Profile Payload</strong>
-                <span>Edit the JSON request body used for this evaluation.</span>
-              </div>
-              <button type="button" id="close-eval-payload">Close</button>
-            </div>
-            <textarea id="eval-input" spellcheck="false"></textarea>
           </div>
         </div>
       </section>
@@ -1930,6 +1927,6 @@
       </div>
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
-  <script src="/app.js?v=20260605-inline-overview-detail"></script>
+  <script src="/app.js?v=20260605-inline-eval-payload"></script>
 </body>
 </html>

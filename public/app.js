@@ -6,7 +6,8 @@ const evalSummary = document.querySelector("#eval-summary");
 const evalOutputSummary = document.querySelector("#eval-output-summary");
 const evalEndpointLabel = document.querySelector("#eval-endpoint-label");
 const evalAuditLabel = document.querySelector("#eval-audit-label");
-const evalPayloadModal = document.querySelector("#eval-payload-modal");
+const evalPayloadPanel = document.querySelector("#eval-payload-panel");
+const evalPayloadToggle = document.querySelector("#toggle-eval-payload");
 const evalValidation = document.querySelector("#eval-validation");
 const evalSavedProfile = document.querySelector("#eval-saved-profile");
 const editorOutput = document.querySelector("#rule-editor-output");
@@ -290,8 +291,7 @@ document.querySelector("#run-eval").addEventListener("click", runEvaluate);
 document.querySelector("#run-eval-secondary").addEventListener("click", runEvaluate);
 document.querySelector("#load-preset").addEventListener("click", loadEvaluatePreset);
 document.querySelector("#load-preset-secondary").addEventListener("click", loadEvaluatePreset);
-document.querySelector("#open-eval-payload").addEventListener("click", openEvalPayload);
-document.querySelector("#close-eval-payload").addEventListener("click", closeEvalPayload);
+evalPayloadToggle?.addEventListener("click", toggleEvalPayload);
 document.querySelector("#save-eval-profile").addEventListener("click", saveEvaluateProfile);
 document.querySelector("#delete-eval-profile").addEventListener("click", deleteEvaluateProfile);
 document.querySelector("#compare-eval").addEventListener("click", compareEvaluateVersions);
@@ -502,7 +502,6 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && document.body.classList.contains("assistant-open")) closeAssistantPanel();
   if (event.key === "Escape" && lookupDetailModal && !lookupDetailModal.hidden) closeLookupDetail();
   if (event.key === "Escape" && messageDetailModal && !messageDetailModal.hidden) closeMessageDetail();
-  if (event.key === "Escape" && evalPayloadModal && !evalPayloadModal.hidden) closeEvalPayload();
 });
 
 loadMetrics();
@@ -7449,14 +7448,11 @@ function syncEvaluatePresetSelect(rule = {}) {
   presetSelect.value = rule.decision_key === "loan_eligibility" ? "loan" : "rule_default";
 }
 
-function openEvalPayload() {
-  if (!evalPayloadModal) return;
-  evalPayloadModal.hidden = false;
-}
-
-function closeEvalPayload() {
-  if (!evalPayloadModal) return;
-  evalPayloadModal.hidden = true;
+function toggleEvalPayload() {
+  if (!evalPayloadPanel || !evalPayloadToggle) return;
+  evalPayloadPanel.hidden = !evalPayloadPanel.hidden;
+  evalPayloadToggle.textContent = evalPayloadPanel.hidden ? "Show Payload JSON" : "Hide Payload JSON";
+  if (!evalPayloadPanel.hidden) evalPayloadPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function readEvaluateInput() {

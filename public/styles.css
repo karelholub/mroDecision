@@ -3412,68 +3412,26 @@ header {
   gap: 12px;
 }
 
-.eval-payload-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 22;
+.eval-payload-panel {
   display: grid;
-  padding: 22px;
-  background: rgba(17, 24, 39, 0.5);
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 12px;
 }
 
-.eval-payload-modal[hidden] {
+.eval-payload-panel[hidden] {
   display: none;
 }
 
-.eval-payload-dialog {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  min-width: 0;
-  min-height: 0;
-  width: min(980px, 100%);
-  height: min(760px, 100%);
-  align-self: center;
-  justify-self: center;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  box-shadow: 0 20px 45px rgba(16, 24, 40, 0.24);
-  overflow: hidden;
-}
-
-.eval-payload-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel-soft);
-}
-
-.eval-payload-header div {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.eval-payload-header strong {
-  font-size: 18px;
-}
-
-.eval-payload-header span {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.eval-payload-dialog textarea {
+.eval-payload-panel textarea {
   width: 100%;
-  height: 100%;
-  min-height: 0;
+  min-height: 360px;
+  max-height: 560px;
   margin: 0;
-  border: 0;
-  border-radius: 0;
-  resize: none;
+  resize: vertical;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
