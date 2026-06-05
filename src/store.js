@@ -228,6 +228,7 @@ export class Store {
           surfaces: [],
           assets: { experiments: [], rules: [], messages: [] },
           review_status: { draft: 0, submitted: 0, approved: 0, published: 0, archived: 0 },
+          conflicts: [],
           recent_events: [],
           last_activity_at: null
         });
@@ -323,8 +324,11 @@ export class Store {
       .map((campaign) => {
         const exposures = Number(campaign.client_events.exposure || 0);
         const conversions = Number(campaign.client_events.conversion || 0);
+        const conflicts = campaignRuleConflicts(campaign.assets);
         return {
           ...campaign,
+          conflicts,
+          conflict_count: conflicts.length,
           client_event_total: Object.values(campaign.client_events).reduce((sum, value) => sum + Number(value || 0), 0),
           conversion_rate: exposures > 0 ? conversions / exposures : 0,
           decision_keys: campaign.decision_keys.slice(0, 12),
@@ -2955,7 +2959,8 @@ function campaignRuleSummary(rule = {}) {
     updated_at: rule.updated_at || "",
     approval_status: approval.status || rule.status || "draft",
     variant_count: Array.isArray(experiment.variants) ? experiment.variants.length : 0,
-    message_ids: referencedMessageIds(rule.draft || {})
+    message_ids: referencedMessageIds(rule.draft || {}),
+    audience_outcomes: campaignAudienceOutcomes(rule)
   };
 }
 
@@ -2987,6 +2992,79 @@ function campaignDependencies(assets = {}, messagesById = new Map()) {
   return links.slice(0, 50);
 }
 
+function campaignRuleConflicts(assets = {}) {
+  const outcomes = [...(assets.rules || []), ...(assets.experiments || [])]
+    .flatMap((rule) => rule.audience_outcomes || [])
+    .filter((outcome) => outcome.surface && ["eligible", "ineligible"].includes(outcome.outcome));
+  const conflicts = [];
+  const seen = new Set();
+  for (let leftIndex = 0; leftIndex < outcomes.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < outcomes.length; rightIndex += 1) {
+      const left = outcomes[leftIndex];
+      const right = outcomes[rightIndex];
+      if (left.condition_signature !== right.condition_signature) continue;
+      if (left.surface === right.surface) continue;
+      if (left.outcome === right.outcome) continue;
+      const key = [
+        left.condition_signature,
+        [left.rule_id, left.branch_id, left.surface].join(":"),
+        [right.rule_id, right.branch_id, right.surface].join(":")
+      ].sort().join("|");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      conflicts.push({
+        id: `conflict_${conflicts.length + 1}`,
+        level: "warning",
+        type: "cross_surface_eligibility",
+        summary: `${left.surface} is ${left.outcome}; ${right.surface} is ${right.outcome}`,
+        audience: left.condition_label || "Same audience conditions",
+        condition_signature: left.condition_signature,
+        left,
+        right
+      });
+    }
+  }
+  return conflicts.slice(0, 20);
+}
+
+function campaignAudienceOutcomes(rule = {}) {
+  const draft = rule.draft || {};
+  if (!isPlainObject(draft) || draft.graph) return [];
+  const outcomes = [];
+  for (const branch of Array.isArray(draft.branches) ? draft.branches : []) {
+    const outcome = normalizeEligibilityOutcome(branch.result);
+    if (!outcome || !branch.when) continue;
+    outcomes.push({
+      rule_id: rule.decision_key,
+      rule_name: rule.name || rule.decision_key,
+      rule_type: rule.type || "decision",
+      branch_id: branch.id || "branch",
+      surface: rule.surface || "",
+      result: branch.result || "",
+      outcome,
+      condition_label: conditionConflictLabel(branch.when),
+      condition_signature: stableConditionSignature(branch.when)
+    });
+  }
+  if ((!draft.branches || draft.branches.length === 0) && draft.fallback?.result) {
+    const outcome = normalizeEligibilityOutcome(draft.fallback.result);
+    if (outcome) {
+      outcomes.push({
+        rule_id: rule.decision_key,
+        rule_name: rule.name || rule.decision_key,
+        rule_type: rule.type || "decision",
+        branch_id: "fallback",
+        surface: rule.surface || "",
+        result: draft.fallback.result || "",
+        outcome,
+        condition_label: "All profiles",
+        condition_signature: "__all_profiles__"
+      });
+    }
+  }
+  return outcomes;
+}
+
 function referencedMessageIds(definition = {}) {
   const ids = new Set();
   const inspect = (value) => {
@@ -3002,6 +3080,53 @@ function referencedMessageIds(definition = {}) {
   };
   inspect(definition);
   return [...ids];
+}
+
+function normalizeEligibilityOutcome(result = "") {
+  const value = String(result || "").trim().toLowerCase();
+  if (["eligible", "allow", "allowed", "show", "include", "true"].includes(value)) return "eligible";
+  if (["ineligible", "not_eligible", "not eligible", "suppress", "suppressed", "deny", "denied", "block", "blocked", "false"].includes(value)) return "ineligible";
+  return "";
+}
+
+function stableConditionSignature(condition) {
+  return JSON.stringify(normalizeConditionForSignature(condition));
+}
+
+function normalizeConditionForSignature(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => normalizeConditionForSignature(item))
+      .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  }
+  if (!isPlainObject(value)) return value;
+  const sorted = {};
+  for (const key of Object.keys(value).sort()) {
+    sorted[key] = normalizeConditionForSignature(value[key]);
+  }
+  return sorted;
+}
+
+function conditionConflictLabel(condition) {
+  if (!isPlainObject(condition)) return "Same audience conditions";
+  if (condition.all || condition.any) {
+    const mode = condition.all ? "all" : "any";
+    const children = Array.isArray(condition[mode]) ? condition[mode] : [];
+    return children.map(conditionConflictLabel).filter(Boolean).join(mode === "all" ? " AND " : " OR ") || "Same audience conditions";
+  }
+  if (condition.not) return `NOT (${conditionConflictLabel(condition.not)})`;
+  const source = condition.source || "field";
+  const key = condition.key || "";
+  const operator = condition.operator || "matches";
+  const value = condition.value_source ? `${condition.value_source.source}.${condition.value_source.key}` : formatConflictValue(condition.value);
+  return `${source}.${key} ${operator} ${value}`.trim();
+}
+
+function formatConflictValue(value) {
+  if (Array.isArray(value)) return value.join(", ");
+  if (value == null) return "";
+  if (isPlainObject(value)) return JSON.stringify(value);
+  return String(value);
 }
 
 function portableSettings(settings) {

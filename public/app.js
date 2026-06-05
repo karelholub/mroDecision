@@ -894,6 +894,7 @@ function renderCampaignDetail(campaignName) {
         ${campaignDetailKpi("Rules", campaign.rules || 0, `${formatNumber(campaign.published_rules || 0)} published`)}
         ${campaignDetailKpi("Experiments", campaign.experiments || 0, `${formatNumber(assets.experiments?.length || 0)} listed`)}
         ${campaignDetailKpi("Messages", campaign.messages || 0, `${formatNumber(assets.messages?.length || 0)} listed`)}
+        ${campaignDetailKpi("Conflicts", campaign.conflict_count || 0, (campaign.conflict_count || 0) ? "review required" : "none detected")}
         ${campaignDetailKpi("Conversion", formatPercent(campaign.conversion_rate || 0), `${formatNumber(campaign.client_events?.conversion || 0)} conversions`)}
       </div>
     </div>
@@ -902,6 +903,7 @@ function renderCampaignDetail(campaignName) {
       ${campaignAssetSection("Rules", assets.rules || [], "rule")}
       ${campaignAssetSection("Messages", assets.messages || [], "message")}
       ${campaignSurfacesSection(campaign.surfaces || [], campaign.client_events || {})}
+      ${campaignConflictsSection(campaign.conflicts || [])}
       ${campaignReviewSection(campaign.review_status || {})}
       ${campaignDependenciesSection(campaign.dependencies || [])}
       ${campaignRecentEventsSection(events)}
@@ -994,6 +996,41 @@ function campaignReviewSection(status = {}) {
         `).join("")}
       </div>
     </section>
+  `;
+}
+
+function campaignConflictsSection(conflicts = []) {
+  return `
+    <section class="campaign-detail-section campaign-detail-wide ${conflicts.length ? "has-conflicts" : ""}">
+      <div class="campaign-detail-section-head">
+        <strong>Rule Conflicts</strong>
+        <span>${escapeHtml(formatNumber(conflicts.length))} cross-surface contradiction${conflicts.length === 1 ? "" : "s"}</span>
+      </div>
+      <div class="campaign-conflict-list">
+        ${conflicts.length ? conflicts.map((conflict) => `
+          <div class="campaign-conflict-item">
+            <div>
+              <strong>${escapeHtml(conflict.summary || "Conflicting eligibility outcomes")}</strong>
+              <span>${escapeHtml(conflict.audience || "Same audience conditions")}</span>
+            </div>
+            <div class="campaign-conflict-sides">
+              ${campaignConflictSide(conflict.left)}
+              ${campaignConflictSide(conflict.right)}
+            </div>
+          </div>
+        `).join("") : `<div class="status-line">No exact cross-surface eligibility conflicts detected.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function campaignConflictSide(side = {}) {
+  return `
+    <div class="${side.outcome === "eligible" ? "eligible" : "ineligible"}">
+      <strong>${escapeHtml(side.surface || "-")} · ${escapeHtml(side.outcome || "-")}</strong>
+      <span>${escapeHtml(side.rule_name || side.rule_id || "-")}</span>
+      <small>${escapeHtml(side.branch_id || "-")} · result ${escapeHtml(side.result || "-")}</small>
+    </div>
   `;
 }
 

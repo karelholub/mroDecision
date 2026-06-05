@@ -4025,6 +4025,13 @@ components:
           items:
             type: object
             additionalProperties: true
+        conflicts:
+          type: array
+          description: Exact cross-surface eligibility contradictions for the same normalized audience condition.
+          items:
+            $ref: "#/components/schemas/CampaignRuleConflict"
+        conflict_count:
+          type: integer
         review_status:
           type: object
           additionalProperties:
@@ -4056,6 +4063,34 @@ components:
         updated_at:
           type: string
           format: date-time
+        audience_outcomes:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    CampaignRuleConflict:
+      type: object
+      properties:
+        id:
+          type: string
+        level:
+          type: string
+          enum: [warning]
+        type:
+          type: string
+          enum: [cross_surface_eligibility]
+        summary:
+          type: string
+        audience:
+          type: string
+        condition_signature:
+          type: string
+        left:
+          type: object
+          additionalProperties: true
+        right:
+          type: object
+          additionalProperties: true
     CampaignActionRequest:
       type: object
       required: [campaign, action]

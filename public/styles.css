@@ -2619,6 +2619,11 @@ header {
   padding: 12px;
 }
 
+.campaign-detail-section.has-conflicts {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
 .campaign-detail-wide {
   grid-column: 1 / -1;
 }
@@ -2634,6 +2639,7 @@ header {
 .campaign-asset-list,
 .campaign-event-list,
 .campaign-dependency-list,
+.campaign-conflict-list,
 .campaign-review-list {
   display: grid;
   gap: 8px;
@@ -2716,6 +2722,47 @@ header {
 .campaign-dependency-list > div {
   display: grid;
   gap: 3px;
+}
+
+.campaign-conflict-item {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel);
+  min-width: 0;
+}
+
+.campaign-conflict-item > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.campaign-conflict-sides {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.campaign-conflict-sides > div {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px;
+  background: var(--panel-soft);
+  min-width: 0;
+}
+
+.campaign-conflict-sides > div.eligible {
+  border-color: rgba(13, 148, 136, 0.35);
+}
+
+.campaign-conflict-sides > div.ineligible {
+  border-color: rgba(220, 38, 38, 0.35);
 }
 
 .campaign-dependency-list .missing {
@@ -6894,7 +6941,8 @@ pre {
 
   .campaign-detail-kpis,
   .campaign-mini-metrics,
-  .campaign-review-list {
+  .campaign-review-list,
+  .campaign-conflict-sides {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

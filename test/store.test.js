@@ -711,6 +711,43 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(store.getConditionBlock("imported_guard").conditions[0].key, "lead_score");
   assert.equal(store.getSettings().environment_label, "production");
   assert.equal(store.getSettings().meiro_cli_token, "mpat_test");
+  const conflictCondition = { source: "attribute", key: "lead_score", operator: "greater_than_or_equal", value: "70" };
+  store.createRuleSet(
+    {
+      name: "Mobile eligibility",
+      decision_key: "mobile_eligibility_conflict",
+      type: "inapp_message",
+      surface: "mobile_app",
+      metadata: { campaign: { name: "Conflict Smoke", folder: "QA" } },
+      draft: {
+        branches: [{ id: "high_intent", when: conflictCondition, result: "eligible", outputs: {} }],
+        fallback: { result: "ineligible", outputs: {} }
+      }
+    },
+    "tester"
+  );
+  store.createRuleSet(
+    {
+      name: "Web ineligibility",
+      decision_key: "web_ineligibility_conflict",
+      type: "inapp_message",
+      surface: "web_homepage",
+      metadata: { campaign: { name: "Conflict Smoke", folder: "QA" } },
+      draft: {
+        branches: [{ id: "high_intent", when: { ...conflictCondition }, result: "ineligible", outputs: {} }],
+        fallback: { result: "ineligible", outputs: {} }
+      }
+    },
+    "tester"
+  );
+  const conflictCampaign = store.listCampaignOperations({ window_hours: 300 }).find((item) => item.campaign === "Conflict Smoke / QA");
+  assert.equal(conflictCampaign.conflict_count, 1);
+  assert.equal(conflictCampaign.conflicts[0].type, "cross_surface_eligibility");
+  assert.equal(conflictCampaign.conflicts[0].left.condition_signature, conflictCampaign.conflicts[0].right.condition_signature);
+  assert.deepEqual(
+    new Set([conflictCampaign.conflicts[0].left.outcome, conflictCampaign.conflicts[0].right.outcome]),
+    new Set(["eligible", "ineligible"])
+  );
 
   store.close();
   const reopened = await Store.load();
