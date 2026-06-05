@@ -748,6 +748,10 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
     new Set([conflictCampaign.conflicts[0].left.outcome, conflictCampaign.conflicts[0].right.outcome]),
     new Set(["eligible", "ineligible"])
   );
+  const ruleConflictReport = store.listRuleConflicts({ window_hours: 300 });
+  assert.equal(ruleConflictReport.count >= 1, true);
+  assert.equal(ruleConflictReport.by_rule.mobile_eligibility_conflict.length, 1);
+  assert.equal(ruleConflictReport.by_rule.web_ineligibility_conflict[0].campaign, "Conflict Smoke / QA");
 
   store.close();
   const reopened = await Store.load();

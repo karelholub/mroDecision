@@ -631,6 +631,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CampaignActionResult"
+  /v1/rule-conflicts:
+    get:
+      summary: List rule conflict diagnostics
+      description: Returns exact cross-surface eligibility contradictions grouped by rule for inventory and governance review.
+      parameters:
+        - in: query
+          name: window_hours
+          schema:
+            type: integer
+          description: Metrics window used while resolving campaign rollups.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+          description: Maximum campaign rollups to inspect.
+      responses:
+        "200":
+          description: Rule conflict diagnostics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuleConflictReport"
   /v1/rule-sets/{key}:
     get:
       summary: Get a rule set with draft and latest published version
@@ -4091,6 +4113,24 @@ components:
         right:
           type: object
           additionalProperties: true
+    RuleConflictReport:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        count:
+          type: integer
+        conflicts:
+          type: array
+          items:
+            $ref: "#/components/schemas/CampaignRuleConflict"
+        by_rule:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/CampaignRuleConflict"
     CampaignActionRequest:
       type: object
       required: [campaign, action]

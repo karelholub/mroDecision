@@ -302,6 +302,12 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  if (req.method === "GET" && pathname === "/v1/rule-conflicts") {
+    requireScope(req, "viewer");
+    sendJson(res, 200, store.listRuleConflicts(Object.fromEntries(url.searchParams)));
+    return;
+  }
+
   if (req.method === "POST" && pathname === "/v1/campaigns/actions") {
     requireScope(req, "editor");
     const result = applyCampaignAction(await readJson(req, config.requestBodyLimitBytes), req.auth.name);

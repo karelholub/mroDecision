@@ -362,6 +362,34 @@ export class Store {
     };
   }
 
+  listRuleConflicts(params = {}) {
+    const campaigns = this.listCampaignOperations({
+      window_hours: params.window_hours,
+      limit: params.limit || 50
+    });
+    const conflicts = campaigns.flatMap((campaign) =>
+      (campaign.conflicts || []).map((conflict) => ({
+        ...conflict,
+        campaign: campaign.campaign,
+        rules: [conflict.left?.rule_id, conflict.right?.rule_id].filter(Boolean),
+        surfaces: [conflict.left?.surface, conflict.right?.surface].filter(Boolean)
+      }))
+    );
+    const byRule = {};
+    for (const conflict of conflicts) {
+      for (const ruleId of conflict.rules || []) {
+        if (!byRule[ruleId]) byRule[ruleId] = [];
+        byRule[ruleId].push(conflict);
+      }
+    }
+    return {
+      generated_at: createdAtNow(),
+      count: conflicts.length,
+      conflicts,
+      by_rule: byRule
+    };
+  }
+
   createRuleSet(input, author) {
     const key = normalizeKey(input.decision_key || input.name);
     if (!key) badRequest("decision_key is required");

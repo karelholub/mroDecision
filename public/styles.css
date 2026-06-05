@@ -3619,6 +3619,7 @@ header {
     minmax(104px, 0.7fr)
     minmax(72px, 0.45fr)
     minmax(100px, 0.65fr)
+    minmax(100px, 0.65fr)
     minmax(72px, 0.42fr)
     minmax(118px, 0.78fr)
     minmax(145px, 0.9fr);
@@ -3655,15 +3656,45 @@ header {
   font-size: 12px;
 }
 
-.rule-list-pane .row > div:nth-child(9) {
+.rule-list-pane .row > div:nth-child(10) {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   padding-top: 4px;
 }
 
-.rule-list-pane .row > div:nth-child(9):empty {
+.rule-list-pane .row > div:nth-child(10):empty {
   display: none;
+}
+
+.rule-conflict-badge {
+  display: inline-grid;
+  gap: 2px;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 7px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.rule-conflict-badge small {
+  color: inherit;
+  font-size: 11px;
+}
+
+.rule-conflict-badge.warn {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+  font-weight: 800;
+}
+
+.rule-conflict-badge.none {
+  background: transparent;
 }
 
 .rule-editor-detail-panel {

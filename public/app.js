@@ -114,6 +114,7 @@ let selectedRuleMetadata = {};
 let builderBranches = [];
 let graphBuilder = { entry: "input", nodes: [] };
 let cachedRuleSets = [];
+let cachedRuleConflicts = { conflicts: [], by_rule: {} };
 let cachedLookupTables = [];
 let cachedMessages = [];
 let cachedMessageAssets = [];
@@ -641,8 +642,15 @@ async function loadRuntimeStatus() {
 
 async function loadRules() {
   try {
-    const body = await api("/v1/rule-sets");
+    const [body, conflictBody] = await Promise.all([
+      api("/v1/rule-sets"),
+      api("/v1/rule-conflicts")
+    ]);
     cachedRuleSets = body.rule_sets;
+    cachedRuleConflicts = {
+      conflicts: conflictBody.conflicts || [],
+      by_rule: conflictBody.by_rule || {}
+    };
     renderEvaluateRuleOptions();
     renderRuleList();
     renderRuleInspector();
@@ -3273,6 +3281,7 @@ function ruleListHeader() {
         ["type", "Type"],
         ["priority", "Priority"],
         ["campaign", "Campaign"],
+        ["conflicts", "Conflicts"],
         ["version", "Version"],
         ["updated_at", "Last Modified"]
       ].map(([key, label]) => `<div><button type="button" data-rule-sort="${key}">${escapeHtml(label)}${ruleSort.key === key ? ` ${ruleSort.direction === "asc" ? "ASC" : "DESC"}` : ""}</button></div>`).join("")}
@@ -3310,12 +3319,12 @@ function filteredRuleSets() {
 function compareRuleSetsForSort(left, right) {
   const direction = ruleSort.direction === "asc" ? 1 : -1;
   const key = ruleSort.key;
-  const leftRaw = key === "campaign" ? campaignSearchText(left.metadata || {}) : left[key];
-  const rightRaw = key === "campaign" ? campaignSearchText(right.metadata || {}) : right[key];
-  const leftValue = key === "priority" || key === "version"
+  const leftRaw = key === "campaign" ? campaignSearchText(left.metadata || {}) : key === "conflicts" ? ruleConflictsFor(left.decision_key).length : left[key];
+  const rightRaw = key === "campaign" ? campaignSearchText(right.metadata || {}) : key === "conflicts" ? ruleConflictsFor(right.decision_key).length : right[key];
+  const leftValue = key === "priority" || key === "version" || key === "conflicts"
     ? Number(leftRaw || 0)
     : String(leftRaw || "").toLowerCase();
-  const rightValue = key === "priority" || key === "version"
+  const rightValue = key === "priority" || key === "version" || key === "conflicts"
     ? Number(rightRaw || 0)
     : String(rightRaw || "").toLowerCase();
   if (leftValue < rightValue) return -1 * direction;
@@ -3324,6 +3333,7 @@ function compareRuleSetsForSort(left, right) {
 }
 
 function ruleSetRow(item) {
+  const conflicts = ruleConflictsFor(item.decision_key);
   const actions = [
     `<button type="button" data-rule-action="duplicate" data-rule-key="${escapeHtml(item.decision_key)}">Duplicate</button>`,
     item.status === "archived"
@@ -3338,12 +3348,29 @@ function ruleSetRow(item) {
       item.type || "decision",
       item.priority ?? 0,
       campaignValue(item.metadata) || folderValue(item.metadata) || "-",
+      ruleConflictBadge(conflicts),
       item.version ?? "-",
       item.updated_at ? formatTime(item.updated_at) : "-",
       actions
     ],
-    { key: item.decision_key, rawColumns: [8] }
+    { key: item.decision_key, rawColumns: [6, 9] }
   );
+}
+
+function ruleConflictsFor(ruleKey) {
+  return cachedRuleConflicts.by_rule?.[ruleKey] || [];
+}
+
+function ruleConflictBadge(conflicts = []) {
+  if (!conflicts.length) return `<span class="rule-conflict-badge none">None</span>`;
+  const surfaces = [...new Set(conflicts.flatMap((conflict) => conflict.surfaces || []))].slice(0, 4).join(" vs ");
+  const title = conflicts.map((conflict) => `${conflict.campaign}: ${conflict.summary}`).join("\n");
+  return `
+    <span class="rule-conflict-badge warn" title="${escapeHtml(title)}">
+      ${escapeHtml(formatNumber(conflicts.length))} conflict${conflicts.length === 1 ? "" : "s"}
+      <small>${escapeHtml(surfaces || "review")}</small>
+    </span>
+  `;
 }
 
 async function runRuleAction(action, key) {
