@@ -1765,6 +1765,10 @@ select.invalid {
   box-shadow: 0 12px 30px rgba(15, 118, 110, 0.26);
 }
 
+body[data-current-view="messages"]:not(.assistant-open) .assistant-fab {
+  bottom: 92px;
+}
+
 body.assistant-open .assistant-fab {
   display: none;
 }
@@ -5004,7 +5008,7 @@ header {
 
 .message-editor-pane {
   display: grid;
-  grid-template-rows: minmax(340px, 1fr) minmax(140px, 0.25fr);
+  grid-template-rows: minmax(340px, 1fr) minmax(260px, 0.35fr);
   gap: 16px;
   min-height: 0;
   max-height: 1100px;
@@ -5559,15 +5563,36 @@ header {
   color: var(--ink);
 }
 
+.message-bottom-drawer .drawer-panel {
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.message-bottom-drawer .drawer-panel.active {
+  display: grid;
+}
+
+.message-bottom-drawer .drawer-panel .table,
 .message-bottom-drawer .drawer-panel textarea,
 .message-bottom-drawer .drawer-panel pre {
+  display: block;
+  height: 100%;
   width: 100%;
   min-width: 0;
-  min-height: 146px;
+  min-height: 0;
+  max-height: none;
+  margin: 0;
   border: 0;
   border-radius: 0;
+  overflow: auto;
+}
+
+.message-bottom-drawer .drawer-panel textarea,
+.message-bottom-drawer .drawer-panel pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  resize: none;
 }
 
 .message-asset-panel {
