@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Meiro DEE</title>
-    <link rel="stylesheet" href="/styles.css?v=20260608-no-topbar" />
+    <link rel="stylesheet" href="/styles.css?v=20260608-message-application" />
   </head>
   <body>
     <aside>
@@ -1054,6 +1054,10 @@
                 </select>
               </label>
               <label>
+                Application
+                <input id="message-filter-application" list="message-application-options" placeholder="web-storefront" />
+              </label>
+              <label>
                 Surface
                 <input id="message-filter-surface" list="message-surface-options" placeholder="homepage_hero" />
               </label>
@@ -1062,6 +1066,7 @@
                 <input id="message-filter-campaign" placeholder="retention" />
               </label>
             </div>
+            <datalist id="message-application-options"></datalist>
             <datalist id="message-surface-options"></datalist>
             <div id="message-list" class="table message-list"></div>
           </div>
@@ -1085,6 +1090,10 @@
                       <label>
                         Name
                         <input id="message-name" required />
+                      </label>
+                      <label>
+                        Application
+                        <input id="message-application" list="message-application-options" placeholder="web-storefront" />
                       </label>
                       <label>
                         Surface
@@ -1986,6 +1995,6 @@
       </div>
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
-  <script src="/app.js?v=20260608-no-topbar"></script>
+  <script src="/app.js?v=20260608-message-application"></script>
 </body>
 </html>

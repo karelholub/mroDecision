@@ -273,6 +273,7 @@ document.querySelector("#refresh-messages").addEventListener("click", loadMessag
 document.querySelector("#message-filter-search")?.addEventListener("input", renderMessageList);
 document.querySelector("#message-filter-status")?.addEventListener("change", renderMessageList);
 document.querySelector("#message-filter-template")?.addEventListener("change", renderMessageList);
+document.querySelector("#message-filter-application")?.addEventListener("input", renderMessageList);
 document.querySelector("#message-filter-surface")?.addEventListener("input", renderMessageList);
 document.querySelector("#message-filter-campaign")?.addEventListener("input", renderMessageList);
 document.querySelector("#export-lookup-csv").addEventListener("click", exportLookupCsv);
@@ -432,6 +433,7 @@ document.querySelector("#message-image-dropzone")?.addEventListener("dragleave",
 document.querySelector("#message-image-dropzone")?.addEventListener("drop", handleMessageImageDrop);
 [
   "#message-name",
+  "#message-application",
   "#message-surface",
   "#message-status",
   "#message-template-type",
@@ -454,6 +456,7 @@ document.querySelector("#message-image-dropzone")?.addEventListener("drop", hand
 });
 [
   "#message-name",
+  "#message-application",
   "#message-surface",
   "#message-template-type",
   "#message-placement",
@@ -4582,6 +4585,7 @@ function renderMessageList() {
   const search = document.querySelector("#message-filter-search")?.value.trim().toLowerCase() || "";
   const status = document.querySelector("#message-filter-status")?.value || "";
   const template = document.querySelector("#message-filter-template")?.value || "";
+  const application = document.querySelector("#message-filter-application")?.value.trim().toLowerCase() || "";
   const surface = document.querySelector("#message-filter-surface")?.value.trim().toLowerCase() || "";
   const campaign = document.querySelector("#message-filter-campaign")?.value.trim().toLowerCase() || "";
   const filtered = cachedMessages.filter((item) => {
@@ -4593,6 +4597,7 @@ function renderMessageList() {
       item.surface,
       item.status,
       itemTemplate,
+      applicationValue(item.metadata || {}),
       JSON.stringify(content),
       JSON.stringify(item.metadata || {}),
       campaignSearchText(item.metadata || {})
@@ -4600,13 +4605,14 @@ function renderMessageList() {
     return (!search || haystack.includes(search)) &&
       (!status || (item.status || "active") === status) &&
       (!template || itemTemplate === template) &&
+      (!application || applicationSearchText(item.metadata || {}).includes(application)) &&
       (!surface || String(item.surface || "").toLowerCase().includes(surface)) &&
       (!campaign || campaignSearchText(item.metadata || {}).includes(campaign));
   });
-  target.innerHTML = header(["Preview", "Name", "Surface", "Campaign", "Status", "Updated", "Details"]);
+  target.innerHTML = header(["Preview", "Name", "Application", "Surface", "Campaign", "Status", "Updated", "Details"]);
   target.innerHTML += filtered.length
     ? filtered.map((item) => messageCatalogRow(item)).join("")
-    : row(["No messages match the current filters", "", "", "", "", "", ""]);
+    : row(["No messages match the current filters", "", "", "", "", "", "", ""]);
   target.querySelectorAll("[data-message-id]").forEach((element) => {
     element.addEventListener("click", () => loadMessage(element.dataset.messageId, cachedMessages));
   });
@@ -4628,6 +4634,7 @@ function messageCatalogRow(item) {
   return row([
     messageCatalogPreview(item),
     item.name,
+    applicationValue(item.metadata) || "-",
     item.surface || "-",
     campaignValue(item.metadata) || folderValue(item.metadata) || "-",
     item.status || "active",
@@ -4758,6 +4765,30 @@ function renderMessageSurfaceOptions() {
   list.innerHTML = [...new Set(surfaces)].sort((a, b) => a.localeCompare(b))
     .map((value) => `<option value="${escapeHtml(value)}"></option>`)
     .join("");
+  renderMessageApplicationOptions();
+}
+
+function renderMessageApplicationOptions() {
+  const list = document.querySelector("#message-application-options");
+  if (!list) return;
+  const defaults = [
+    "web-storefront",
+    "mobile-app",
+    "customer-portal",
+    "agent-console",
+    "email-platform"
+  ];
+  const applications = [
+    ...defaults,
+    ...cachedMessages.map((item) => applicationValue(item.metadata || {})),
+    ...cachedMessages.map((item) => item.metadata?.app_id),
+    ...cachedMessages.map((item) => item.metadata?.application_id)
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  list.innerHTML = [...new Set(applications)].sort((a, b) => a.localeCompare(b))
+    .map((value) => `<option value="${escapeHtml(value)}"></option>`)
+    .join("");
 }
 
 function openMessageDetail() {
@@ -4771,6 +4802,7 @@ function newMessage(options = {}) {
   document.querySelector("#message-id").value = "hero_offer";
   document.querySelector("#message-id").disabled = false;
   document.querySelector("#message-name").value = "Hero Offer";
+  document.querySelector("#message-application").value = "web-storefront";
   document.querySelector("#message-surface").value = "homepage_hero";
   document.querySelector("#message-status").value = "active";
   document.querySelector("#message-template-type").value = "banner";
@@ -4806,6 +4838,7 @@ function newMessage(options = {}) {
     ctas: [{ label: "string", url: "url", style: "primary|secondary" }]
   }, null, 2);
   document.querySelector("#message-metadata").value = JSON.stringify({
+    application: "web-storefront",
     lifecycle: {
       starts_at: "",
       expires_at: "",
@@ -4832,6 +4865,7 @@ function loadMessage(id, messages) {
   document.querySelector("#message-id").value = message.id;
   document.querySelector("#message-id").disabled = true;
   document.querySelector("#message-name").value = message.name;
+  document.querySelector("#message-application").value = applicationValue(message.metadata || {});
   document.querySelector("#message-surface").value = message.surface || "";
   document.querySelector("#message-status").value = message.status || "active";
   document.querySelector("#message-campaign").value = campaignValue(message.metadata || {});
@@ -4858,13 +4892,14 @@ function duplicateSelectedMessage() {
   }
   selectedMessageId = null;
   const copyId = uniqueMessageCopyId(source.id);
+  const metadata = { ...(source.metadata || {}) };
+  delete metadata.created_from_assistant_plan;
   document.querySelector("#message-id").value = copyId;
   document.querySelector("#message-id").disabled = false;
   document.querySelector("#message-name").value = `${source.name || source.id} Copy`;
+  document.querySelector("#message-application").value = applicationValue(metadata);
   document.querySelector("#message-surface").value = source.surface || "";
   document.querySelector("#message-status").value = "active";
-  const metadata = { ...(source.metadata || {}) };
-  delete metadata.created_from_assistant_plan;
   document.querySelector("#message-campaign").value = campaignValue(metadata);
   document.querySelector("#message-folder").value = folderValue(metadata);
   document.querySelector("#message-content").value = JSON.stringify(source.default_content || {}, null, 2);
@@ -5118,6 +5153,7 @@ function syncMessageJsonFromPreviewLive() {
 
 function syncMessageDeliveryFromMetadata(metadata = {}) {
   const lifecycle = metadata.lifecycle || metadata.delivery || {};
+  document.querySelector("#message-application").value = applicationValue(metadata);
   document.querySelector("#message-starts-at").value = dateTimeLocalValue(lifecycle.starts_at || metadata.starts_at || "");
   document.querySelector("#message-expires-at").value = dateTimeLocalValue(lifecycle.expires_at || metadata.expires_at || "");
   document.querySelector("#message-priority").value = Number(metadata.priority ?? lifecycle.priority ?? 0);
@@ -5143,6 +5179,12 @@ function syncMessageMetadataFromDelivery() {
     document.querySelector("#message-folder")?.value.trim()
   );
   if (!metadata.campaign.name && !metadata.campaign.folder) delete metadata.campaign;
+  const application = document.querySelector("#message-application")?.value.trim() || "";
+  if (application) metadata.application = application;
+  else delete metadata.application;
+  delete metadata.application_id;
+  metadata.app_id = application || "";
+  if (!metadata.app_id) delete metadata.app_id;
   const sample = parseJsonSafe(messageTokenSample?.value || "{}");
   if (sample && Object.keys(sample).length) metadata.personalization_sample = sample;
   else delete metadata.personalization_sample;
@@ -5192,6 +5234,7 @@ function defaultMessageTokenSample() {
     segments: {},
     context: {
       channel: "web",
+      app_id: document.querySelector("#message-application")?.value || "web-storefront",
       surface: document.querySelector("#message-surface")?.value || "homepage"
     }
   };
@@ -5326,6 +5369,7 @@ function renderMessagePreview() {
   const body = renderPersonalizedText(rawBody || "No message body yet.", sample);
   const footer = renderPersonalizedText(raw.footer, sample);
   const imageUrl = raw.imageUrl;
+  const application = document.querySelector("#message-application").value.trim() || "-";
   const surface = document.querySelector("#message-surface").value.trim() || "-";
   const status = document.querySelector("#message-status").value || "active";
   const ttl = Number(document.querySelector("#message-frequency-ttl").value || 0);
@@ -5368,6 +5412,7 @@ function renderMessagePreview() {
     statusItem("Status", status),
     statusItem("Preview health", messagePreviewHealthLabel(health)),
     statusItem("Template", templateType),
+    statusItem("Application", application),
     statusItem("Placement", placement || "-"),
     statusItem("Surface", surface),
     statusItem("TTL", ttl > 0 ? `${ttl}s` : "No recheck hint"),
@@ -6043,6 +6088,20 @@ function campaignValue(metadata = {}) {
 
 function folderValue(metadata = {}) {
   return metadata?.campaign?.folder || metadata?.folder || "";
+}
+
+function applicationValue(metadata = {}) {
+  if (typeof metadata?.application === "string") return metadata.application;
+  return metadata?.application?.name || metadata?.app_id || metadata?.application_id || "";
+}
+
+function applicationSearchText(metadata = {}) {
+  return [
+    applicationValue(metadata),
+    metadata?.application?.id,
+    metadata?.application_id,
+    metadata?.app_id
+  ].filter(Boolean).join(" ").toLowerCase();
 }
 
 function campaignSearchText(metadata = {}) {
