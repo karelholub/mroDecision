@@ -126,13 +126,6 @@ button:hover {
   border-color: var(--line-strong);
 }
 
-.assistant-toggle {
-  min-height: 34px;
-  border-color: transparent;
-  background: var(--accent);
-  color: #ffffff;
-}
-
 nav button {
   display: flex;
   align-items: center;
@@ -1757,63 +1750,7 @@ select.invalid {
   min-width: 0;
   height: 100vh;
   display: grid;
-  grid-template-rows: 52px minmax(0, 1fr);
-}
-
-body[data-current-view="overview"] .app-frame {
   grid-template-rows: minmax(0, 1fr);
-}
-
-body[data-current-view="overview"] .topbar {
-  display: none;
-}
-
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 16px;
-  min-height: 52px;
-  padding: 8px 28px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(10px);
-}
-
-.topbar > div:first-child {
-  display: none;
-  gap: 2px;
-  min-width: 0;
-}
-
-.topbar strong,
-.topbar span {
-  overflow-wrap: anywhere;
-}
-
-#topbar-subtitle {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.topbar-status {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.topbar-status span {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 5px 9px;
-  background: var(--panel-soft);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
 }
 
 .assistant-fab {
@@ -7034,15 +6971,11 @@ pre {
 
   .app-frame {
     height: auto;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
 
   main {
     overflow: visible;
-  }
-
-  .topbar {
-    position: static;
   }
 
   #rules .split {

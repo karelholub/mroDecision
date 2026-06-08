@@ -84,10 +84,6 @@ const overviewRuleDetailPanel = document.querySelector("#overview-rule-detail-pa
 const experimentKpis = document.querySelector("#experiment-kpis");
 const experimentList = document.querySelector("#experiment-list");
 const experimentDetail = document.querySelector("#experiment-detail");
-const topbarTitle = document.querySelector("#topbar-title");
-const topbarSubtitle = document.querySelector("#topbar-subtitle");
-const topbarEnv = document.querySelector("#topbar-env");
-const topbarHealth = document.querySelector("#topbar-health");
 const ruleInspectorSummary = document.querySelector("#rule-inspector-summary");
 const inspectorKey = document.querySelector("#inspector-key");
 const inspectorSurface = document.querySelector("#inspector-surface");
@@ -196,7 +192,6 @@ function switchView(viewName) {
   button.classList.add("active");
   document.body.dataset.currentView = viewName;
   view.classList.add("active");
-  updateTopbarForView(view);
   if (viewName === "overview") loadMetrics();
   if (viewName === "experiments") loadExperiments();
   if (viewName === "audit") loadAudit();
@@ -240,7 +235,6 @@ document.querySelector("#refresh-experiments")?.addEventListener("click", loadEx
 document.querySelector("#experiment-filter-campaign")?.addEventListener("input", () => renderExperiments());
 document.querySelector("#quick-create-experiment")?.addEventListener("click", quickCreateExperiment);
 document.querySelector("#export-experiments-csv")?.addEventListener("click", exportExperimentsCsv);
-document.querySelector("#assistant-toggle")?.addEventListener("click", openAssistantPanel);
 document.querySelector("#assistant-fab")?.addEventListener("click", openAssistantPanel);
 document.querySelector("#assistant-close")?.addEventListener("click", closeAssistantPanel);
 document.querySelector("#assistant-plan")?.addEventListener("click", planAssistantRequest);
@@ -554,7 +548,6 @@ renderEvaluationOutputSummary(null);
 renderSavedEvaluateProfiles();
 renderEvaluateValidation();
 loadIntegration();
-loadRuntimeStatus();
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -575,7 +568,6 @@ function openAssistantPanel() {
   if (!panel) return;
   panel.hidden = false;
   document.body.classList.add("assistant-open");
-  document.querySelector("#assistant-toggle")?.setAttribute("aria-expanded", "true");
   document.querySelector("#assistant-prompt")?.focus();
   scrollAssistantConversation();
 }
@@ -584,7 +576,6 @@ function closeAssistantPanel() {
   const panel = document.querySelector("#assistant-panel");
   if (!panel) return;
   document.body.classList.remove("assistant-open");
-  document.querySelector("#assistant-toggle")?.setAttribute("aria-expanded", "false");
   panel.hidden = true;
 }
 
@@ -634,23 +625,6 @@ function scrollAssistantConversation() {
   requestAnimationFrame(() => {
     target.scrollTop = target.scrollHeight;
   });
-}
-
-function updateTopbarForView(view) {
-  const title = view.querySelector("h2")?.textContent || "Meiro DEE";
-  const subtitle = view.querySelector(".page-subtitle")?.textContent || "Decision control plane";
-  topbarTitle.textContent = title;
-  topbarSubtitle.textContent = subtitle;
-}
-
-async function loadRuntimeStatus() {
-  try {
-    const response = await fetch("/v1/ready", { headers: { "x-request-id": "ui-runtime-status" } });
-    const body = await response.json();
-    topbarHealth.textContent = body.status === "ready" ? "Ready" : "Not ready";
-  } catch {
-    topbarHealth.textContent = "Unknown";
-  }
 }
 
 async function loadRules() {
@@ -2762,7 +2736,7 @@ function renderOverviewFooter(metrics) {
   overviewServiceFooter.innerHTML = [
     serviceFooterItem("System status", "All systems operational", "OK"),
     serviceFooterItem("Data freshness", schema.last_synced_at ? `Schema synced ${formatTime(schema.last_synced_at)}` : "Schema not synced", "DF"),
-    serviceFooterItem("Environment", topbarEnv?.textContent || "local", "ENV"),
+    serviceFooterItem("Environment", cachedSettings.settings?.environment_label || "local", "ENV"),
     serviceFooterItem("Version", "v0.1.0", "VER")
   ].join("");
 }
@@ -8994,7 +8968,6 @@ async function loadSettings() {
     const body = await api("/v1/settings");
     const settings = body.settings || {};
     cachedSettings = { settings, runtime: body.runtime || {} };
-    topbarEnv.textContent = settings.environment_label || "local";
     document.querySelector("#setting-environment-label").value = settings.environment_label || "";
     document.querySelector("#setting-audit-retention-days").value = settings.audit_retention_days || "";
     document.querySelector("#setting-client-event-retention-days").value = settings.client_event_retention_days || "";
