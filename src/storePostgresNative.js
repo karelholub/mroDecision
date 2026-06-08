@@ -146,6 +146,187 @@ export class PostgresNativeReadStore {
     return Object.fromEntries(result.rows.map((row) => [row.key, parseJson(row.value_json)]));
   }
 
+  async createRuleSet(input, author = "system") {
+    const key = normalizeKey(input.decision_key || input.name);
+    if (!key) throw new Error("decision_key is required");
+    if (await this.getRuleSet(key)) throw new Error(`Rule set already exists: ${key}`);
+    const now = new Date().toISOString();
+    const ruleSet = {
+      name: input.name || key,
+      decision_key: key,
+      description: input.description || "",
+      input_schema: input.input_schema || {},
+      output_schema: input.output_schema || {},
+      type: normalizeRuleSetType(input.type),
+      priority: Number(input.priority || 0),
+      surface: input.surface || "",
+      cache_policy: normalizeCachePolicy(input.cache_policy),
+      metadata: isPlainObject(input.metadata) ? input.metadata : {},
+      author,
+      status: "draft",
+      tags: Array.isArray(input.tags) ? input.tags : [],
+      created_at: now,
+      updated_at: now,
+      draft: input.draft || input.definition || { fallback: { result: "deferred", outputs: {} }, branches: [] },
+      versions: []
+    };
+    await this.insertRuleSet(ruleSet);
+    return ruleSet;
+  }
+
+  async upsertRuleSet(input, author = "system") {
+    const existing = await this.getRuleSet(input.decision_key);
+    if (!existing) {
+      const ruleSet = await this.createRuleSet(input, author);
+      await this.replaceVersions(ruleSet.decision_key, input.versions || []);
+      if (input.status && input.status !== ruleSet.status) {
+        await this.client.query("UPDATE rule_sets SET status = $1 WHERE decision_key = $2", [input.status, ruleSet.decision_key]);
+        ruleSet.status = input.status;
+      }
+      ruleSet.versions = input.versions || [];
+      return ruleSet;
+    }
+    const updated = {
+      ...existing,
+      name: input.name,
+      description: input.description || "",
+      input_schema: input.input_schema || {},
+      output_schema: input.output_schema || {},
+      type: normalizeRuleSetType(input.type || existing.type),
+      priority: Number(input.priority ?? existing.priority ?? 0),
+      surface: input.surface ?? existing.surface ?? "",
+      cache_policy: normalizeCachePolicy(input.cache_policy ?? existing.cache_policy),
+      metadata: isPlainObject(input.metadata) ? input.metadata : existing.metadata,
+      tags: Array.isArray(input.tags) ? input.tags : [],
+      draft: input.draft || input.definition || existing.draft,
+      versions: Array.isArray(input.versions) ? input.versions : existing.versions,
+      status: input.status || (input.versions?.length ? "published" : "draft"),
+      author,
+      updated_at: new Date().toISOString()
+    };
+    await this.transaction(async () => {
+      await this.updateRuleSetRow(updated);
+      await this.replaceVersions(updated.decision_key, updated.versions, { useExistingTransaction: true });
+    });
+    return updated;
+  }
+
+  async updateDraft(key, input, author = "system") {
+    const ruleSet = await this.getRuleSet(key);
+    if (!ruleSet) throw new Error(`Rule set not found: ${key}`);
+    const updated = {
+      ...ruleSet,
+      name: input.name ?? ruleSet.name,
+      description: input.description ?? ruleSet.description,
+      input_schema: input.input_schema ?? ruleSet.input_schema,
+      output_schema: input.output_schema ?? ruleSet.output_schema,
+      type: normalizeRuleSetType(input.type ?? ruleSet.type),
+      priority: Number(input.priority ?? ruleSet.priority ?? 0),
+      surface: input.surface ?? ruleSet.surface ?? "",
+      cache_policy: normalizeCachePolicy(input.cache_policy ?? ruleSet.cache_policy),
+      metadata: mergeApprovalMetadata(ruleSet.metadata, input.metadata),
+      tags: Array.isArray(input.tags) ? input.tags : ruleSet.tags,
+      draft: input.draft || input.definition || ruleSet.draft,
+      author,
+      status: ruleSet.status === "archived" ? "archived" : "draft",
+      updated_at: new Date().toISOString()
+    };
+    updated.metadata = resetApprovalForDraftEdit(updated.metadata, author);
+    await this.updateRuleSetRow(updated);
+    return updated;
+  }
+
+  async publish(key, author = "system") {
+    const ruleSet = await this.getRuleSet(key);
+    if (!ruleSet) throw new Error(`Rule set not found: ${key}`);
+    if (ruleSet.status === "archived") throw new Error("Archived rule sets cannot be published");
+    if (!ruleSet.draft) throw new Error("Rule set has no draft to publish");
+    const nextVersion = Math.max(0, ...ruleSet.versions.map((item) => Number(item.version || 0))) + 1;
+    const publishedAt = new Date().toISOString();
+    const version = {
+      version: nextVersion,
+      published_at: publishedAt,
+      author,
+      definition: structuredClone(ruleSet.draft),
+      metadata: structuredClone(ruleSet.metadata || {})
+    };
+    await this.transaction(async () => {
+      await this.client.query(
+        `INSERT INTO rule_versions (decision_key, version, published_at, author, definition_json, metadata_json)
+         VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
+        [key, version.version, version.published_at, version.author, JSON.stringify(version.definition), JSON.stringify(version.metadata)]
+      );
+      await this.updateRuleSetRow({ ...ruleSet, status: "published", author, updated_at: publishedAt });
+    });
+    return version;
+  }
+
+  async archiveRuleSet(key, author = "system") {
+    const ruleSet = await this.getRuleSet(key);
+    if (!ruleSet) throw new Error(`Rule set not found: ${key}`);
+    const updated = { ...ruleSet, status: "archived", author, updated_at: new Date().toISOString() };
+    await this.updateRuleSetRow(updated);
+    return updated;
+  }
+
+  async insertRuleSet(ruleSet) {
+    await this.client.query(
+      `INSERT INTO rule_sets (
+        decision_key, name, description, input_schema_json, output_schema_json,
+        type, priority, surface, cache_policy_json, metadata_json,
+        author, status, tags_json, draft_json, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12, $13::jsonb, $14::jsonb, $15, $16)`,
+      ruleSetParams(ruleSet)
+    );
+  }
+
+  async updateRuleSetRow(ruleSet) {
+    await this.client.query(
+      `UPDATE rule_sets SET
+        name = $2,
+        description = $3,
+        input_schema_json = $4::jsonb,
+        output_schema_json = $5::jsonb,
+        type = $6,
+        priority = $7,
+        surface = $8,
+        cache_policy_json = $9::jsonb,
+        metadata_json = $10::jsonb,
+        author = $11,
+        status = $12,
+        tags_json = $13::jsonb,
+        draft_json = $14::jsonb,
+        updated_at = $16
+       WHERE decision_key = $1`,
+      ruleSetParams(ruleSet)
+    );
+  }
+
+  async replaceVersions(decisionKey, versions = [], options = {}) {
+    const operation = async () => {
+      await this.client.query("DELETE FROM rule_versions WHERE decision_key = $1", [decisionKey]);
+      for (const version of versions || []) {
+        await this.client.query(
+          `INSERT INTO rule_versions (decision_key, version, published_at, author, definition_json, metadata_json)
+           VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
+          [
+            decisionKey,
+            Number(version.version),
+            version.published_at || new Date().toISOString(),
+            version.author || "system",
+            JSON.stringify(version.definition || {}),
+            JSON.stringify(isPlainObject(version.metadata) ? version.metadata : {})
+          ]
+        );
+      }
+    };
+    if (options.useExistingTransaction) {
+      await operation();
+      return;
+    }
+    await this.transaction(operation);
+  }
+
   async updateSettings(input, author = "system") {
     const now = new Date().toISOString();
     const before = await this.getSettings();
@@ -370,6 +551,65 @@ function isoValue(value) {
 
 function normalizeRuleSetType(type) {
   return ["decision", "inapp_message", "experiment"].includes(type) ? type : "decision";
+}
+
+function normalizeCachePolicy(policy) {
+  return isPlainObject(policy) ? policy : {};
+}
+
+function ruleSetParams(ruleSet) {
+  return [
+    ruleSet.decision_key,
+    ruleSet.name,
+    ruleSet.description || "",
+    JSON.stringify(ruleSet.input_schema || {}),
+    JSON.stringify(ruleSet.output_schema || {}),
+    normalizeRuleSetType(ruleSet.type),
+    Number(ruleSet.priority || 0),
+    ruleSet.surface || "",
+    JSON.stringify(normalizeCachePolicy(ruleSet.cache_policy)),
+    JSON.stringify(isPlainObject(ruleSet.metadata) ? ruleSet.metadata : {}),
+    ruleSet.author || "system",
+    ruleSet.status || "draft",
+    JSON.stringify(Array.isArray(ruleSet.tags) ? ruleSet.tags : []),
+    JSON.stringify(ruleSet.draft || {}),
+    ruleSet.created_at || new Date().toISOString(),
+    ruleSet.updated_at || new Date().toISOString()
+  ];
+}
+
+function normalizeKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function mergeApprovalMetadata(existing = {}, next) {
+  if (!isPlainObject(next)) return existing;
+  if (Object.hasOwn(next, "approval")) return next;
+  return existing.approval ? { ...next, approval: existing.approval } : next;
+}
+
+function resetApprovalForDraftEdit(metadata = {}, author = "") {
+  const approval = metadata.approval;
+  if (!approval || approval.status === "draft") return metadata;
+  return {
+    ...metadata,
+    approval: {
+      ...approval,
+      status: "draft",
+      invalidated_by: author,
+      invalidated_at: new Date().toISOString(),
+      approved_by: "",
+      approved_at: ""
+    }
+  };
 }
 
 function randomId() {

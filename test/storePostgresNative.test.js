@@ -237,6 +237,89 @@ test("native postgres write store rolls back schema replacement on invalid item"
   assert.ok(calls.some((call) => call.sql === "ROLLBACK"));
 });
 
+test("native postgres rule writes create and update drafts", async () => {
+  const { client, calls, rules } = nativeRuleClient();
+  const store = new PostgresNativeReadStore(client);
+
+  const created = await store.createRuleSet(
+    {
+      name: "Retention Offer",
+      decision_key: "Retention Offer",
+      type: "decision",
+      priority: 80,
+      tags: ["retention"],
+      draft: { fallback: { result: "eligible" }, branches: [] }
+    },
+    "editor"
+  );
+  const updated = await store.updateDraft(
+    created.decision_key,
+    {
+      metadata: { approval: { status: "approved", approved_by: "lead", approved_at: "2026-06-01T10:00:00.000Z" } },
+      draft: { fallback: { result: "deferred" }, branches: [{ id: "branch_1" }] }
+    },
+    "editor"
+  );
+
+  assert.equal(created.decision_key, "retention_offer");
+  assert.equal(rules.get("retention_offer").priority, 80);
+  assert.equal(updated.status, "draft");
+  assert.equal(updated.metadata.approval.status, "draft");
+  assert.equal(updated.metadata.approval.invalidated_by, "editor");
+  assert.deepEqual(rules.get("retention_offer").draft_json.branches, [{ id: "branch_1" }]);
+  assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO rule_sets")));
+  assert.ok(calls.some((call) => call.sql.startsWith("UPDATE rule_sets SET")));
+});
+
+test("native postgres rule writes publish and archive in transactions", async () => {
+  const { client, calls, rules, versions } = nativeRuleClient();
+  seedRule(rules, {
+    decision_key: "next_best_offer",
+    name: "Next Best Offer",
+    status: "draft",
+    draft_json: { fallback: { result: "eligible" }, branches: [] },
+    metadata_json: { owner: "growth" }
+  });
+  const store = new PostgresNativeReadStore(client);
+
+  const version = await store.publish("next_best_offer", "publisher");
+  const archived = await store.archiveRuleSet("next_best_offer", "admin");
+
+  assert.equal(version.version, 1);
+  assert.deepEqual(versions.get("next_best_offer")[0].definition_json, { fallback: { result: "eligible" }, branches: [] });
+  assert.equal(rules.get("next_best_offer").status, "archived");
+  assert.equal(archived.status, "archived");
+  assert.ok(calls.some((call) => call.sql === "BEGIN"));
+  assert.ok(calls.some((call) => call.sql === "COMMIT"));
+});
+
+test("native postgres rule writes upsert rule versions transactionally", async () => {
+  const { client, calls, rules, versions } = nativeRuleClient();
+  seedRule(rules, { decision_key: "loan", name: "Loan", status: "draft" });
+  versions.set("loan", [{ version: 1, published_at: "old", author: "old", definition_json: {}, metadata_json: {} }]);
+  const store = new PostgresNativeReadStore(client);
+
+  const updated = await store.upsertRuleSet(
+    {
+      decision_key: "loan",
+      name: "Loan Eligibility",
+      status: "published",
+      versions: [
+        { version: 2, published_at: "2026-06-01T10:00:00.000Z", author: "publisher", definition: { fallback: { result: "eligible" } }, metadata: { note: "v2" } }
+      ]
+    },
+    "editor"
+  );
+
+  assert.equal(updated.status, "published");
+  assert.equal(rules.get("loan").name, "Loan Eligibility");
+  assert.equal(versions.get("loan").length, 1);
+  assert.equal(versions.get("loan")[0].version, 2);
+  assert.ok(calls.some((call) => call.sql === "BEGIN"));
+  assert.ok(calls.some((call) => call.sql === "COMMIT"));
+  assert.ok(calls.some((call) => call.sql.startsWith("DELETE FROM rule_versions")));
+});
+
 function fakeClient(calls, responses) {
   return {
     async query(sql, params = []) {
@@ -244,5 +327,104 @@ function fakeClient(calls, responses) {
       const match = Object.entries(responses).find(([key]) => sql.includes(key));
       return { rows: match ? match[1] : [] };
     }
+  };
+}
+
+function nativeRuleClient() {
+  const calls = [];
+  const rules = new Map();
+  const versions = new Map();
+  return {
+    calls,
+    rules,
+    versions,
+    client: {
+      async query(sql, params = []) {
+        calls.push({ sql, params });
+        if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [] };
+        if (sql.startsWith("SELECT * FROM rule_sets WHERE decision_key")) {
+          const row = rules.get(params[0]);
+          return { rows: row ? [row] : [] };
+        }
+        if (sql.startsWith("INSERT INTO rule_sets")) {
+          rules.set(params[0], ruleRowFromParams(params));
+          return { rows: [] };
+        }
+        if (sql.startsWith("UPDATE rule_sets SET status")) {
+          const existing = rules.get(params[1]);
+          if (existing) existing.status = params[0];
+          return { rows: [] };
+        }
+        if (sql.startsWith("DELETE FROM rule_versions")) {
+          versions.set(params[0], []);
+          return { rows: [] };
+        }
+        if (sql.includes("FROM rule_versions")) {
+          return { rows: versions.get(params[0]) || [] };
+        }
+        if (sql.startsWith("UPDATE rule_sets SET")) {
+          const existing = rules.get(params[0]) || {};
+          rules.set(params[0], { ...existing, ...ruleRowFromParams(params), created_at: existing.created_at || params[14] });
+          return { rows: [] };
+        }
+        if (sql.startsWith("INSERT INTO rule_versions")) {
+          const list = versions.get(params[0]) || [];
+          list.push({
+            decision_key: params[0],
+            version: params[1],
+            published_at: params[2],
+            author: params[3],
+            definition_json: JSON.parse(params[4]),
+            metadata_json: JSON.parse(params[5])
+          });
+          versions.set(params[0], list);
+          return { rows: [] };
+        }
+        return { rows: [] };
+      }
+    }
+  };
+}
+
+function seedRule(rules, row) {
+  const now = "2026-06-01T00:00:00.000Z";
+  rules.set(row.decision_key, {
+    decision_key: row.decision_key,
+    name: row.name || row.decision_key,
+    description: row.description || "",
+    input_schema_json: row.input_schema_json || {},
+    output_schema_json: row.output_schema_json || {},
+    type: row.type || "decision",
+    priority: row.priority || 0,
+    surface: row.surface || "",
+    cache_policy_json: row.cache_policy_json || {},
+    metadata_json: row.metadata_json || {},
+    author: row.author || "system",
+    status: row.status || "draft",
+    tags_json: row.tags_json || [],
+    draft_json: row.draft_json || {},
+    created_at: row.created_at || now,
+    updated_at: row.updated_at || now
+  });
+}
+
+function ruleRowFromParams(params) {
+  return {
+    decision_key: params[0],
+    name: params[1],
+    description: params[2],
+    input_schema_json: JSON.parse(params[3]),
+    output_schema_json: JSON.parse(params[4]),
+    type: params[5],
+    priority: params[6],
+    surface: params[7],
+    cache_policy_json: JSON.parse(params[8]),
+    metadata_json: JSON.parse(params[9]),
+    author: params[10],
+    status: params[11],
+    tags_json: JSON.parse(params[12]),
+    draft_json: JSON.parse(params[13]),
+    created_at: params[14],
+    updated_at: params[15]
   };
 }
