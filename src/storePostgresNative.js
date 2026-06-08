@@ -292,6 +292,121 @@ export class PostgresNativeReadStore {
     return rowToMessage(row);
   }
 
+  async listMessageAssets() {
+    const result = await this.client.query(
+      "SELECT id, filename, content_type, size_bytes, metadata_json, created_at, created_by FROM message_assets ORDER BY created_at DESC, id ASC",
+      []
+    );
+    const references = await this.messageAssetReferences();
+    return result.rows.map((row) => rowToMessageAsset(row, references.get(row.id) || []));
+  }
+
+  async createMessageAsset(input = {}, author = "system") {
+    const filename = String(input.filename || "message-asset").slice(0, 180);
+    const contentType = String(input.content_type || "").toLowerCase();
+    const allowedTypes = new Set(["image/gif", "image/jpeg", "image/png", "image/svg+xml", "image/webp"]);
+    if (!allowedTypes.has(contentType)) throw new Error("Message asset must be a PNG, JPEG, WebP, GIF, or SVG image");
+    const base64 = imageBase64FromInput(input);
+    const sizeBytes = Buffer.byteLength(base64, "base64");
+    if (sizeBytes <= 0) throw new Error("Message asset is empty");
+    if (sizeBytes > 2 * 1024 * 1024) throw new Error("Message asset limit is 2 MB");
+    const now = new Date().toISOString();
+    const asset = {
+      id: `msg_asset_${randomId()}`,
+      filename,
+      content_type: contentType,
+      size_bytes: sizeBytes,
+      content_base64: base64,
+      metadata: isPlainObject(input.metadata) ? input.metadata : {},
+      created_at: now,
+      created_by: author
+    };
+    await this.client.query(
+      `INSERT INTO message_assets (
+        id, filename, content_type, size_bytes, content_base64, metadata_json, created_at, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)`,
+      [
+        asset.id,
+        asset.filename,
+        asset.content_type,
+        asset.size_bytes,
+        asset.content_base64,
+        JSON.stringify(asset.metadata),
+        asset.created_at,
+        asset.created_by
+      ]
+    );
+    return rowToMessageAsset(asset, []);
+  }
+
+  async getMessageAsset(id, includeContent = false) {
+    const result = await this.client.query("SELECT * FROM message_assets WHERE id = $1", [id]);
+    const row = result.rows[0];
+    if (!row) throw new Error(`Message asset not found: ${id}`);
+    const references = (await this.messageAssetReferences()).get(id) || [];
+    const asset = rowToMessageAsset(row, references);
+    if (includeContent) asset.content_base64 = row.content_base64;
+    return asset;
+  }
+
+  async deleteMessageAsset(id, options = {}) {
+    const asset = await this.getMessageAsset(id);
+    if (asset.used_by.length && !options.force) throw new Error("Message asset is still used");
+    await this.client.query("DELETE FROM message_assets WHERE id = $1", [id]);
+    return { deleted: true, asset };
+  }
+
+  async cleanupMessageAssets() {
+    const assets = await this.listMessageAssets();
+    const unused = assets.filter((asset) => !asset.used_by.length);
+    for (const asset of unused) {
+      await this.client.query("DELETE FROM message_assets WHERE id = $1", [asset.id]);
+    }
+    return { deleted: unused.length, assets: unused };
+  }
+
+  async messageAssetReferences() {
+    const references = new Map();
+    const assetUrlPattern = /\/v1\/message-assets\/([^/]+)\/content/g;
+    for (const message of await this.listMessages()) {
+      collectAssetReferences(references, assetUrlPattern, {
+        default_content: message.default_content || {},
+        metadata: message.metadata || {}
+      }, {
+        object_type: "message",
+        id: message.id,
+        name: message.name,
+        surface: message.surface || "",
+        status: message.status || "",
+        usage: "message_content"
+      });
+    }
+    for (const ruleSummary of await this.listRuleSets()) {
+      const rule = await this.getRuleSet(ruleSummary.decision_key);
+      if (!rule) continue;
+      collectAssetReferences(references, assetUrlPattern, rule.draft || {}, {
+        object_type: "rule",
+        id: rule.decision_key,
+        name: rule.name,
+        surface: rule.surface || "",
+        status: rule.status || "",
+        usage: "draft_outputs"
+      });
+      for (const version of rule.versions || []) {
+        collectAssetReferences(references, assetUrlPattern, version.definition || {}, {
+          object_type: "rule_version",
+          id: rule.decision_key,
+          name: rule.name,
+          surface: rule.surface || "",
+          status: "published",
+          version: version.version,
+          usage: "published_outputs"
+        });
+      }
+    }
+    return references;
+  }
+
   async listConditionBlocks() {
     const result = await this.client.query("SELECT * FROM condition_blocks ORDER BY name ASC, id ASC", []);
     return result.rows.map(rowToConditionBlock);
@@ -706,6 +821,20 @@ function rowToMessageVersionSummary(row) {
   };
 }
 
+function rowToMessageAsset(row, usedBy = []) {
+  return {
+    id: row.id,
+    filename: row.filename,
+    content_type: row.content_type,
+    size_bytes: Number(row.size_bytes || 0),
+    content_url: `/v1/message-assets/${encodeURIComponent(row.id)}/content`,
+    metadata: parseJson(row.metadata_json, {}),
+    created_at: isoValue(row.created_at),
+    created_by: row.created_by,
+    used_by: usedBy
+  };
+}
+
 function rowToConditionBlock(row) {
   return {
     id: row.id,
@@ -815,6 +944,35 @@ function normalizeKey(value) {
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function imageBase64FromInput(input = {}) {
+  if (input.data_url) {
+    const match = String(input.data_url).match(/^data:([^;,]+);base64,(.+)$/);
+    if (!match) throw new Error("data_url must be a base64 data URL");
+    if (String(input.content_type || "").toLowerCase() !== match[1].toLowerCase()) throw new Error("content_type must match the data URL media type");
+    return match[2];
+  }
+  if (input.base64) return String(input.base64).replace(/\s+/g, "");
+  throw new Error("Message asset requires data_url or base64");
+}
+
+function collectAssetReferences(references, pattern, payload, reference) {
+  const text = JSON.stringify(payload ?? null);
+  for (const match of text.matchAll(pattern)) {
+    const id = decodeURIComponent(match[1]);
+    if (!references.has(id)) references.set(id, []);
+    const existing = references.get(id);
+    const key = [
+      reference.object_type,
+      reference.id,
+      reference.usage,
+      reference.version || "",
+      reference.surface || ""
+    ].join(":");
+    if (existing.some((item) => item.reference_key === key)) continue;
+    existing.push({ ...reference, reference_key: key });
+  }
 }
 
 function mergeApprovalMetadata(existing = {}, next) {

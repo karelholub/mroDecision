@@ -389,6 +389,51 @@ test("native postgres content writes upsert messages with version history", asyn
   assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO message_versions")));
 });
 
+test("native postgres content writes manage message assets and usage guards", async () => {
+  const { client, calls, assets, messages } = nativeContentClient();
+  const store = new PostgresNativeReadStore(client);
+
+  const asset = await store.createMessageAsset(
+    {
+      filename: "hero.png",
+      content_type: "image/png",
+      base64: "aGVsbG8=",
+      metadata: { source: "upload" }
+    },
+    "designer"
+  );
+  messages.set("hero_message", {
+    id: "hero_message",
+    name: "Hero message",
+    surface: "homepage",
+    status: "active",
+    content_schema_json: {},
+    default_content_json: { image_url: asset.content_url },
+    metadata_json: {},
+    updated_at: "2026-06-01T00:00:00.000Z",
+    author: "designer",
+    version: 1
+  });
+
+  const listed = await store.listMessageAssets();
+  const withContent = await store.getMessageAsset(asset.id, true);
+  await assert.rejects(() => store.deleteMessageAsset(asset.id), /still used/);
+  const forced = await store.deleteMessageAsset(asset.id, { force: true });
+  const unused = await store.createMessageAsset({ filename: "unused.svg", content_type: "image/svg+xml", base64: "PHN2Zy8+" }, "designer");
+  messages.clear();
+  const cleanup = await store.cleanupMessageAssets();
+
+  assert.equal(asset.filename, "hero.png");
+  assert.equal(assets.has(asset.id), false);
+  assert.equal(listed[0].used_by[0].id, "hero_message");
+  assert.equal(withContent.content_base64, "aGVsbG8=");
+  assert.equal(forced.deleted, true);
+  assert.equal(cleanup.deleted, 1);
+  assert.equal(cleanup.assets[0].id, unused.id);
+  assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO message_assets")));
+  assert.ok(calls.some((call) => call.sql.startsWith("DELETE FROM message_assets")));
+});
+
 function fakeClient(calls, responses) {
   return {
     async query(sql, params = []) {
@@ -405,12 +450,14 @@ function nativeContentClient() {
   const lookupVersions = new Map();
   const messages = new Map();
   const messageVersions = new Map();
+  const assets = new Map();
   return {
     calls,
     lookups,
     lookupVersions,
     messages,
     messageVersions,
+    assets,
     client: {
       async query(sql, params = []) {
         calls.push({ sql, params });
@@ -442,6 +489,9 @@ function nativeContentClient() {
           const row = messages.get(params[0]);
           return { rows: row ? [row] : [] };
         }
+        if (sql.includes("FROM messages")) {
+          return { rows: [...messages.values()] };
+        }
         if (sql.startsWith("SELECT MAX(version) AS version FROM message_versions")) {
           const max = Math.max(0, ...(messageVersions.get(params[0]) || []).map((row) => Number(row.version || 0)));
           return { rows: [{ version: max || null }] };
@@ -464,6 +514,24 @@ function nativeContentClient() {
         }
         if (sql.startsWith("SELECT * FROM message_versions WHERE id")) {
           return { rows: [...(messageVersions.get(params[0]) || [])].sort((a, b) => b.version - a.version) };
+        }
+        if (sql.startsWith("SELECT id, filename, content_type")) {
+          return { rows: [...assets.values()].map(({ content_base64, ...row }) => row) };
+        }
+        if (sql.startsWith("INSERT INTO message_assets")) {
+          assets.set(params[0], messageAssetRowFromParams(params));
+          return { rows: [] };
+        }
+        if (sql.startsWith("SELECT * FROM message_assets WHERE id")) {
+          const row = assets.get(params[0]);
+          return { rows: row ? [row] : [] };
+        }
+        if (sql.startsWith("DELETE FROM message_assets")) {
+          assets.delete(params[0]);
+          return { rows: [] };
+        }
+        if (sql.includes("FROM rule_sets rs")) {
+          return { rows: [] };
         }
         return { rows: [] };
       }
@@ -580,6 +648,19 @@ function messageVersionRowFromParams(params) {
     metadata_json: JSON.parse(params[7]),
     updated_at: params[8],
     author: params[9]
+  };
+}
+
+function messageAssetRowFromParams(params) {
+  return {
+    id: params[0],
+    filename: params[1],
+    content_type: params[2],
+    size_bytes: params[3],
+    content_base64: params[4],
+    metadata_json: JSON.parse(params[5]),
+    created_at: params[6],
+    created_by: params[7]
   };
 }
 
