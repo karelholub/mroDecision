@@ -503,6 +503,30 @@ test("native postgres campaign operations report assets and conflicts", async ()
   assert.ok(calls.some((call) => call.sql.includes("FROM client_events")));
 });
 
+test("native postgres campaign action helpers update campaign assets", async () => {
+  const { client, calls, rules, messages } = nativeCampaignClient();
+  const store = new PostgresNativeReadStore(client);
+
+  const assets = await store.listCampaignAssets("Summer / Web");
+  assert.equal(assets.rules.length, 2);
+  assert.equal(assets.messages.length, 1);
+
+  const submitted = await store.setRuleApproval("web_rule", { status: "submitted", draft_hash: "hash-1", assigned_to: "owner@example.test" }, "editor");
+  assert.equal(submitted.metadata.approval.status, "submitted");
+
+  await store.setRuleCampaign("web_rule", { campaign: "Winter", folder: "App" }, "editor");
+  await store.setMessageCampaign("hero_message", { campaign: "Winter", folder: "App" }, "editor");
+  assert.deepEqual(rules.find((rule) => rule.decision_key === "web_rule").metadata_json.campaign, { name: "Winter", folder: "App" });
+  assert.deepEqual(messages.find((message) => message.id === "hero_message").metadata_json.campaign, { name: "Winter", folder: "App" });
+
+  const duplicate = await store.duplicateRuleSet("web_rule", { decision_key: "web_rule_copy" }, "editor");
+  assert.equal(duplicate.decision_key, "web_rule_copy");
+  assert.equal(rules.find((rule) => rule.decision_key === "web_rule_copy").status, "draft");
+  assert.ok(calls.some((call) => call.sql.startsWith("UPDATE rule_sets SET")));
+  assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO rule_sets")));
+  assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO messages")));
+});
+
 test("native postgres content writes replace lookup tables with version history", async () => {
   const { client, calls, lookups, lookupVersions } = nativeContentClient();
   const store = new PostgresNativeReadStore(client);
@@ -1174,12 +1198,35 @@ function nativeCampaignClient() {
   ];
   return {
     calls,
+    rules,
+    messages,
     client: {
       async query(sql, params = []) {
         calls.push({ sql, params });
+        if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [] };
         if (sql.includes("FROM rule_sets rs")) return { rows: rules.map((rule) => ({ ...rule, latest_version: 1, last_published_at: rule.updated_at })) };
         if (sql.startsWith("SELECT * FROM rule_sets WHERE decision_key")) return { rows: rules.filter((rule) => rule.decision_key === params[0]) };
+        if (sql.startsWith("UPDATE rule_sets SET")) {
+          const index = rules.findIndex((rule) => rule.decision_key === params[0]);
+          const row = ruleRowFromParams(params);
+          if (index >= 0) rules[index] = { ...rules[index], ...row, created_at: rules[index].created_at };
+          return { rows: [] };
+        }
+        if (sql.startsWith("INSERT INTO rule_sets")) {
+          rules.push(ruleRowFromParams(params));
+          return { rows: [] };
+        }
         if (sql.includes("FROM rule_versions")) return { rows: [{ version: 1, published_at: "2026-06-01T10:00:00.000Z", author: "publisher", definition_json: {}, metadata_json: {} }] };
+        if (sql.startsWith("SELECT * FROM messages WHERE id")) return { rows: messages.filter((message) => message.id === params[0]) };
+        if (sql.startsWith("SELECT MAX(version) AS version FROM message_versions")) return { rows: [{ version: 1 }] };
+        if (sql.startsWith("INSERT INTO messages")) {
+          const index = messages.findIndex((message) => message.id === params[0]);
+          const row = messageRowFromParams(params);
+          if (index >= 0) messages[index] = row;
+          else messages.push(row);
+          return { rows: [] };
+        }
+        if (sql.startsWith("INSERT INTO message_versions")) return { rows: [] };
         if (sql.includes("FROM messages")) return { rows: messages };
         if (sql.includes("FROM audit_log")) {
           return {

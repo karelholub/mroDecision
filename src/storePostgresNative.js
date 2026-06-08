@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { nativePostgresAdapterInfo } from "./storePostgresNativeSchema.js";
+import { config } from "./config.js";
+import { nativePostgresAdapterInfo, nativePostgresSchemaSql } from "./storePostgresNativeSchema.js";
 
 const allowedSettingKeys = new Set([
   "environment_label",
@@ -853,6 +854,17 @@ export class PostgresNativeReadStore {
     };
   }
 
+  async listCampaignAssets(campaignName = "Unassigned") {
+    const target = campaignName || "Unassigned";
+    const belongsToCampaign = (metadata = {}) => (campaignLabel(metadata) || "Unassigned") === target;
+    const [rules, messages] = await Promise.all([this.listRuleSets(), this.listMessages()]);
+    return {
+      campaign: target,
+      rules: rules.filter((rule) => belongsToCampaign(rule.metadata)),
+      messages: messages.filter((message) => belongsToCampaign(message.metadata))
+    };
+  }
+
   async getClientEventMetrics(params = {}) {
     const values = [];
     const where = [];
@@ -1063,6 +1075,15 @@ export class PostgresNativeReadStore {
       await this.insertMessageVersion(message);
     });
     return message;
+  }
+
+  async setMessageCampaign(id, input = {}, author = "system") {
+    const message = await this.getMessage(id);
+    if (!message) throw new Error(`Message not found: ${id}`);
+    return this.upsertMessage(id, {
+      ...message,
+      metadata: assignCampaignMetadata(message.metadata || {}, input.campaign || "", input.folder || "")
+    }, author);
   }
 
   async insertMessageVersion(message) {
@@ -1434,6 +1455,48 @@ export class PostgresNativeReadStore {
     return updated;
   }
 
+  async setRuleApproval(key, input = {}, author = "system") {
+    const ruleSet = await this.getRuleSet(key);
+    if (!ruleSet) throw new Error(`Rule set not found: ${key}`);
+    if (ruleSet.status === "archived") throw new Error("Archived rule sets cannot be reviewed");
+    const status = input.status;
+    if (!["submitted", "approved"].includes(status)) throw new Error("Approval status must be submitted or approved");
+    const now = new Date().toISOString();
+    const existing = ruleSet.metadata?.approval || {};
+    const approval = {
+      ...existing,
+      status,
+      draft_hash: input.draft_hash || existing.draft_hash || "",
+      note: input.note || "",
+      assigned_to: status === "submitted" ? input.assigned_to || existing.assigned_to || "" : existing.assigned_to || "",
+      requested_by: status === "submitted" ? author : existing.requested_by || "",
+      requested_at: status === "submitted" ? now : existing.requested_at || "",
+      approved_by: status === "approved" ? author : "",
+      approved_at: status === "approved" ? now : "",
+      history: [
+        ...(Array.isArray(existing.history) ? existing.history : []),
+        {
+          status,
+          by: author,
+          at: now,
+          note: input.note || "",
+          assigned_to: input.assigned_to || existing.assigned_to || ""
+        }
+      ].slice(-20)
+    };
+    const updated = {
+      ...ruleSet,
+      metadata: {
+        ...(ruleSet.metadata || {}),
+        approval
+      },
+      author,
+      updated_at: now
+    };
+    await this.updateRuleSetRow(updated);
+    return updated;
+  }
+
   async publish(key, author = "system") {
     const ruleSet = await this.getRuleSet(key);
     if (!ruleSet) throw new Error(`Rule set not found: ${key}`);
@@ -1465,6 +1528,40 @@ export class PostgresNativeReadStore {
     const updated = { ...ruleSet, status: "archived", author, updated_at: new Date().toISOString() };
     await this.updateRuleSetRow(updated);
     return updated;
+  }
+
+  async setRuleCampaign(key, input = {}, author = "system") {
+    const ruleSet = await this.getRuleSet(key);
+    if (!ruleSet) throw new Error(`Rule set not found: ${key}`);
+    const updated = {
+      ...ruleSet,
+      metadata: assignCampaignMetadata(ruleSet.metadata || {}, input.campaign || "", input.folder || ""),
+      author,
+      updated_at: new Date().toISOString()
+    };
+    await this.updateRuleSetRow(updated);
+    return updated;
+  }
+
+  async duplicateRuleSet(key, input = {}, author = "system") {
+    const ruleSet = await this.getRuleSet(key);
+    if (!ruleSet) throw new Error(`Rule set not found: ${key}`);
+    const newKey = normalizeKey(input.decision_key || `${key}_copy`);
+    if (!newKey) throw new Error("decision_key is required");
+    if (await this.getRuleSet(newKey)) throw new Error(`Rule set already exists: ${newKey}`);
+    const now = new Date().toISOString();
+    const duplicate = {
+      ...ruleSet,
+      name: input.name || `${ruleSet.name} Copy`,
+      decision_key: newKey,
+      author,
+      status: "draft",
+      created_at: now,
+      updated_at: now,
+      versions: []
+    };
+    await this.insertRuleSet(duplicate);
+    return duplicate;
   }
 
   async insertRuleSet(ruleSet) {
@@ -1619,6 +1716,49 @@ export class PostgresNativeReadStore {
       await this.client.query("ROLLBACK", []).catch(() => {});
       throw error;
     }
+  }
+}
+
+export async function loadNativePostgresStore() {
+  if (!config.databaseUrl) {
+    throw new Error("DEE_STORE_ADAPTER=postgres_native requires DEE_DATABASE_URL.");
+  }
+  const { Pool } = await loadPg();
+  const pool = new Pool({ connectionString: config.databaseUrl });
+  try {
+    await applyNativePostgresSchema(pool);
+    const store = new PostgresNativeReadStore(pool);
+    store.close = async () => {
+      await pool.end();
+    };
+    return store;
+  } catch (error) {
+    await pool.end().catch(() => {});
+    throw error;
+  }
+}
+
+async function applyNativePostgresSchema(pool) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const statement of nativePostgresSchemaSql()) {
+      await client.query(statement);
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function loadPg() {
+  try {
+    return await import("pg");
+  } catch (error) {
+    throw new Error(`DEE_STORE_ADAPTER=postgres_native requires the pg package. Run npm install before using this adapter. (${error.message})`);
   }
 }
 
@@ -1981,6 +2121,19 @@ function campaignLabel(metadata = {}) {
   const campaign = typeof metadata?.campaign === "string" ? metadata.campaign : metadata?.campaign?.name || "";
   const folder = metadata?.campaign?.folder || metadata?.folder || "";
   return [campaign, folder].filter(Boolean).join(" / ");
+}
+
+function assignCampaignMetadata(metadata = {}, campaign = "", folder = "") {
+  const next = isPlainObject(metadata) ? structuredClone(metadata) : {};
+  delete next.folder;
+  const name = String(campaign || "").trim();
+  const folderName = String(folder || "").trim();
+  if (name || folderName) {
+    next.campaign = { name, folder: folderName };
+  } else {
+    delete next.campaign;
+  }
+  return next;
 }
 
 function campaignRuleSummary(rule = {}) {

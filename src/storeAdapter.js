@@ -1,6 +1,7 @@
 import { config } from "./config.js";
 import { Store } from "./store.js";
 import { nativePostgresAdapterInfo } from "./storePostgresNativeSchema.js";
+import { loadNativePostgresStore } from "./storePostgresNative.js";
 import { loadPostgresStore, postgresAdapterInfo } from "./storePostgres.js";
 
 export const storeAdapters = {
@@ -22,12 +23,14 @@ export const storeAdapters = {
   postgres: {
     ...postgresAdapterInfo,
     load: () => loadPostgresStore()
+  },
+  postgres_native: {
+    ...nativePostgresAdapterInfo,
+    load: () => loadNativePostgresStore()
   }
 };
 
-export const plannedStoreAdapters = {
-  postgres_native: nativePostgresAdapterInfo
-};
+export const plannedStoreAdapters = {};
 
 export async function loadStoreAdapter(adapterId = config.storeAdapter) {
   const id = normalizeStoreAdapter(adapterId);
@@ -52,14 +55,14 @@ export async function loadStoreAdapter(adapterId = config.storeAdapter) {
 }
 
 export function listStoreAdapters() {
-  const available = Object.values(storeAdapters).map(({ id, label, production_notes, capabilities }) => ({
+  const available = Object.values(storeAdapters).map(({ id, label, production_notes, capabilities, requirements }) => ({
     id,
     label,
-    available: id !== "postgres" || Boolean(config.databaseUrl),
-    status: id === "postgres" && !config.databaseUrl ? "configuration_required" : "available",
+    available: !["postgres", "postgres_native"].includes(id) || Boolean(config.databaseUrl),
+    status: ["postgres", "postgres_native"].includes(id) && !config.databaseUrl ? "configuration_required" : "available",
     production_notes,
     capabilities,
-    requirements: id === "postgres" ? ["DEE_DATABASE_URL", "optional pg package"] : []
+    requirements: requirements || (id === "postgres" ? ["DEE_DATABASE_URL", "optional pg package"] : [])
   }));
   const planned = Object.values(plannedStoreAdapters).map(({ id, label, status, production_notes, capabilities, requirements }) => ({
     id,

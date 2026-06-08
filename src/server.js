@@ -369,7 +369,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "POST" && pathname === "/v1/campaigns/actions") {
     requireScope(req, "editor");
-    const result = applyCampaignAction(await readJson(req, config.requestBodyLimitBytes), req.auth.name);
+    const result = await applyCampaignAction(await readJson(req, config.requestBodyLimitBytes), req.auth.name);
     await saveStore();
     clientResultCache.clear();
     sendJson(res, 200, result);
@@ -1526,12 +1526,12 @@ function publicSettings(settings) {
   return copy;
 }
 
-function applyCampaignAction(body = {}, author = "admin") {
+async function applyCampaignAction(body = {}, author = "admin") {
   const campaign = body.campaign || "Unassigned";
   const action = body.action || "";
   const dryRun = body.dry_run !== false;
   if (!["submit_review", "archive", "duplicate", "move"].includes(action)) badRequest("Unsupported campaign action");
-  const assets = store.listCampaignAssets(campaign);
+  const assets = await storeCall("listCampaignAssets", campaign);
   const duplicateSuffix = normalizeCampaignDuplicateSuffix(body.suffix || "copy");
   const targetCampaign = typeof body.target_campaign === "string" ? body.target_campaign.trim() : "";
   const targetFolder = typeof body.target_folder === "string" ? body.target_folder.trim() : "";
@@ -1558,8 +1558,8 @@ function applyCampaignAction(body = {}, author = "admin") {
       }
       affect({ object_type: rule.type === "experiment" ? "experiment" : "rule", object_id: rule.decision_key, action: "submit_review" });
       if (!dryRun) {
-        const fullRule = store.getRuleSet(rule.decision_key);
-        store.setRuleApproval(rule.decision_key, {
+        const fullRule = await storeCall("getRuleSet", rule.decision_key);
+        await storeCall("setRuleApproval", rule.decision_key, {
           status: "submitted",
           note: body.note || `Bulk submitted from campaign ${assets.campaign}`,
           assigned_to: body.assigned_to || "",
@@ -1579,7 +1579,7 @@ function applyCampaignAction(body = {}, author = "admin") {
         continue;
       }
       affect({ object_type: rule.type === "experiment" ? "experiment" : "rule", object_id: rule.decision_key, action: "archive" });
-      if (!dryRun) store.archiveRuleSet(rule.decision_key, author);
+      if (!dryRun) await storeCall("archiveRuleSet", rule.decision_key, author);
     }
     for (const message of assets.messages) {
       if (message.status === "archived") {
@@ -1587,20 +1587,20 @@ function applyCampaignAction(body = {}, author = "admin") {
         continue;
       }
       affect({ object_type: "message", object_id: message.id, action: "archive" });
-      if (!dryRun) store.upsertMessage(message.id, { ...message, status: "archived" }, author);
+      if (!dryRun) await storeCall("upsertMessage", message.id, { ...message, status: "archived" }, author);
     }
   }
 
   if (action === "duplicate") {
     for (const rule of assets.rules) {
       const targetId = normalizeCampaignDuplicateId(rule.decision_key, duplicateSuffix);
-      if (!targetId || store.getRuleSet(targetId)) {
+      if (!targetId || await storeCall("getRuleSet", targetId)) {
         skip({ object_type: rule.type === "experiment" ? "experiment" : "rule", object_id: rule.decision_key, target_id: targetId, reason: "target_exists" });
         continue;
       }
       affect({ object_type: rule.type === "experiment" ? "experiment" : "rule", object_id: rule.decision_key, target_id: targetId, action: "duplicate" });
       if (!dryRun) {
-        store.duplicateRuleSet(rule.decision_key, {
+        await storeCall("duplicateRuleSet", rule.decision_key, {
           decision_key: targetId,
           name: `${rule.name || rule.decision_key} Copy`
         }, author);
@@ -1608,13 +1608,13 @@ function applyCampaignAction(body = {}, author = "admin") {
     }
     for (const message of assets.messages) {
       const targetId = normalizeCampaignDuplicateId(message.id, duplicateSuffix);
-      if (!targetId || store.getMessage(targetId)) {
+      if (!targetId || await storeCall("getMessage", targetId)) {
         skip({ object_type: "message", object_id: message.id, target_id: targetId, reason: "target_exists" });
         continue;
       }
       affect({ object_type: "message", object_id: message.id, target_id: targetId, action: "duplicate" });
       if (!dryRun) {
-        store.upsertMessage(targetId, {
+        await storeCall("upsertMessage", targetId, {
           ...message,
           name: `${message.name || message.id} Copy`,
           status: "active"
@@ -1639,11 +1639,11 @@ function applyCampaignAction(body = {}, author = "admin") {
           action: "move",
           target_campaign: targetLabel
         });
-        if (!dryRun) store.setRuleCampaign(rule.decision_key, { campaign: targetCampaign, folder: targetFolder }, author);
+        if (!dryRun) await storeCall("setRuleCampaign", rule.decision_key, { campaign: targetCampaign, folder: targetFolder }, author);
       }
       for (const message of assets.messages) {
         affect({ object_type: "message", object_id: message.id, action: "move", target_campaign: targetLabel });
-        if (!dryRun) store.setMessageCampaign(message.id, { campaign: targetCampaign, folder: targetFolder }, author);
+        if (!dryRun) await storeCall("setMessageCampaign", message.id, { campaign: targetCampaign, folder: targetFolder }, author);
       }
     }
   }

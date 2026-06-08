@@ -1,7 +1,6 @@
 export const nativePostgresAdapterInfo = {
   id: "postgres_native",
   label: "Postgres Native",
-  status: "planned",
   production_notes: "Native row-level Postgres adapter for high-write, multi-replica enterprise deployments.",
   capabilities: {
     persistent: true,
@@ -14,7 +13,7 @@ export const nativePostgresAdapterInfo = {
     snapshot_persistence: false,
     native_row_store: true
   },
-  requirements: ["DEE_DATABASE_URL", "pg package", "native async store implementation", "migration runner"]
+  requirements: ["DEE_DATABASE_URL", "pg package"]
 };
 
 export const nativePostgresMigrationVersion = 1;

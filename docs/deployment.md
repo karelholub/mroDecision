@@ -98,7 +98,16 @@ DEE_POSTGRES_SNAPSHOT_TABLE=dee_store_snapshots
 
 This mode stores the full DEE SQLite-compatible snapshot in a managed Postgres JSONB table. It gives managed-database persistence, provider backups, and easier restore workflows, but it is intentionally reported as a single-writer adapter. Do not use it for horizontal write scaling across multiple active DEE replicas.
 
-Snapshot saves use optimistic revision protection. If two active writers point at the same snapshot table, the later stale writer will fail with a revision conflict instead of silently overwriting newer data. Stop the stale instance, restart it so it reloads the latest snapshot, and keep only one active writer until the native row-level adapter is available.
+Snapshot saves use optimistic revision protection. If two active writers point at the same snapshot table, the later stale writer will fail with a revision conflict instead of silently overwriting newer data. Stop the stale instance, restart it so it reloads the latest snapshot, and keep only one active writer for snapshot mode.
+
+For high-write or multi-replica deployments, use the native row-level Postgres adapter:
+
+```env
+DEE_STORE_ADAPTER=postgres_native
+DEE_DATABASE_URL=postgres://user:pass@host:5432/db
+```
+
+The native adapter applies the idempotent schema contract from `src/storePostgresNativeSchema.js` during startup and reports production-ready row-store capabilities through `/v1/ready` and Settings runtime metadata.
 
 Unsupported adapter values fail startup with a clear error. This is deliberate: production deployments should not silently fall back to local-file storage when a managed database was expected. `/v1/ready` and Settings runtime metadata report the active adapter and its capabilities.
 
@@ -106,12 +115,11 @@ Recommended path:
 
 1. Keep the SQLite adapter as the default implementation.
 2. Use Postgres snapshot mode when managed persistence is more important than horizontal writes.
-3. Use the planned `postgres_native` adapter contract for high-write multi-replica deployments once the async store implementation is complete.
-4. Apply the native Postgres schema contract from `src/storePostgresNativeSchema.js`; it defines JSONB domain tables, typed timestamps, migration metadata, and the indexes needed by the current query paths.
-5. Add a migration runner for the managed SQL schema instead of relying on SQLite inline `CREATE TABLE IF NOT EXISTS`.
-6. Add integration tests that run against both SQLite and the native managed adapter.
-7. Add readiness checks for connection pool health, migration version, and read/write probes.
-8. Only then scale horizontally.
+3. Use `DEE_STORE_ADAPTER=postgres_native` for high-write multi-replica deployments.
+4. Keep `npm run postgres:migrate -- --print` in release review so schema changes are visible before rollout.
+5. Add live integration tests against the managed database before scaling traffic.
+6. Tune database pool limits and web replica counts together.
+7. Keep a rollback playbook for application version rollback and managed database restore points.
 
 Preview the native schema without touching a database:
 
@@ -119,13 +127,13 @@ Preview the native schema without touching a database:
 npm run postgres:migrate -- --print
 ```
 
-Apply it to a managed Postgres database once the native adapter implementation is ready:
+Apply it to a managed Postgres database before rollout, or let the native adapter apply the same idempotent schema during startup:
 
 ```bash
 DEE_DATABASE_URL=postgres://user:pass@host:5432/db npm run postgres:migrate -- --apply
 ```
 
-Until the native row-level adapter exists, run one active writer per SQLite database volume or Postgres snapshot table. Multiple service replicas pointed at the same SQLite file over network storage are not recommended.
+For SQLite or Postgres snapshot mode, run one active writer per database volume or snapshot table. Multiple service replicas pointed at the same SQLite file over network storage are not recommended.
 
 ## Observability
 
