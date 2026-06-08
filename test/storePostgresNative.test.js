@@ -384,6 +384,46 @@ test("native postgres runtime writes audit, client events, and assignments", asy
   assert.ok(calls.some((call) => call.sql.includes("ON CONFLICT(event_id) DO NOTHING")));
 });
 
+test("native postgres runtime stores Meiro delivery history", async () => {
+  const { client, calls, meiroDeliveries } = nativeRuntimeClient();
+  const store = new PostgresNativeReadStore(client);
+
+  const accepted = await store.recordMeiroDelivery({
+    target: "feedback",
+    endpoint: "https://example.test/collect/decision-engine-feedback",
+    ok: true,
+    status: 202,
+    attempted_at: "2026-06-01T10:00:00.000Z",
+    duration_ms: 42,
+    payload: { profile_key: "profile-1", decision_key: "next_best_offer" }
+  });
+  await store.recordMeiroDelivery({
+    target: "collector",
+    endpoint: "https://example.test/collect/source",
+    ok: false,
+    status: 400,
+    attempted_at: "2026-06-01T10:01:00.000Z",
+    duration_ms: 10,
+    error: "bad request",
+    payload: { profile_key: "profile-2" }
+  });
+
+  const feedback = await store.listMeiroDeliveries({ target: "feedback", ok: "true", search: "profile-1" });
+  const failed = await store.listMeiroDeliveries({ ok: "false" });
+  const summary = await store.getMeiroDeliverySummary();
+
+  assert.equal(accepted.ok, true);
+  assert.equal(meiroDeliveries.length, 2);
+  assert.equal(feedback.length, 1);
+  assert.equal(feedback[0].payload.profile_key, "profile-1");
+  assert.equal(failed[0].status, 400);
+  assert.equal(summary.total, 2);
+  assert.equal(summary.failed, 1);
+  assert.equal(summary.targets.collector, 1);
+  assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO meiro_deliveries")));
+  assert.ok(calls.some((call) => call.sql.includes("payload_json::text ILIKE")));
+});
+
 test("native postgres content writes replace lookup tables with version history", async () => {
   const { client, calls, lookups, lookupVersions } = nativeContentClient();
   const store = new PostgresNativeReadStore(client);
@@ -608,11 +648,13 @@ function nativeRuntimeClient() {
   const audit = [];
   const clientEvents = new Map();
   const assignments = [];
+  const meiroDeliveries = [];
   return {
     calls,
     audit,
     clientEvents,
     assignments,
+    meiroDeliveries,
     client: {
       async query(sql, params = []) {
         calls.push({ sql, params });
@@ -672,10 +714,52 @@ function nativeRuntimeClient() {
           });
           return { rows: [] };
         }
+        if (sql.startsWith("INSERT INTO meiro_deliveries")) {
+          meiroDeliveries.push({
+            id: params[0],
+            target: params[1],
+            endpoint: params[2],
+            ok: params[3],
+            status: params[4],
+            attempted_at: params[5],
+            duration_ms: params[6],
+            error: params[7],
+            response_preview: params[8],
+            payload_json: JSON.parse(params[9])
+          });
+          return { rows: [] };
+        }
+        if (sql.startsWith("SELECT * FROM meiro_deliveries")) {
+          const filters = extractMeiroDeliveryFilters(sql, params);
+          const rows = meiroDeliveries
+            .filter((row) => Object.entries(filters).every(([key, value]) => {
+              if (key === "search") {
+                const haystack = `${row.endpoint} ${row.error} ${row.response_preview} ${JSON.stringify(row.payload_json)}`.toLowerCase();
+                return haystack.includes(value.toLowerCase().replaceAll("%", ""));
+              }
+              return row[key] === value;
+            }))
+            .sort((a, b) => String(b.attempted_at).localeCompare(String(a.attempted_at)))
+            .slice(0, Number(params.at(-1) || 20));
+          return { rows };
+        }
         return { rows: [] };
       }
     }
   };
+}
+
+function extractMeiroDeliveryFilters(sql, params) {
+  const filters = {};
+  for (const key of ["target", "status"]) {
+    const match = sql.match(new RegExp(`${key} = \\$(\\d+)`));
+    if (match) filters[key] = params[Number(match[1]) - 1];
+  }
+  if (sql.includes("ok = true")) filters.ok = true;
+  if (sql.includes("ok = false")) filters.ok = false;
+  const searchMatch = sql.match(/payload_json::text ILIKE \$(\d+)/);
+  if (searchMatch) filters.search = params[Number(searchMatch[1]) - 1];
+  return filters;
 }
 
 function nativeRuleClient() {

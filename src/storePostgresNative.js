@@ -567,6 +567,103 @@ export class PostgresNativeReadStore {
     return result.rows.map(rowToSchemaItem);
   }
 
+  async listMeiroDeliveries(params = {}) {
+    const requestedLimit = Number(params.limit || 20);
+    const limit = Math.min(Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 20, 100);
+    const values = [];
+    const where = [];
+    if (params.target) {
+      values.push(String(params.target));
+      where.push(`target = $${values.length}`);
+    }
+    if (params.ok === "true" || params.ok === true) {
+      where.push("ok = true");
+    }
+    if (params.ok === "false" || params.ok === false) {
+      where.push("ok = false");
+    }
+    if (params.status) {
+      const status = Number(params.status);
+      if (Number.isFinite(status)) {
+        values.push(status);
+        where.push(`status = $${values.length}`);
+      }
+    }
+    if (params.search) {
+      const search = `%${String(params.search)}%`;
+      values.push(search);
+      where.push(`(endpoint ILIKE $${values.length} OR error ILIKE $${values.length} OR response_preview ILIKE $${values.length} OR payload_json::text ILIKE $${values.length})`);
+    }
+    values.push(limit);
+    const result = await this.client.query(
+      `SELECT * FROM meiro_deliveries ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY attempted_at DESC LIMIT $${values.length}`,
+      values
+    );
+    return result.rows.map(rowToMeiroDelivery);
+  }
+
+  async getMeiroDeliverySummary(params = {}) {
+    const deliveries = await this.listMeiroDeliveries({ ...params, limit: params.limit || 100 });
+    const targets = {};
+    const statuses = {};
+    let success = 0;
+    let failed = 0;
+    let durationTotal = 0;
+    for (const item of deliveries) {
+      if (item.ok) success += 1;
+      else failed += 1;
+      durationTotal += item.duration_ms || 0;
+      targets[item.target || "unknown"] = (targets[item.target || "unknown"] || 0) + 1;
+      statuses[item.status || 0] = (statuses[item.status || 0] || 0) + 1;
+    }
+    return {
+      total: deliveries.length,
+      success,
+      failed,
+      success_rate: deliveries.length ? success / deliveries.length : 0,
+      avg_duration_ms: deliveries.length ? Math.round(durationTotal / deliveries.length) : 0,
+      targets,
+      statuses,
+      last_attempted_at: deliveries[0]?.attempted_at || ""
+    };
+  }
+
+  async recordMeiroDelivery(input = {}) {
+    const delivery = {
+      id: input.id || randomId(12),
+      target: input.target || "unknown",
+      endpoint: input.endpoint || "",
+      ok: Boolean(input.ok),
+      status: Number(input.status || 0),
+      attempted_at: input.attempted_at || new Date().toISOString(),
+      duration_ms: Number(input.duration_ms || 0),
+      error: input.error || "",
+      response_preview: input.response_preview || "",
+      payload: isPlainObject(input.payload) ? input.payload : {}
+    };
+    await this.client.query(
+      `INSERT INTO meiro_deliveries (
+        id, target, endpoint, ok, status, attempted_at, duration_ms, error, response_preview, payload_json
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)`,
+      [
+        delivery.id,
+        delivery.target,
+        delivery.endpoint,
+        delivery.ok,
+        delivery.status,
+        delivery.attempted_at,
+        delivery.duration_ms,
+        delivery.error,
+        delivery.response_preview,
+        JSON.stringify(delivery.payload)
+      ]
+    );
+    return rowToMeiroDelivery({
+      ...delivery,
+      payload_json: delivery.payload
+    });
+  }
+
   async getSettings() {
     const result = await this.client.query("SELECT key, value_json FROM settings ORDER BY key ASC", []);
     return Object.fromEntries(result.rows.map((row) => [row.key, parseJson(row.value_json)]));
@@ -999,6 +1096,21 @@ function rowToSchemaItem(row) {
     updated_at: isoValue(row.updated_at),
     author: row.author,
     raw: parseJson(row.raw_json, {})
+  };
+}
+
+function rowToMeiroDelivery(row) {
+  return {
+    id: row.id,
+    target: row.target || "unknown",
+    endpoint: row.endpoint || "",
+    ok: Boolean(row.ok),
+    status: Number(row.status || 0),
+    attempted_at: isoValue(row.attempted_at),
+    duration_ms: Number(row.duration_ms || 0),
+    error: row.error || "",
+    response_preview: row.response_preview || "",
+    payload: parseJson(row.payload_json, {})
   };
 }
 
