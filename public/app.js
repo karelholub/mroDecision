@@ -15,6 +15,9 @@ const branchEditor = document.querySelector("#branch-editor");
 const ruleGraph = document.querySelector("#rule-graph");
 const graphEditor = document.querySelector("#graph-editor");
 const graphNodeEditor = document.querySelector("#graph-node-editor");
+const graphMinimap = document.querySelector("#graph-minimap");
+const graphSnapEnabledInput = document.querySelector("#graph-snap-enabled");
+const graphSnapSizeInput = document.querySelector("#graph-snap-size");
 const lookupOutput = document.querySelector("#lookup-output");
 const lookupDetailPanel = document.querySelector("#lookup-editor");
 const messageOutput = document.querySelector("#message-output");
@@ -136,6 +139,8 @@ let conditionBlocksLoaded = false;
 let selectedConditionBlockId = null;
 let selectedMessageTokenField = "#message-preview-body";
 let ruleSort = { key: "updated_at", direction: "desc" };
+let graphSnapEnabled = true;
+let graphSnapSize = 24;
 const savedProfileStorageKey = "meiro-dee-evaluate-profiles";
 const defaultConditionBlockTemplates = [
   {
@@ -357,6 +362,14 @@ document.querySelector("#reset-graph-layout").addEventListener("click", () => {
   autoLayoutGraph(true);
   renderGraphBuilder();
   syncJsonFromBuilder();
+});
+graphSnapEnabledInput?.addEventListener("change", () => {
+  graphSnapEnabled = graphSnapEnabledInput.checked;
+  renderRuleGraph();
+});
+graphSnapSizeInput?.addEventListener("input", () => {
+  graphSnapSize = normalizedGraphSnapSize();
+  renderRuleGraph();
 });
 document.querySelector("#graph-entry").addEventListener("input", () => {
   graphBuilder.entry = document.querySelector("#graph-entry").value.trim();
@@ -6446,6 +6459,10 @@ function renderRuleGraph() {
     renderAdvancedGraphPreview();
     return;
   }
+  if (graphMinimap) {
+    graphMinimap.hidden = true;
+    graphMinimap.innerHTML = "";
+  }
   const fallbackResult = document.querySelector("#fallback-result").value.trim() || "deferred";
   const fallbackOutputs = parseJsonSafe(document.querySelector("#fallback-outputs").value || "{}");
   const branchCards = builderBranches.map((branch, index) => {
@@ -6527,7 +6544,7 @@ function renderAdvancedGraphPreview() {
         <span>Draft JSON remains the source of truth.</span>
       </div>
       <div class="graph-canvas-shell">
-        <div class="graph-canvas" style="width:${layout.width}px; height:${layout.height}px;">
+        <div class="graph-canvas${graphSnapEnabled ? " snap-enabled" : ""}" style="width:${layout.width}px; height:${layout.height}px; --graph-grid-size:${graphSnapSize}px;">
           ${graphEdgeSvg(layout.width, layout.height)}
           ${cards || '<div class="graph-empty graph-canvas-empty">Create a graph template or add a node.</div>'}
         </div>
@@ -6547,6 +6564,65 @@ function renderAdvancedGraphPreview() {
     });
   });
   bindGraphNodeDrag();
+  renderGraphMinimap(layout);
+}
+
+function renderGraphMinimap(layout = graphCanvasLayout()) {
+  if (!graphMinimap) return;
+  const nodes = graphBuilder.nodes || [];
+  if (document.querySelector("#builder-mode")?.value !== "graph") {
+    graphMinimap.innerHTML = "";
+    graphMinimap.hidden = true;
+    return;
+  }
+  graphMinimap.hidden = false;
+  const minimapWidth = 240;
+  const minimapHeight = 118;
+  const scale = Math.min(
+    (minimapWidth - 16) / Math.max(layout.width, 1),
+    (minimapHeight - 16) / Math.max(layout.height, 1)
+  );
+  const miniNodes = nodes.map((node) => {
+    const nodeLayout = normalizedGraphNodeLayout(node);
+    const left = Math.max(6, Math.round(nodeLayout.x * scale) + 6);
+    const top = Math.max(6, Math.round(nodeLayout.y * scale) + 6);
+    const width = Math.max(18, Math.round(layout.nodeWidth * scale));
+    const height = Math.max(12, Math.round(layout.nodeHeight * scale));
+    return `
+      <button
+        type="button"
+        class="graph-minimap-node ${node.id === graphBuilder.entry ? "entry" : ""}"
+        data-minimap-node="${escapeHtml(node.id || "")}"
+        style="left:${left}px; top:${top}px; width:${width}px; height:${height}px;"
+        title="${escapeHtml(node.id || "node")}"
+        aria-label="Focus graph node ${escapeHtml(node.id || "node")}"
+      ></button>
+    `;
+  }).join("");
+  graphMinimap.innerHTML = `
+    <div class="graph-minimap-copy">
+      <strong>Canvas map</strong>
+      <span>${escapeHtml(graphReachabilitySummary())} &middot; ${nodes.length} node${nodes.length === 1 ? "" : "s"} &middot; ${graphSnapEnabled ? `${graphSnapSize}px snap` : "free drag"}</span>
+    </div>
+    <div class="graph-minimap-stage" style="width:${minimapWidth}px; height:${minimapHeight}px;">
+      ${miniNodes || '<span class="graph-minimap-empty">No nodes</span>'}
+    </div>
+  `;
+  graphMinimap.querySelectorAll("[data-minimap-node]").forEach((button) => {
+    button.addEventListener("click", () => focusGraphNode(button.dataset.minimapNode));
+  });
+}
+
+function focusGraphNode(nodeId) {
+  if (!nodeId) return;
+  const canvasNode = ruleGraph?.querySelector(`[data-graph-node="${cssEscape(nodeId)}"]`);
+  const editorNode = graphNodeEditor?.querySelector(`[data-node-id="${cssEscape(nodeId)}"]`);
+  canvasNode?.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+  editorNode?.scrollIntoView({ behavior: "smooth", block: "center" });
+  [canvasNode, editorNode].forEach((node) => {
+    node?.classList.add("highlight");
+    setTimeout(() => node?.classList.remove("highlight"), 900);
+  });
 }
 
 function normalizedGraphNodeLayout(node) {
@@ -6555,6 +6631,20 @@ function normalizedGraphNodeLayout(node) {
     x: Number.isFinite(Number(layout.x)) ? Math.max(16, Number(layout.x)) : 16,
     y: Number.isFinite(Number(layout.y)) ? Math.max(16, Number(layout.y)) : 16
   };
+}
+
+function normalizedGraphSnapSize() {
+  const nextSize = Number(graphSnapSizeInput?.value || graphSnapSize || 24);
+  if (!Number.isFinite(nextSize)) return 24;
+  return Math.min(80, Math.max(8, Math.round(nextSize)));
+}
+
+function snapGraphCoordinate(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 16;
+  if (!graphSnapEnabled) return Math.round(numeric);
+  const size = normalizedGraphSnapSize();
+  return Math.round(numeric / size) * size;
 }
 
 function autoLayoutGraph(force = false) {
@@ -6640,7 +6730,7 @@ function bindGraphNodeDrag() {
           y: Math.max(16, Math.min(canvasRect.height - 140, original.y + moveEvent.clientY - start.y))
         };
         moved = moved || Math.abs(next.x - original.x) > 4 || Math.abs(next.y - original.y) > 4;
-        node.layout = { x: Math.round(next.x), y: Math.round(next.y) };
+        node.layout = { x: Math.max(16, snapGraphCoordinate(next.x)), y: Math.max(16, snapGraphCoordinate(next.y)) };
         button.style.left = `${node.layout.x}px`;
         button.style.top = `${node.layout.y}px`;
       };
@@ -6661,6 +6751,8 @@ function bindGraphNodeDrag() {
 
 function renderGraphBuilder() {
   document.querySelector("#graph-entry").value = graphBuilder.entry || "";
+  if (graphSnapEnabledInput) graphSnapEnabledInput.checked = graphSnapEnabled;
+  if (graphSnapSizeInput) graphSnapSizeInput.value = String(normalizedGraphSnapSize());
   renderFrequencyCapHelperOptions();
   graphNodeEditor.innerHTML = (graphBuilder.nodes || []).map((node, index) => graphNodeEditorCard(node, index)).join("");
   graphNodeEditor.querySelectorAll("[data-graph-field]").forEach((input) => {

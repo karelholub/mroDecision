@@ -6303,10 +6303,7 @@ textarea {
   min-height: 330px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background:
-    linear-gradient(var(--panel-soft), var(--panel-soft)),
-    repeating-linear-gradient(0deg, transparent, transparent 23px, rgba(100, 116, 139, 0.12) 24px),
-    repeating-linear-gradient(90deg, transparent, transparent 23px, rgba(100, 116, 139, 0.12) 24px);
+  background: var(--panel-soft);
   overflow: auto;
 }
 
@@ -6314,6 +6311,13 @@ textarea {
   position: relative;
   min-width: 100%;
   min-height: 330px;
+}
+
+.graph-canvas.snap-enabled {
+  background-image:
+    linear-gradient(rgba(100, 116, 139, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(100, 116, 139, 0.12) 1px, transparent 1px);
+  background-size: var(--graph-grid-size, 24px) var(--graph-grid-size, 24px);
 }
 
 .graph-edge-svg {
@@ -6413,9 +6417,97 @@ button.graph-node:hover {
 
 .graph-toolbar {
   display: grid;
-  grid-template-columns: minmax(150px, 0.9fr) minmax(150px, 0.8fr) auto auto auto;
+  grid-template-columns: minmax(150px, 1fr) minmax(150px, 0.8fr) repeat(5, auto);
   gap: 10px;
   align-items: end;
+}
+
+.graph-snap-toggle {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+}
+
+.graph-snap-toggle input {
+  width: auto;
+}
+
+.graph-minimap {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--panel);
+}
+
+.graph-minimap-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.graph-minimap-copy span,
+.graph-minimap-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.graph-minimap-stage {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  overflow: hidden;
+}
+
+.graph-minimap-stage::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border: 1px dashed rgba(100, 116, 139, 0.24);
+  border-radius: 5px;
+}
+
+.graph-minimap-node {
+  position: absolute;
+  z-index: 1;
+  border: 1px solid rgba(15, 118, 110, 0.55);
+  border-radius: 4px;
+  background: rgba(13, 148, 136, 0.18);
+  cursor: pointer;
+}
+
+.graph-minimap-node.entry {
+  border-color: var(--accent);
+  background: rgba(37, 99, 235, 0.22);
+}
+
+.graph-minimap-node:hover {
+  border-color: var(--accent);
+  background: rgba(37, 99, 235, 0.28);
+}
+
+.graph-minimap-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+@media (max-width: 960px) {
+  .graph-toolbar,
+  .graph-minimap {
+    grid-template-columns: 1fr;
+  }
+
+  .graph-minimap-stage {
+    width: 100% !important;
+    max-width: 240px;
+  }
 }
 
 .graph-node-editor {

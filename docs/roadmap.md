@@ -46,7 +46,7 @@ Implemented:
 
 Important gaps:
 
-- Advanced graph editor includes a draggable canvas; deeper canvas ergonomics such as minimap and snap guides remain optional polish.
+- Advanced graph editor includes a draggable canvas with a minimap, node focus actions, configurable snap-to-grid, and grid guides; deeper canvas ergonomics such as route grouping and branch folding remain optional polish.
 - First client behavior exists for experiment evaluation; in-app message operations are still pending.
 - First client-facing endpoint exists: `POST /v1/client/evaluate`.
 - Deterministic experiment assignment exists for configured variants.
@@ -99,9 +99,9 @@ Goal: support the full v2 graph model without forcing engineers to edit JSON.
 - Build a first visual flow editor for input, condition, score, lookup, output, and fallback nodes.
 - Add draft test panel with matched node path.
 
-Open decision: ship a pragmatic graph editor first, then polish minimap/drag behavior, rather than blocking on a full canvas experience.
+Open decision: ship a pragmatic graph editor first, then add deeper route grouping and branch folding only when complex customer flows require them.
 
-Status: first-pass graph authoring is implemented with Branch/Graph mode switching, node cards for input, condition, score, lookup, frequency cap, output, fallback, and error nodes, draggable canvas positioning, visual route preview, JSON sync, route/reachability validation, draft/published evaluation trace cards, branch value-source comparisons, reusable condition blocks, branch output TTL helpers, safer publish review, and guided helpers for lookup and frequency-cap nodes. Minimap and snap-guide polish remain optional.
+Status: first-pass graph authoring is implemented with Branch/Graph mode switching, node cards for input, condition, score, lookup, frequency cap, output, fallback, and error nodes, draggable canvas positioning, visual route preview, JSON sync, route/reachability validation, draft/published evaluation trace cards, branch value-source comparisons, reusable condition blocks, branch output TTL helpers, safer publish review, guided helpers for lookup and frequency-cap nodes, a canvas minimap, and configurable snap-to-grid behavior.
 
 ## Phase 4: Client-Facing In-App and Experiment APIs
 

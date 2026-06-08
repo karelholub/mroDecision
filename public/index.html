@@ -512,7 +512,16 @@
                       <button type="button" id="add-graph-node">Add Node</button>
                       <button type="button" id="create-graph-template">Create Template</button>
                       <button type="button" id="reset-graph-layout">Reset Layout</button>
+                      <label class="graph-snap-toggle">
+                        <input id="graph-snap-enabled" type="checkbox" checked />
+                        Snap
+                      </label>
+                      <label>
+                        Grid
+                        <input id="graph-snap-size" type="number" min="8" max="80" step="4" value="24" />
+                      </label>
                     </div>
+                    <div id="graph-minimap" class="graph-minimap" aria-live="polite"></div>
                     <div class="frequency-cap-helper">
                       <div class="builder-section-head">
                         <div>
