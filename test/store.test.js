@@ -743,6 +743,7 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   const conflictCampaign = store.listCampaignOperations({ window_hours: 300 }).find((item) => item.campaign === "Conflict Smoke / QA");
   assert.equal(conflictCampaign.conflict_count, 1);
   assert.equal(conflictCampaign.conflicts[0].type, "cross_surface_eligibility");
+  assert.ok(conflictCampaign.conflicts[0].recommendation.some((item) => item.includes("context/channel")));
   assert.equal(conflictCampaign.conflicts[0].left.condition_signature, conflictCampaign.conflicts[0].right.condition_signature);
   assert.deepEqual(
     new Set([conflictCampaign.conflicts[0].left.outcome, conflictCampaign.conflicts[0].right.outcome]),

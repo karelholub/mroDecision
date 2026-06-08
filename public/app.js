@@ -1025,6 +1025,7 @@ function campaignConflictsSection(conflicts = []) {
               ${campaignConflictSide(conflict.left)}
               ${campaignConflictSide(conflict.right)}
             </div>
+            ${campaignConflictRecommendation(conflict.recommendation)}
           </div>
         `).join("") : `<div class="status-line">No exact cross-surface eligibility conflicts detected.</div>`}
       </div>
@@ -1035,9 +1036,24 @@ function campaignConflictsSection(conflicts = []) {
 function campaignConflictSide(side = {}) {
   return `
     <div class="${side.outcome === "eligible" ? "eligible" : "ineligible"}">
-      <strong>${escapeHtml(side.surface || "-")} · ${escapeHtml(side.outcome || "-")}</strong>
-      <span>${escapeHtml(side.rule_name || side.rule_id || "-")}</span>
-      <small>${escapeHtml(side.branch_id || "-")} · result ${escapeHtml(side.result || "-")}</small>
+      <div>
+        <strong>${escapeHtml(side.surface || "-")} · ${escapeHtml(side.outcome || "-")}</strong>
+        <span>${escapeHtml(side.rule_name || side.rule_id || "-")}</span>
+        <small>${escapeHtml(side.branch_id || "-")} · result ${escapeHtml(side.result || "-")}</small>
+      </div>
+      <button type="button" data-campaign-nav="${side.rule_type === "experiment" ? "open-experiment" : "open-rule"}" data-object-id="${escapeHtml(side.rule_id || "")}" ${side.rule_id ? "" : "disabled"}>Open rule</button>
+    </div>
+  `;
+}
+
+function campaignConflictRecommendation(items = []) {
+  const list = Array.isArray(items) ? items.filter(Boolean) : [];
+  return `
+    <div class="campaign-conflict-recommendation">
+      <strong>Recommended resolution</strong>
+      ${list.length
+        ? `<ul>${list.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+        : `<span>Review both rules and align the audience, surface, or result before launch.</span>`}
     </div>
   `;
 }

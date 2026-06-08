@@ -2749,7 +2749,9 @@ header {
 
 .campaign-conflict-sides > div {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 3px;
+  align-items: center;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 9px;
@@ -2763,6 +2765,40 @@ header {
 
 .campaign-conflict-sides > div.ineligible {
   border-color: rgba(220, 38, 38, 0.35);
+}
+
+.campaign-conflict-sides > div > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.campaign-conflict-sides button {
+  min-height: 30px;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.campaign-conflict-recommendation {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px;
+  background: var(--panel-soft);
+  min-width: 0;
+}
+
+.campaign-conflict-recommendation ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.campaign-conflict-recommendation li {
+  color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .campaign-dependency-list .missing {
@@ -6975,6 +7011,10 @@ pre {
   .campaign-review-list,
   .campaign-conflict-sides {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .campaign-conflict-sides > div {
+    grid-template-columns: 1fr;
   }
 
   .assistant-handoff-row {

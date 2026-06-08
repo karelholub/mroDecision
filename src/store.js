@@ -3047,12 +3047,21 @@ function campaignRuleConflicts(assets = {}) {
         summary: `${left.surface} is ${left.outcome}; ${right.surface} is ${right.outcome}`,
         audience: left.condition_label || "Same audience conditions",
         condition_signature: left.condition_signature,
+        recommendation: conflictRecommendation(left, right),
         left,
         right
       });
     }
   }
   return conflicts.slice(0, 20);
+}
+
+function conflictRecommendation(left = {}, right = {}) {
+  return [
+    `Confirm whether ${left.surface || "one surface"} and ${right.surface || "the other surface"} should intentionally differ for this audience.`,
+    "If the difference is intentional, add an explicit context/channel condition or campaign note so reviewers can distinguish it from an accidental contradiction.",
+    "If it is not intentional, align one rule result or narrow the audience condition before publishing."
+  ];
 }
 
 function campaignAudienceOutcomes(rule = {}) {

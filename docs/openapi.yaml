@@ -4111,6 +4111,10 @@ components:
           type: string
         condition_signature:
           type: string
+        recommendation:
+          type: array
+          items:
+            type: string
         left:
           type: object
           additionalProperties: true
