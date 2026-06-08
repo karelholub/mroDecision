@@ -9346,6 +9346,7 @@ function renderSettingsSummary(settings, runtime, error = null) {
   const storeAdapter = runtime?.store_adapter || {};
   const adapterInfo = storeAdapter.adapter_info || {};
   const deployment = storeAdapter.deployment || {};
+  const postgresRuntime = storeAdapter.postgres || {};
   const productionReady = deployment.status === "production_ready";
   const schemaStatus = settings?.schema_last_sync_status || "never";
   const schemaHealthy = ["ok", "success"].includes(schemaStatus);
@@ -9366,6 +9367,7 @@ function renderSettingsSummary(settings, runtime, error = null) {
       detail: deployment.summary || adapterInfo.production_notes || "Store adapter metadata unavailable",
       ok: productionReady
     },
+    storeAdapterDetailItem(storeAdapter, adapterInfo, postgresRuntime),
     ...storeDeploymentHealthItems(deployment),
     {
       label: "Meiro Collector",
@@ -9420,13 +9422,47 @@ function renderSettingsSummary(settings, runtime, error = null) {
   ];
   settingsHealthSummary.innerHTML = items
     .map((item) => `
-      <div class="settings-health-item ${item.ok ? "ok" : "warn"}">
+      <div class="settings-health-item ${item.ok ? "ok" : "warn"} ${item.className || ""}">
         <span>${escapeHtml(item.label)}</span>
         <strong>${escapeHtml(item.value)}</strong>
         <span>${escapeHtml(item.detail)}</span>
+        ${(item.meta || []).map((meta) => `<small>${escapeHtml(meta)}</small>`).join("")}
       </div>
     `)
     .join("");
+}
+
+function storeAdapterDetailItem(storeAdapter = {}, adapterInfo = {}, postgresRuntime = {}) {
+  const capabilities = adapterInfo.capabilities || {};
+  const isPostgresSnapshot = storeAdapter.adapter === "postgres" || postgresRuntime.mode === "snapshot";
+  const snapshot = postgresRuntime.snapshot || null;
+  const savedSnapshot = postgresRuntime.saved_snapshot || null;
+  const mode = isPostgresSnapshot ? "Postgres snapshot" : adapterInfo.label || storeAdapter.adapter || "SQLite";
+  const flags = [
+    capabilities.managed_database ? "managed DB" : "local file",
+    capabilities.multi_instance ? "multi-replica" : "single writer",
+    capabilities.native_row_store ? "row-level store" : capabilities.snapshot_persistence ? "snapshot store" : "embedded store"
+  ];
+  const meta = [
+    `Mode: ${mode}`,
+    `Capabilities: ${flags.join(", ")}`
+  ];
+  if (isPostgresSnapshot) {
+    meta.push(`Table: ${postgresRuntime.table || "dee_store_snapshots"}`);
+    meta.push(`Revision: ${formatNumber(postgresRuntime.revision || 0)}${postgresRuntime.saved_at ? ` saved ${formatTime(postgresRuntime.saved_at)}` : " not saved yet"}`);
+    if (snapshot) meta.push(`Current snapshot: ${formatNumber(snapshot.row_count || 0)} rows, ${formatBytes(snapshot.size_bytes || 0)}`);
+    if (savedSnapshot) meta.push(`Saved snapshot: ${formatNumber(savedSnapshot.row_count || 0)} rows, ${formatBytes(savedSnapshot.size_bytes || 0)}`);
+  } else {
+    meta.push(storeAdapter.path ? `Path: ${storeAdapter.path}` : "Path: configured data directory");
+  }
+  return {
+    label: "Store Adapter",
+    value: adapterInfo.label || storeAdapter.adapter || "SQLite",
+    detail: adapterInfo.production_notes || "Store adapter metadata unavailable",
+    ok: capabilities.persistent === true && (capabilities.managed_database === true || capabilities.recommended_max_replicas === 1),
+    className: "wide",
+    meta
+  };
 }
 
 function storeDeploymentHealthItems(deployment = {}) {

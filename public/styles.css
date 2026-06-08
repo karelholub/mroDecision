@@ -295,6 +295,18 @@ aside input {
   line-height: 1.35;
 }
 
+.settings-health-item small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.settings-health-item.wide {
+  grid-column: span 2;
+}
+
 .settings-health-item.ok {
   border-color: #a7d7cd;
   background: #f0faf7;
@@ -7322,6 +7334,10 @@ pre {
     max-height: none;
     overflow: visible;
     position: static;
+  }
+
+  .settings-health-item.wide {
+    grid-column: auto;
   }
 
   .integration-workspace .settings-card:last-child,

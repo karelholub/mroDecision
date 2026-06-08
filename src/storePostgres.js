@@ -54,7 +54,10 @@ export async function loadPostgresStore() {
         mode: "snapshot",
         revision: latest?.revision || 0,
         saved_at: latest?.saved_at || null,
-        database_url_configured: true
+        saved_age_seconds: latest?.saved_at ? Math.max(0, Math.round((Date.now() - Date.parse(latest.saved_at)) / 1000)) : null,
+        database_url_configured: true,
+        snapshot: summarizeSnapshot(store.exportSnapshot()),
+        saved_snapshot: latest?.snapshot ? summarizeSnapshot(latest.snapshot) : null
       }
     });
     return store;
@@ -121,7 +124,7 @@ function safeSnapshotTableName(value) {
 }
 
 function snapshotDeploymentReadiness() {
-  return [
+  const checks = [
     {
       key: "database_connection",
       ok: true,
@@ -156,6 +159,36 @@ function snapshotDeploymentReadiness() {
       level: "ok",
       label: "Managed database",
       detail: "Backups and point-in-time recovery should be handled by the Postgres provider."
+    },
+    {
+      key: "native_row_store",
+      ok: false,
+      level: "warn",
+      label: "Native row store",
+      detail: "This adapter persists snapshots. Native row-level Postgres is still required for high-write horizontal scaling."
     }
   ];
+  const hasError = checks.some((check) => check.level === "error");
+  const hasWarn = checks.some((check) => check.level === "warn");
+  return {
+    status: hasError ? "not_ready" : hasWarn ? "single_instance" : "production_ready",
+    summary: hasError
+      ? "Postgres snapshot store is not ready."
+      : "Ready for managed single-writer persistence; native row-level Postgres is required before horizontal write scaling.",
+    recommended_max_replicas: 1,
+    backup_mode: "managed_database",
+    checks
+  };
+}
+
+function summarizeSnapshot(snapshot) {
+  const tables = snapshot?.tables && typeof snapshot.tables === "object" ? snapshot.tables : {};
+  const tableCounts = Object.fromEntries(Object.entries(tables).map(([table, rows]) => [table, Array.isArray(rows) ? rows.length : 0]));
+  return {
+    exported_at: snapshot?.exported_at || "",
+    table_count: Object.keys(tableCounts).length,
+    row_count: Object.values(tableCounts).reduce((sum, count) => sum + Number(count || 0), 0),
+    size_bytes: Buffer.byteLength(JSON.stringify(snapshot || {})),
+    tables: tableCounts
+  };
 }
