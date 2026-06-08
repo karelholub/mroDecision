@@ -113,6 +113,18 @@ Recommended path:
 7. Add readiness checks for connection pool health, migration version, and read/write probes.
 8. Only then scale horizontally.
 
+Preview the native schema without touching a database:
+
+```bash
+npm run postgres:migrate -- --print
+```
+
+Apply it to a managed Postgres database once the native adapter implementation is ready:
+
+```bash
+DEE_DATABASE_URL=postgres://user:pass@host:5432/db npm run postgres:migrate -- --apply
+```
+
 Until the native row-level adapter exists, run one active writer per SQLite database volume or Postgres snapshot table. Multiple service replicas pointed at the same SQLite file over network storage are not recommended.
 
 ## Observability
