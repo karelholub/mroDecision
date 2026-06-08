@@ -1,5 +1,6 @@
 import { config } from "./config.js";
 import { Store } from "./store.js";
+import { nativePostgresAdapterInfo } from "./storePostgresNativeSchema.js";
 import { loadPostgresStore, postgresAdapterInfo } from "./storePostgres.js";
 
 export const storeAdapters = {
@@ -24,7 +25,9 @@ export const storeAdapters = {
   }
 };
 
-export const plannedStoreAdapters = {};
+export const plannedStoreAdapters = {
+  postgres_native: nativePostgresAdapterInfo
+};
 
 export async function loadStoreAdapter(adapterId = config.storeAdapter) {
   const id = normalizeStoreAdapter(adapterId);

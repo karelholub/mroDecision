@@ -106,11 +106,12 @@ Recommended path:
 
 1. Keep the SQLite adapter as the default implementation.
 2. Use Postgres snapshot mode when managed persistence is more important than horizontal writes.
-3. Add a native row-level `PostgresStore` behind `DEE_STORE_ADAPTER` for high-write multi-replica deployments.
-4. Add a migration runner for the managed SQL schema instead of relying on SQLite inline `CREATE TABLE IF NOT EXISTS`.
-5. Add integration tests that run against both SQLite and the native managed adapter.
-6. Add readiness checks for connection pool health, migration version, and read/write probes.
-7. Only then scale horizontally.
+3. Use the planned `postgres_native` adapter contract for high-write multi-replica deployments once the async store implementation is complete.
+4. Apply the native Postgres schema contract from `src/storePostgresNativeSchema.js`; it defines JSONB domain tables, typed timestamps, migration metadata, and the indexes needed by the current query paths.
+5. Add a migration runner for the managed SQL schema instead of relying on SQLite inline `CREATE TABLE IF NOT EXISTS`.
+6. Add integration tests that run against both SQLite and the native managed adapter.
+7. Add readiness checks for connection pool health, migration version, and read/write probes.
+8. Only then scale horizontally.
 
 Until the native row-level adapter exists, run one active writer per SQLite database volume or Postgres snapshot table. Multiple service replicas pointed at the same SQLite file over network storage are not recommended.
 

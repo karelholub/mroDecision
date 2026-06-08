@@ -15,12 +15,21 @@ test("store adapter registry exposes sqlite capabilities", () => {
   assert.equal(postgres.capabilities.managed_database, true);
   assert.equal(postgres.capabilities.snapshot_persistence, true);
   assert.equal(postgres.capabilities.native_row_store, false);
+  const postgresNative = adapters.find((adapter) => adapter.id === "postgres_native");
+  assert.equal(postgresNative.available, false);
+  assert.equal(postgresNative.status, "planned");
+  assert.equal(postgresNative.capabilities.multi_instance, true);
+  assert.equal(postgresNative.capabilities.native_row_store, true);
 });
 
 test("store adapter loader rejects unsupported adapters", async () => {
   await assert.rejects(
     () => loadStoreAdapter("postgres"),
     /requires DEE_DATABASE_URL/
+  );
+  await assert.rejects(
+    () => loadStoreAdapter("postgres_native"),
+    /registered but not available/
   );
   await assert.rejects(
     () => loadStoreAdapter("oracle"),
