@@ -11,6 +11,7 @@ import { createClientResultCache } from "./clientCache.js";
 import { createClientTrafficMetrics } from "./clientTrafficMetrics.js";
 import { evaluateDecision, evaluateDecisionAsync } from "./evaluator.js";
 import { notFound, readJson, sendBuffer, sendError, sendJson, sendText, serveStatic } from "./http.js";
+import { buildDecisionFeedbackPayload, meiroFeedbackEndpoint } from "./meiroFeedback.js";
 import { createProfileCache, profileCacheKey } from "./profileCache.js";
 import { profileCacheWithDiagnostics } from "./profileDiagnostics.js";
 import { createRateLimiter } from "./rateLimiter.js";
@@ -122,6 +123,10 @@ async function routeApi(req, res, url) {
     validateEvaluateRequest(body);
     const result = await evaluateRequest(body);
     await saveStore();
+    queueDecisionFeedbackDelivery(result, body, {
+      source: body.context?.request_source || "server_evaluate",
+      request_id: res.requestId
+    });
     sendJson(res, 200, result);
     return;
   }
@@ -140,7 +145,12 @@ async function routeApi(req, res, url) {
         rule_version: profile.rule_version ?? body.rule_version
       };
       validateEvaluateRequest(request);
-      results.push(await evaluateRequest(request));
+      const result = await evaluateRequest(request);
+      results.push(result);
+      queueDecisionFeedbackDelivery(result, request, {
+        source: request.context?.request_source || "server_evaluate_batch",
+        request_id: res.requestId
+      });
     }
     await saveStore();
     sendJson(res, 200, { results });
@@ -156,6 +166,10 @@ async function routeApi(req, res, url) {
     enforceAllowedDecision(req, body.decision_key);
     const result = await evaluateClientRequest(body);
     await saveStore();
+    queueDecisionFeedbackDelivery(result, body, {
+      source: body.context?.request_source || "client_evaluate",
+      request_id: res.requestId
+    });
     sendJson(res, 200, result);
     return;
   }
@@ -175,6 +189,10 @@ async function routeApi(req, res, url) {
     enforceClientTokenContext(req, body);
     const result = await evaluateClientSurface(body, req.auth);
     await saveStore();
+    queueSurfaceDecisionFeedbackDelivery(result, body, {
+      source: body.context?.request_source || "client_surface",
+      request_id: res.requestId
+    });
     sendJson(res, 200, result);
     return;
   }
@@ -187,6 +205,22 @@ async function routeApi(req, res, url) {
     enforceClientTokenContext(req, body);
     const result = await evaluateClientSurfaceBatch(req, body);
     await saveStore();
+    for (const [index, item] of (result.results || []).entries()) {
+      const profile = (body.profiles || [])[index] || {};
+      queueSurfaceDecisionFeedbackDelivery(item, {
+        ...profile,
+        surface: body.surface,
+        context: {
+          ...(body.context || {}),
+          ...(profile.context || {}),
+          surface: body.surface,
+          sync_id: body.context?.sync_id || profile.context?.sync_id || ""
+        }
+      }, {
+        source: profile.context?.request_source || body.context?.request_source || "client_surface_batch",
+        request_id: res.requestId
+      });
+    }
     sendJson(res, 200, result);
     return;
   }
@@ -1007,7 +1041,7 @@ async function testMeiroProfileConnection(input = {}) {
       profile_keys: Object.keys(parsed || {}).slice(0, 20),
       message: response.ok ? "Profile API reached" : profileApiDiagnosticMessage({ message: parsed.message || parsed.error, statusCode: response.status })
     };
-    store.recordMeiroDelivery({
+    await recordMeiroDeliverySafe({
       ...result,
       duration_ms: Date.now() - startedAt,
       response_preview: text.slice(0, 500),
@@ -1024,7 +1058,7 @@ async function testMeiroProfileConnection(input = {}) {
       profile_keys: [],
       message: profileApiDiagnosticMessage(error)
     };
-    store.recordMeiroDelivery({ ...result, duration_ms: Date.now() - startedAt, error: error.message });
+    await recordMeiroDeliverySafe({ ...result, duration_ms: Date.now() - startedAt, error: error.message });
     return result;
   }
 }
@@ -1064,7 +1098,7 @@ async function testMeiroFeedbackConnection(input = {}) {
   return deliverMeiroPayload("feedback", endpoint, payload);
 }
 
-async function deliverMeiroPayload(target, endpoint, payload) {
+async function deliverMeiroPayload(target, endpoint, payload, description = "test payload") {
   const startedAt = Date.now();
   let text = "";
   try {
@@ -1079,9 +1113,9 @@ async function deliverMeiroPayload(target, endpoint, payload) {
       ok: response.ok,
       status: response.status,
       endpoint,
-      message: response.ok ? `${target} accepted test payload` : text.slice(0, 300) || `${target} returned an error`
+      message: response.ok ? `${target} accepted ${description}` : text.slice(0, 300) || `${target} returned an error`
     };
-    store.recordMeiroDelivery({
+    await recordMeiroDeliverySafe({
       ...result,
       duration_ms: Date.now() - startedAt,
       response_preview: text.slice(0, 500),
@@ -1096,7 +1130,7 @@ async function deliverMeiroPayload(target, endpoint, payload) {
       endpoint,
       message: error.message
     };
-    store.recordMeiroDelivery({
+    await recordMeiroDeliverySafe({
       ...result,
       duration_ms: Date.now() - startedAt,
       error: error.message,
@@ -1105,6 +1139,51 @@ async function deliverMeiroPayload(target, endpoint, payload) {
     });
     return result;
   }
+}
+
+async function recordMeiroDeliverySafe(input) {
+  if (typeof store.recordMeiroDelivery !== "function") return null;
+  return maybeAwait(store.recordMeiroDelivery(input));
+}
+
+function queueDecisionFeedbackDelivery(decision, request, options = {}) {
+  setImmediate(() => {
+    deliverDecisionFeedback(decision, request, options).catch((error) => {
+      console.warn(`Meiro feedback delivery failed: ${error.message}`);
+    });
+  });
+}
+
+function queueSurfaceDecisionFeedbackDelivery(surfaceResult, request, options = {}) {
+  if (!surfaceResult?.selected) return;
+  queueDecisionFeedbackDelivery(surfaceResult.selected, {
+    ...request,
+    decision_key: surfaceResult.selected.decision_key,
+    profile_key: surfaceResult.profile_key || request.profile_key,
+    context: {
+      ...(request.context || {}),
+      surface: surfaceResult.surface || request.surface || request.context?.surface || ""
+    }
+  }, {
+    ...options,
+    surface: surfaceResult.surface || request.surface || request.context?.surface || "",
+    surface_result: {
+      surface: surfaceResult.surface || request.surface || "",
+      selected_decision_key: surfaceResult.selected.decision_key,
+      candidate_count: Array.isArray(surfaceResult.candidates) ? surfaceResult.candidates.length : 0,
+      candidates: Array.isArray(surfaceResult.candidates) ? surfaceResult.candidates : []
+    }
+  });
+}
+
+async function deliverDecisionFeedback(decision, request, options = {}) {
+  const settings = await storeCall("getSettings");
+  const endpoint = meiroFeedbackEndpoint(settings);
+  if (!endpoint) return null;
+  const payload = buildDecisionFeedbackPayload(decision, request, { ...options, endpoint });
+  const result = await deliverMeiroPayload("feedback", endpoint, payload, "decision payload");
+  await saveStore();
+  return result;
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
