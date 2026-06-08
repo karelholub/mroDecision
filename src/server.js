@@ -340,7 +340,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "GET" && pathname === "/v1/experiments") {
     requireScope(req, "viewer");
-    const operations = store.getExperimentOperations();
+    const operations = await storeCall("getExperimentOperations");
     if (url.searchParams.get("format") === "csv") {
       sendText(res, 200, experimentOperationsToCsv(operations), "text/csv; charset=utf-8");
       return;

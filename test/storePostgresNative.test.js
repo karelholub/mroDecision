@@ -456,6 +456,30 @@ test("native postgres runtime stores Meiro delivery history", async () => {
   assert.ok(calls.some((call) => call.sql.includes("payload_json::text ILIKE")));
 });
 
+test("native postgres experiment operations report variants and assignments", async () => {
+  const { client, calls } = nativeExperimentClient();
+  const store = new PostgresNativeReadStore(client);
+
+  const operations = await store.getExperimentOperations();
+  const experiment = operations.experiments[0];
+
+  assert.equal(operations.summary.total, 1);
+  assert.equal(operations.summary.running, 1);
+  assert.equal(operations.summary.exposures, 260);
+  assert.equal(operations.summary.conversions, 39);
+  assert.equal(experiment.decision_key, "homepage_experiment");
+  assert.equal(experiment.variant_count, 2);
+  assert.equal(experiment.baseline_variant, "control");
+  assert.equal(experiment.winner_variant, "destination_focus");
+  assert.equal(experiment.variants.find((variant) => variant.key === "control").conversion_rate, 0.1);
+  assert.ok(experiment.variants.find((variant) => variant.key === "destination_focus").lift_vs_baseline > 0);
+  assert.equal(experiment.assignment_history.total, 2);
+  assert.equal(experiment.assignment_history.by_variant[0].key, "destination_focus");
+  assert.equal(experiment.assignment_history.recent.length, 2);
+  assert.ok(calls.some((call) => call.sql.includes("GROUP BY variant_key, event_type")));
+  assert.ok(calls.some((call) => call.sql.includes("date_trunc('hour'")));
+});
+
 test("native postgres content writes replace lookup tables with version history", async () => {
   const { client, calls, lookups, lookupVersions } = nativeContentClient();
   const store = new PostgresNativeReadStore(client);
@@ -1004,6 +1028,140 @@ function nativeRuleClient() {
       }
     }
   };
+}
+
+function nativeExperimentClient() {
+  const calls = [];
+  const rule = {
+    decision_key: "homepage_experiment",
+    name: "Homepage Experiment",
+    description: "",
+    input_schema_json: {},
+    output_schema_json: {},
+    type: "experiment",
+    priority: 10,
+    surface: "homepage",
+    cache_policy_json: {},
+    metadata_json: {
+      experiment: {
+        status: "draft",
+        unit: "profile",
+        variants: [
+          { key: "control", weight: 50, outputs: { headline: "Default" } },
+          { key: "destination_focus", weight: 50, outputs: { headline: "Travel deals" } }
+        ]
+      }
+    },
+    author: "tester",
+    status: "published",
+    tags_json: [],
+    draft_json: {},
+    created_at: "2026-06-01T09:00:00.000Z",
+    updated_at: "2026-06-01T10:00:00.000Z",
+    latest_version: 1,
+    last_published_at: "2026-06-01T10:00:00.000Z"
+  };
+  const version = {
+    version: 1,
+    published_at: "2026-06-01T10:00:00.000Z",
+    author: "publisher",
+    definition_json: {},
+    metadata_json: {
+      experiment: {
+        status: "running",
+        unit: "profile",
+        variants: [
+          { key: "control", weight: 50, outputs: { headline: "Default" } },
+          { key: "destination_focus", weight: 50, outputs: { headline: "Travel deals" } }
+        ]
+      }
+    }
+  };
+  const events = [
+    eventRow("exposure", "control", 100),
+    eventRow("conversion", "control", 10),
+    eventRow("impression", "control", 80),
+    eventRow("exposure", "destination_focus", 160),
+    eventRow("conversion", "destination_focus", 29),
+    eventRow("impression", "destination_focus", 120)
+  ];
+  const assignments = [
+    assignmentRow("assign-1", "destination_focus", "2026-06-01T11:10:00.000Z"),
+    assignmentRow("assign-2", "control", "2026-06-01T11:00:00.000Z")
+  ];
+  return {
+    calls,
+    client: {
+      async query(sql, params = []) {
+        calls.push({ sql, params });
+        if (sql.includes("FROM rule_sets rs")) return { rows: [rule] };
+        if (sql.startsWith("SELECT * FROM rule_sets WHERE decision_key")) return { rows: params[0] === rule.decision_key ? [rule] : [] };
+        if (sql.includes("FROM rule_versions")) return { rows: params[0] === rule.decision_key ? [version] : [] };
+        if (sql.includes("GROUP BY variant_key, event_type")) return { rows: events };
+        if (sql.includes("GROUP BY event_type")) {
+          return { rows: eventTotals(events) };
+        }
+        if (sql.startsWith("SELECT COUNT(*) AS count FROM experiment_assignments")) {
+          return { rows: [{ count: assignments.length }] };
+        }
+        if (sql.startsWith("SELECT *") && sql.includes("FROM experiment_assignments")) {
+          return { rows: [...assignments].sort((a, b) => String(b.assigned_at).localeCompare(String(a.assigned_at))) };
+        }
+        if (sql.includes("date_trunc('hour'")) {
+          return { rows: groupAssignmentTrend(assignments) };
+        }
+        if (sql.includes("FROM experiment_assignments") && sql.includes("GROUP BY key")) {
+          const column = sql.match(/NULLIF\(([^,]+), ''\)/)?.[1] || "variant_key";
+          return { rows: groupRows(assignments, column).map(({ key, count }) => ({ key: key || "(empty)", count })) };
+        }
+        return { rows: [] };
+      }
+    }
+  };
+}
+
+function eventRow(eventType, variantKey, count) {
+  return {
+    variant_key: variantKey,
+    event_type: eventType,
+    count,
+    unique_profiles: count,
+    last_seen_at: "2026-06-01T12:00:00.000Z"
+  };
+}
+
+function eventTotals(events) {
+  return [...events.reduce((map, row) => {
+    const existing = map.get(row.event_type) || { event_type: row.event_type, count: 0, unique_profiles: 0, last_seen_at: "" };
+    existing.count += row.count;
+    existing.unique_profiles += row.unique_profiles;
+    if (row.last_seen_at > existing.last_seen_at) existing.last_seen_at = row.last_seen_at;
+    map.set(row.event_type, existing);
+    return map;
+  }, new Map()).values()];
+}
+
+function assignmentRow(id, variantKey, assignedAt) {
+  return {
+    id,
+    assigned_at: assignedAt,
+    decision_key: "homepage_experiment",
+    profile_key: `profile-${id}`,
+    rule_version: 1,
+    variant_key: variantKey,
+    strategy: "fixed",
+    reason: "bucket",
+    bucket: variantKey === "control" ? 20 : 80,
+    assignment_json: {}
+  };
+}
+
+function groupAssignmentTrend(assignments) {
+  return groupRows(assignments, "variant_key").map(({ key, count }) => ({
+    bucket: "2026-06-01T11:00:00.000Z",
+    variant_key: key || "(empty)",
+    count
+  }));
 }
 
 function extractClientEventFilters(sql, params) {

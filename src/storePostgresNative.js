@@ -507,6 +507,184 @@ export class PostgresNativeReadStore {
     };
   }
 
+  async getExperimentOperations() {
+    const rules = (await this.listRuleSets()).filter((rule) => rule.type === "experiment");
+    const experiments = [];
+    for (const rule of rules) {
+      let publishedVersion = null;
+      try {
+        publishedVersion = rule.version ? await this.getVersion(rule.decision_key) : null;
+      } catch {
+        publishedVersion = null;
+      }
+      const draftExperiment = rule.metadata?.experiment || {};
+      const publishedExperiment = publishedVersion?.metadata?.experiment || {};
+      const activeExperiment = publishedVersion ? publishedExperiment : draftExperiment;
+      const variants = Array.isArray(activeExperiment.variants) ? activeExperiment.variants : [];
+      const eventRows = await this.client.query(
+        `SELECT
+          variant_key,
+          event_type,
+          COUNT(*) AS count,
+          COUNT(DISTINCT profile_key) AS unique_profiles,
+          MAX(occurred_at) AS last_seen_at
+         FROM client_events
+         WHERE decision_key = $1
+         GROUP BY variant_key, event_type
+         ORDER BY variant_key ASC, event_type ASC`,
+        [rule.decision_key]
+      );
+      const eventTotals = await this.client.query(
+        `SELECT
+          event_type,
+          COUNT(*) AS count,
+          COUNT(DISTINCT profile_key) AS unique_profiles,
+          MAX(occurred_at) AS last_seen_at
+         FROM client_events
+         WHERE decision_key = $1
+         GROUP BY event_type
+         ORDER BY event_type ASC`,
+        [rule.decision_key]
+      );
+      const variantMetrics = variants.map((variant) => {
+        const rows = eventRows.rows.filter((row) => (row.variant_key || "") === (variant.key || ""));
+        const events = eventCounts(rows);
+        return {
+          key: variant.key,
+          weight: Number(variant.weight || 0),
+          outputs: isPlainObject(variant.outputs) ? variant.outputs : {},
+          events,
+          conversion_rate: conversionRate(events)
+        };
+      });
+      const unconfiguredVariantRows = eventRows.rows
+        .filter((row) => row.variant_key && !variants.some((variant) => variant.key === row.variant_key))
+        .reduce((groups, row) => {
+          const existing = groups.get(row.variant_key) || [];
+          existing.push(row);
+          groups.set(row.variant_key, existing);
+          return groups;
+        }, new Map());
+      for (const [key, rows] of unconfiguredVariantRows.entries()) {
+        const events = eventCounts(rows);
+        variantMetrics.push({ key, weight: 0, outputs: {}, events, conversion_rate: conversionRate(events), configured: false });
+      }
+      const events = eventCounts(eventTotals.rows);
+      const baseline = baselineVariant(variantMetrics);
+      for (const variant of variantMetrics) {
+        variant.baseline = baseline ? variant.key === baseline.key : false;
+        variant.lift_vs_baseline = baseline && baseline.conversion_rate > 0
+          ? (variant.conversion_rate - baseline.conversion_rate) / baseline.conversion_rate
+          : null;
+        variant.significance = experimentSignificance(variant, baseline);
+      }
+      const winner = winnerVariant(variantMetrics);
+      const significantWinner = significantWinnerVariant(variantMetrics);
+      const assignmentHistory = await this.getExperimentAssignmentHistory(rule.decision_key);
+      const winnerRecommendation = experimentWinnerRecommendation({
+        rule,
+        experiment: activeExperiment,
+        variants: variantMetrics,
+        winner,
+        significantWinner
+      });
+      experiments.push({
+        name: rule.name,
+        decision_key: rule.decision_key,
+        surface: rule.surface || "",
+        status: rule.status,
+        experiment_status: activeExperiment.status || "draft",
+        experiment_mode: activeExperiment.mode === "bandit" || activeExperiment.bandit?.enabled === true ? "bandit" : "fixed",
+        bandit: activeExperiment.bandit || null,
+        draft_status: draftExperiment.status || "draft",
+        published_status: publishedExperiment.status || "",
+        assignment_unit: activeExperiment.unit || "profile",
+        version: rule.version || null,
+        last_published_at: rule.last_published_at || null,
+        updated_at: rule.updated_at,
+        variant_count: variants.length,
+        allocation_total: variants.reduce((sum, variant) => sum + Number(variant.weight || 0), 0),
+        variants: variantMetrics,
+        events,
+        conversion_rate: conversionRate(events),
+        baseline_variant: baseline?.key || "",
+        winner_variant: winner?.key || "",
+        winner_lift_vs_baseline: winner?.lift_vs_baseline ?? null,
+        significant_winner_variant: significantWinner?.key || "",
+        significant_winner_confidence: significantWinner?.significance?.confidence || 0,
+        winner_recommendation: winnerRecommendation,
+        assignment_history: assignmentHistory
+      });
+    }
+    return {
+      generated_at: new Date().toISOString(),
+      summary: {
+        total: experiments.length,
+        running: experiments.filter((item) => item.status === "published" && item.experiment_status === "running").length,
+        paused: experiments.filter((item) => item.status !== "archived" && item.experiment_status === "paused").length,
+        draft: experiments.filter((item) => item.status !== "archived" && item.experiment_status === "draft").length,
+        archived: experiments.filter((item) => item.status === "archived").length,
+        exposures: experiments.reduce((sum, item) => sum + Number(item.events.exposure?.count || 0), 0),
+        impressions: experiments.reduce((sum, item) => sum + Number(item.events.impression?.count || 0), 0),
+        conversions: experiments.reduce((sum, item) => sum + Number(item.events.conversion?.count || 0), 0)
+      },
+      experiments
+    };
+  }
+
+  async getExperimentAssignmentHistory(decisionKey, options = {}) {
+    const windowHours = Math.max(1, Math.min(Number(options.window_hours || 24), 168));
+    const end = floorToHour(new Date(Date.now()));
+    const start = options.since ? new Date(options.since) : new Date(end.getTime() - (windowHours - 1) * 60 * 60 * 1000);
+    const since = start.toISOString();
+    const total = await this.client.query(
+      "SELECT COUNT(*) AS count FROM experiment_assignments WHERE decision_key = $1 AND assigned_at >= $2",
+      [decisionKey, since]
+    );
+    const recent = await this.client.query(
+      `SELECT *
+       FROM experiment_assignments
+       WHERE decision_key = $1 AND assigned_at >= $2
+       ORDER BY assigned_at DESC
+       LIMIT $3`,
+      [decisionKey, since, Math.min(Number(options.limit || 100), 500)]
+    );
+    const trendRows = await this.client.query(
+      `SELECT
+        date_trunc('hour', assigned_at) AS bucket,
+        COALESCE(NULLIF(variant_key, ''), '(empty)') AS variant_key,
+        COUNT(*) AS count
+       FROM experiment_assignments
+       WHERE decision_key = $1 AND assigned_at >= $2
+       GROUP BY bucket, variant_key
+       ORDER BY bucket ASC, variant_key ASC`,
+      [decisionKey, since]
+    );
+    return {
+      window_hours: windowHours,
+      total: Number(total.rows[0]?.count || 0),
+      by_variant: await this.assignmentGroup(decisionKey, since, "variant_key"),
+      by_strategy: await this.assignmentGroup(decisionKey, since, "strategy"),
+      by_reason: await this.assignmentGroup(decisionKey, since, "reason"),
+      trend: assignmentTrend(trendRows.rows, start, windowHours),
+      recent: recent.rows.map(rowToExperimentAssignment).slice(0, 12)
+    };
+  }
+
+  async assignmentGroup(decisionKey, since, column) {
+    const allowed = new Set(["variant_key", "strategy", "reason"]);
+    if (!allowed.has(column)) return [];
+    const result = await this.client.query(
+      `SELECT COALESCE(NULLIF(${column}, ''), '(empty)') AS key, COUNT(*) AS count
+       FROM experiment_assignments
+       WHERE decision_key = $1 AND assigned_at >= $2
+       GROUP BY key
+       ORDER BY count DESC, key ASC`,
+      [decisionKey, since]
+    );
+    return result.rows.map((row) => ({ key: row.key, count: Number(row.count || 0) }));
+  }
+
   async getClientEventMetrics(params = {}) {
     const values = [];
     const where = [];
@@ -1460,6 +1638,50 @@ function rowToPrecomputeRun(row) {
   };
 }
 
+function rowToExperimentAssignment(row) {
+  return {
+    id: row.id,
+    assigned_at: isoValue(row.assigned_at),
+    decision_key: row.decision_key,
+    profile_key: row.profile_key,
+    rule_version: Number(row.rule_version || 0),
+    variant_key: row.variant_key,
+    strategy: row.strategy,
+    reason: row.reason,
+    bucket: row.bucket == null ? null : Number(row.bucket),
+    assignment: parseJson(row.assignment_json, {})
+  };
+}
+
+function assignmentTrend(rows = [], start, windowHours) {
+  const buckets = new Map();
+  const startDate = floorToHour(start instanceof Date ? start : new Date(start));
+  for (let index = 0; index < windowHours; index += 1) {
+    const bucket = new Date(startDate.getTime() + index * 60 * 60 * 1000).toISOString();
+    buckets.set(bucket, { bucket, total: 0, variants: [] });
+  }
+  for (const row of rows) {
+    const bucket = floorToHour(row.bucket).toISOString();
+    if (!buckets.has(bucket)) buckets.set(bucket, { bucket, total: 0, variants: [] });
+    const item = buckets.get(bucket);
+    const count = Number(row.count || 0);
+    item.total += count;
+    item.variants.push({ key: row.variant_key || "(empty)", count });
+  }
+  return [...buckets.values()].map((item) => ({
+    ...item,
+    variants: item.variants
+      .map((variant) => ({ ...variant, share: item.total ? variant.count / item.total : 0 }))
+      .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key))
+  }));
+}
+
+function floorToHour(value) {
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  date.setUTCMinutes(0, 0, 0);
+  return date;
+}
+
 function precomputeRunMetrics(runs = []) {
   const latest = runs[0] || null;
   const totals = runs.reduce(
@@ -1480,6 +1702,187 @@ function precomputeRunMetrics(runs = []) {
     error_rate: totals.profiles ? totals.errors / totals.profiles : 0,
     latest_run: latest
   };
+}
+
+function eventCounts(rows = []) {
+  const counts = {};
+  for (const row of rows) {
+    counts[row.event_type] = {
+      count: Number(row.count || 0),
+      unique_profiles: Number(row.unique_profiles || 0),
+      last_seen_at: row.last_seen_at ? isoValue(row.last_seen_at) : null
+    };
+  }
+  return counts;
+}
+
+function conversionRate(events = {}) {
+  const exposures = Number(events.exposure?.count || 0);
+  if (!exposures) return 0;
+  return Number(events.conversion?.count || 0) / exposures;
+}
+
+function baselineVariant(variants = []) {
+  return variants.find((variant) => variant.key === "control") || variants[0] || null;
+}
+
+function winnerVariant(variants = []) {
+  return variants
+    .filter((variant) => Number(variant.events?.exposure?.count || 0) > 0)
+    .sort(
+      (left, right) =>
+        Number(right.conversion_rate || 0) - Number(left.conversion_rate || 0) ||
+        Number(right.events?.conversion?.count || 0) - Number(left.events?.conversion?.count || 0) ||
+        String(left.key || "").localeCompare(String(right.key || ""))
+    )[0] || null;
+}
+
+function significantWinnerVariant(variants = []) {
+  return variants
+    .filter((variant) => !variant.baseline && variant.significance?.significant && Number(variant.lift_vs_baseline || 0) > 0)
+    .sort(
+      (left, right) =>
+        Number(right.significance.confidence || 0) - Number(left.significance.confidence || 0) ||
+        Number(right.lift_vs_baseline || 0) - Number(left.lift_vs_baseline || 0)
+    )[0] || null;
+}
+
+function experimentWinnerRecommendation({ rule = {}, experiment = {}, variants = [], winner = null, significantWinner = null } = {}) {
+  const baseline = baselineVariant(variants);
+  const candidate = significantWinner || null;
+  const candidateWeight = candidate ? Number(candidate.weight || 0) : 0;
+  const checks = [
+    {
+      key: "published",
+      passed: rule.status === "published",
+      label: "Rule is published",
+      detail: rule.status === "published" ? "Live traffic can use this experiment." : "Publish the experiment before winner automation."
+    },
+    {
+      key: "running",
+      passed: experiment.status === "running",
+      label: "Experiment is running",
+      detail: experiment.status === "running" ? "Assignments are active." : "Start the experiment before declaring a winner."
+    },
+    {
+      key: "baseline",
+      passed: Boolean(baseline),
+      label: "Baseline exists",
+      detail: baseline ? `Baseline is ${baseline.key}.` : "A baseline variant is required for significance comparison."
+    },
+    {
+      key: "significance",
+      passed: Boolean(candidate),
+      label: "95% significant winner",
+      detail: candidate
+        ? `${candidate.key} is significant at ${Math.round(Number(candidate.significance?.confidence || 0) * 100)}% confidence.`
+        : winner?.key
+          ? `${winner.key} leads on conversion rate but is not yet a significant positive winner.`
+          : "No winner candidate has exposure yet."
+    },
+    {
+      key: "not_already_promoted",
+      passed: !candidate || candidateWeight < 100,
+      label: "Winner draft still needed",
+      detail: candidate
+        ? candidateWeight >= 100
+          ? `${candidate.key} already has 100% allocation.`
+          : "A winner draft can change allocation."
+        : "Waiting for a significant winner before preparing a draft."
+    }
+  ];
+  const eligible = checks.every((check) => check.passed);
+  return {
+    status: eligible ? "ready" : candidate && candidateWeight >= 100 ? "already_promoted" : "not_ready",
+    action: eligible ? "prepare_winner_draft" : "monitor",
+    eligible,
+    variant_key: candidate?.key || "",
+    observed_winner_variant: winner?.key || "",
+    confidence: candidate?.significance?.confidence || 0,
+    lift_vs_baseline: candidate?.lift_vs_baseline ?? null,
+    checks,
+    message: eligible
+      ? `Prepare a guarded draft that shifts ${candidate.key} to 100% allocation.`
+      : candidate && candidateWeight >= 100
+        ? `${candidate.key} is already allocated at 100%.`
+        : "Keep monitoring until the experiment has a significant positive winner."
+  };
+}
+
+function experimentSignificance(variant = {}, baseline = null) {
+  const variantExposures = Number(variant.events?.exposure?.count || 0);
+  const variantConversions = Number(variant.events?.conversion?.count || 0);
+  const baselineExposures = Number(baseline?.events?.exposure?.count || 0);
+  const baselineConversions = Number(baseline?.events?.conversion?.count || 0);
+  const minimumExposuresPerVariant = 100;
+  const needsExposure = Math.max(0, minimumExposuresPerVariant - Math.min(variantExposures, baselineExposures));
+  if (!baseline || variant.baseline) {
+    return {
+      status: variant.baseline ? "baseline" : "not_comparable",
+      significant: false,
+      confidence: 0,
+      p_value: null,
+      minimum_exposures_per_variant: minimumExposuresPerVariant,
+      needs_more_exposures: Math.max(0, minimumExposuresPerVariant - variantExposures),
+      note: variant.baseline ? "Baseline variant" : "No baseline variant available"
+    };
+  }
+  if (!variantExposures || !baselineExposures) {
+    return {
+      status: "insufficient_data",
+      significant: false,
+      confidence: 0,
+      p_value: null,
+      minimum_exposures_per_variant: minimumExposuresPerVariant,
+      needs_more_exposures: needsExposure,
+      note: "Need exposures for both baseline and variant"
+    };
+  }
+  const p1 = variantConversions / variantExposures;
+  const p2 = baselineConversions / baselineExposures;
+  const pooled = (variantConversions + baselineConversions) / (variantExposures + baselineExposures);
+  const standardError = Math.sqrt(pooled * (1 - pooled) * ((1 / variantExposures) + (1 / baselineExposures)));
+  if (!standardError) {
+    return {
+      status: "no_variance",
+      significant: false,
+      confidence: 0,
+      p_value: null,
+      minimum_exposures_per_variant: minimumExposuresPerVariant,
+      needs_more_exposures: needsExposure,
+      note: "No conversion variance yet"
+    };
+  }
+  const z = (p1 - p2) / standardError;
+  const pValue = 2 * (1 - normalCdf(Math.abs(z)));
+  const confidence = Math.max(0, Math.min(1, 1 - pValue));
+  const significant = confidence >= 0.95 && needsExposure === 0;
+  return {
+    status: significant ? "significant_95" : needsExposure > 0 ? "needs_sample" : "not_significant",
+    significant,
+    confidence,
+    p_value: pValue,
+    z_score: z,
+    minimum_exposures_per_variant: minimumExposuresPerVariant,
+    needs_more_exposures: needsExposure,
+    note: significant
+      ? "Significant at 95% confidence"
+      : needsExposure > 0
+        ? `Need at least ${needsExposure} more exposures per compared variant before declaring significance`
+        : "Difference is not significant at 95% confidence"
+  };
+}
+
+function normalCdf(value) {
+  return 0.5 * (1 + erf(value / Math.SQRT2));
+}
+
+function erf(value) {
+  const sign = value < 0 ? -1 : 1;
+  const x = Math.abs(value);
+  const t = 1 / (1 + 0.3275911 * x);
+  const approximation = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return sign * approximation;
 }
 
 function rowToClientEventMetric(row) {
