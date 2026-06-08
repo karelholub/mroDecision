@@ -82,26 +82,35 @@ Restore by stopping the service, replacing the database files, and starting the 
 
 ## Managed Database Migration Path
 
-The app now starts through an explicit store adapter registry controlled by `DEE_STORE_ADAPTER`. The only implemented adapter is currently:
+The app starts through an explicit store adapter registry controlled by `DEE_STORE_ADAPTER`. SQLite remains the default:
 
 ```bash
 DEE_STORE_ADAPTER=sqlite
 ```
 
-Unsupported adapter values fail startup with a clear error. This is deliberate: production deployments should not silently fall back to local-file storage when a managed database was expected. `/v1/ready` and Settings runtime metadata report the active adapter and its capabilities.
+Managed Postgres snapshot mode can be enabled with:
 
-A managed database migration should add a real adapter implementation, not a connection-string-only switch.
+```bash
+DEE_STORE_ADAPTER=postgres
+DEE_DATABASE_URL=postgres://user:pass@host:5432/db
+DEE_POSTGRES_SNAPSHOT_TABLE=dee_store_snapshots
+```
+
+This mode stores the full DEE SQLite-compatible snapshot in a managed Postgres JSONB table. It gives managed-database persistence, provider backups, and easier restore workflows, but it is intentionally reported as a single-writer adapter. Do not use it for horizontal write scaling across multiple active DEE replicas.
+
+Unsupported adapter values fail startup with a clear error. This is deliberate: production deployments should not silently fall back to local-file storage when a managed database was expected. `/v1/ready` and Settings runtime metadata report the active adapter and its capabilities.
 
 Recommended path:
 
 1. Keep the SQLite adapter as the default implementation.
-2. Add `PostgresStore` or another managed-store implementation behind `DEE_STORE_ADAPTER`.
-3. Add a migration runner for the managed SQL schema instead of relying on SQLite inline `CREATE TABLE IF NOT EXISTS`.
-4. Add integration tests that run against both SQLite and the managed adapter.
-5. Add readiness checks for connection pool health, migration version, and read/write probes.
-6. Only then scale horizontally.
+2. Use Postgres snapshot mode when managed persistence is more important than horizontal writes.
+3. Add a native row-level `PostgresStore` behind `DEE_STORE_ADAPTER` for high-write multi-replica deployments.
+4. Add a migration runner for the managed SQL schema instead of relying on SQLite inline `CREATE TABLE IF NOT EXISTS`.
+5. Add integration tests that run against both SQLite and the native managed adapter.
+6. Add readiness checks for connection pool health, migration version, and read/write probes.
+7. Only then scale horizontally.
 
-Until that adapter exists, run one service replica per SQLite database volume. Multiple service replicas pointed at the same SQLite file over network storage are not recommended.
+Until the native row-level adapter exists, run one active writer per SQLite database volume or Postgres snapshot table. Multiple service replicas pointed at the same SQLite file over network storage are not recommended.
 
 ## Observability
 

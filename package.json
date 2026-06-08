@@ -12,6 +12,9 @@
     "bench": "node scripts/benchmark.js",
     "bench:client": "DEE_BENCH_ENDPOINT=/v1/client/evaluate node scripts/benchmark.js"
   },
+  "optionalDependencies": {
+    "pg": "^8.13.1"
+  },
   "engines": {
     "node": ">=20"
   }

@@ -65,7 +65,13 @@ The store adapter is explicit and defaults to SQLite:
 DEE_STORE_ADAPTER=sqlite npm start
 ```
 
-Only `sqlite` is implemented today. Unsupported adapter values fail startup with a clear error so production deployments do not silently fall back to local-file storage.
+Managed Postgres snapshot mode is available when the optional `pg` package is installed and `DEE_DATABASE_URL` is configured:
+
+```bash
+DEE_STORE_ADAPTER=postgres DEE_DATABASE_URL=postgres://user:pass@host:5432/db npm start
+```
+
+Postgres snapshot mode persists the full DEE store into a managed Postgres JSONB table while keeping SQLite as the in-process execution engine. Use one active writer for this mode; native row-level Postgres remains the path for horizontal write scaling. Unsupported adapter values fail startup with a clear error so production deployments do not silently fall back to local-file storage.
 
 ## API
 

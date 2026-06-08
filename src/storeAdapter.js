@@ -1,5 +1,6 @@
 import { config } from "./config.js";
 import { Store } from "./store.js";
+import { loadPostgresStore, postgresAdapterInfo } from "./storePostgres.js";
 
 export const storeAdapters = {
   sqlite: {
@@ -16,27 +17,14 @@ export const storeAdapters = {
       backup_mode: "file_snapshot"
     },
     load: () => Store.load({ adapter: "sqlite" })
+  },
+  postgres: {
+    ...postgresAdapterInfo,
+    load: () => loadPostgresStore()
   }
 };
 
-export const plannedStoreAdapters = {
-  postgres: {
-    id: "postgres",
-    label: "Postgres",
-    status: "planned",
-    production_notes: "Managed multi-instance database target for enterprise deployments; not available in this local build yet.",
-    capabilities: {
-      persistent: true,
-      multi_instance: true,
-      managed_database: true,
-      transactions: "postgres",
-      online_migrations: true,
-      recommended_max_replicas: null,
-      backup_mode: "managed_database"
-    },
-    requirements: ["DEE_DATABASE_URL", "Postgres driver package", "async store implementation"]
-  }
-};
+export const plannedStoreAdapters = {};
 
 export async function loadStoreAdapter(adapterId = config.storeAdapter) {
   const id = normalizeStoreAdapter(adapterId);
@@ -64,10 +52,11 @@ export function listStoreAdapters() {
   const available = Object.values(storeAdapters).map(({ id, label, production_notes, capabilities }) => ({
     id,
     label,
-    available: true,
-    status: "available",
+    available: id !== "postgres" || Boolean(config.databaseUrl),
+    status: id === "postgres" && !config.databaseUrl ? "configuration_required" : "available",
     production_notes,
-    capabilities
+    capabilities,
+    requirements: id === "postgres" ? ["DEE_DATABASE_URL", "optional pg package"] : []
   }));
   const planned = Object.values(plannedStoreAdapters).map(({ id, label, status, production_notes, capabilities, requirements }) => ({
     id,

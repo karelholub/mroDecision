@@ -861,3 +861,46 @@ test("metrics expose Meiro Pipes in-app precompute profile rollups", async () =>
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("store snapshots round-trip operational tables", async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "dee-store-snapshot-"));
+  process.env.DEE_DATA_DIR = dataDir;
+  process.env.DEE_DB_PATH = path.join(dataDir, "snapshot.sqlite");
+
+  const { Store } = await import(`../src/store.js?snapshot-test=${Date.now()}`);
+  const store = await Store.load();
+  store.createRuleSet(
+    {
+      name: "Snapshot Rule",
+      decision_key: "snapshot_rule",
+      draft: {
+        fallback: { result: "eligible", outputs: { offer_id: "snapshot" } },
+        branches: []
+      }
+    },
+    "tester"
+  );
+  store.addClientEvent({
+    event_id: "snapshot-event",
+    event_type: "impression",
+    occurred_at: "2026-06-05T10:00:00.000Z",
+    decision_key: "snapshot_rule",
+    profile_key: "profile-1",
+    rule_version: 1,
+    variant_key: "control",
+    message_id: "",
+    surface: "homepage",
+    context: {},
+    event: {}
+  });
+
+  const snapshot = store.exportSnapshot();
+  const restored = await Store.loadInMemory();
+  restored.importSnapshot(snapshot);
+
+  assert.equal(restored.getRuleSet("snapshot_rule").name, "Snapshot Rule");
+  assert.equal(restored.countClientEvents({ decision_key: "snapshot_rule" }), 1);
+  assert.equal(restored.exportSnapshot().tables.rule_sets.length, snapshot.tables.rule_sets.length);
+
+  await rm(dataDir, { recursive: true, force: true });
+});

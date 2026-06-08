@@ -53,6 +53,27 @@ const assistantProviderSettingKeys = [
   "assistant_llm_policy",
   "assistant_llm_timeout_ms"
 ];
+const snapshotTables = [
+  "rule_sets",
+  "rule_versions",
+  "lookup_tables",
+  "lookup_table_versions",
+  "messages",
+  "message_versions",
+  "message_assets",
+  "evaluation_profiles",
+  "condition_blocks",
+  "audit_log",
+  "client_events",
+  "precompute_runs",
+  "experiment_assignments",
+  "api_tokens",
+  "settings",
+  "assistant_provider_config_events",
+  "assistant_provider_plan_events",
+  "schema_items",
+  "meiro_deliveries"
+];
 
 export class Store {
   constructor(db, options = {}) {
@@ -70,6 +91,17 @@ export class Store {
     migrate(db);
     await seedIfEmpty(db);
     return new Store(db, { adapter: options.adapter || "sqlite", adapterInfo: options.adapterInfo || defaultSqliteAdapterInfo });
+  }
+
+  static async loadInMemory(options = {}) {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    migrate(db);
+    await seedIfEmpty(db);
+    return new Store(db, {
+      adapter: options.adapter || "sqlite-memory",
+      adapterInfo: options.adapterInfo || defaultSqliteAdapterInfo
+    });
   }
 
   async save() {
@@ -2135,6 +2167,41 @@ export class Store {
     return bundle;
   }
 
+  exportSnapshot() {
+    return {
+      kind: "meiro-dee-store-snapshot",
+      version: 1,
+      exported_at: createdAtNow(),
+      tables: Object.fromEntries(snapshotTables.map((table) => [
+        table,
+        this.db.prepare(`SELECT * FROM ${table}`).all()
+      ]))
+    };
+  }
+
+  importSnapshot(snapshot) {
+    if (!snapshot || snapshot.kind !== "meiro-dee-store-snapshot" || !isPlainObject(snapshot.tables)) {
+      throw new Error("Invalid DEE store snapshot");
+    }
+    this.transaction(() => {
+      for (const table of [...snapshotTables].reverse()) {
+        this.db.prepare(`DELETE FROM ${table}`).run();
+      }
+      for (const table of snapshotTables) {
+        const rows = Array.isArray(snapshot.tables[table]) ? snapshot.tables[table] : [];
+        for (const row of rows) {
+          insertSnapshotRow(this.db, table, row);
+        }
+      }
+    });
+    return {
+      tables: Object.fromEntries(snapshotTables.map((table) => [
+        table,
+        Array.isArray(snapshot.tables[table]) ? snapshot.tables[table].length : 0
+      ]))
+    };
+  }
+
   importBundle(bundle, author) {
     const imported = { rule_sets: 0, lookup_tables: 0, messages: 0, condition_blocks: 0, settings: 0 };
     this.transaction(() => {
@@ -2185,6 +2252,24 @@ export class Store {
       this.transactionDepth -= 1;
     }
   }
+}
+
+function insertSnapshotRow(db, table, row) {
+  if (!snapshotTables.includes(table)) throw new Error(`Unsupported snapshot table: ${table}`);
+  if (!isPlainObject(row)) return;
+  const columns = tableColumns(db, table).filter((column) => Object.prototype.hasOwnProperty.call(row, column));
+  if (!columns.length) return;
+  const placeholders = columns.map(() => "?").join(", ");
+  const sql = `INSERT INTO ${table} (${columns.map(quoteIdentifier).join(", ")}) VALUES (${placeholders})`;
+  db.prepare(sql).run(...columns.map((column) => row[column]));
+}
+
+function tableColumns(db, table) {
+  return db.prepare(`PRAGMA table_info(${table})`).all().map((row) => row.name);
+}
+
+function quoteIdentifier(value) {
+  return `"${String(value).replaceAll('"', '""')}"`;
 }
 
 function migrate(db) {

@@ -11,13 +11,19 @@ test("store adapter registry exposes sqlite capabilities", () => {
   assert.equal(sqlite.capabilities.multi_instance, false);
   const postgres = adapters.find((adapter) => adapter.id === "postgres");
   assert.equal(postgres.available, false);
-  assert.equal(postgres.status, "planned");
-  assert.equal(postgres.capabilities.multi_instance, true);
+  assert.equal(postgres.status, "configuration_required");
+  assert.equal(postgres.capabilities.managed_database, true);
+  assert.equal(postgres.capabilities.snapshot_persistence, true);
+  assert.equal(postgres.capabilities.native_row_store, false);
 });
 
 test("store adapter loader rejects unsupported adapters", async () => {
   await assert.rejects(
     () => loadStoreAdapter("postgres"),
-    /registered but not available/
+    /requires DEE_DATABASE_URL/
+  );
+  await assert.rejects(
+    () => loadStoreAdapter("oracle"),
+    /Unsupported DEE_STORE_ADAPTER/
   );
 });

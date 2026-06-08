@@ -4,6 +4,8 @@ import path from "node:path";
 export const config = {
   port: Number(process.env.PORT || 8080),
   storeAdapter: String(process.env.DEE_STORE_ADAPTER || "sqlite").trim().toLowerCase(),
+  databaseUrl: process.env.DEE_DATABASE_URL || "",
+  postgresSnapshotTable: process.env.DEE_POSTGRES_SNAPSHOT_TABLE || "dee_store_snapshots",
   dataDir: process.env.DEE_DATA_DIR || path.resolve("data"),
   dbPath: process.env.DEE_DB_PATH || path.join(process.env.DEE_DATA_DIR || path.resolve("data"), "dee.sqlite"),
   auditRetentionDays: Number(process.env.DEE_AUDIT_RETENTION_DAYS || 90),
