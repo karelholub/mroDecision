@@ -329,7 +329,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "GET" && pathname === "/v1/metrics/client-events") {
     requireScope(req, "viewer");
-    sendJson(res, 200, { metrics: store.getClientEventMetrics(Object.fromEntries(url.searchParams)) });
+    sendJson(res, 200, { metrics: await storeCall("getClientEventMetrics", Object.fromEntries(url.searchParams)) });
     return;
   }
 
@@ -482,7 +482,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "GET" && pathname === "/v1/audit") {
     requireScope(req, "viewer");
-    const audit = store.queryAudit(Object.fromEntries(url.searchParams));
+    const audit = await storeCall("queryAudit", Object.fromEntries(url.searchParams));
     if (url.searchParams.get("format") === "csv") {
       sendText(res, 200, auditToCsv(audit), "text/csv; charset=utf-8");
       return;

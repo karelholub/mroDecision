@@ -365,6 +365,7 @@ test("native postgres runtime writes audit, client events, and assignments", asy
   });
   const duplicate = await store.addClientEvent({ ...event, event_id: "evt-1" });
   const count = await store.countClientEvents({ event_type: "exposure", decision_key: "next_best_offer", profile_key: "profile-1" });
+  const eventMetrics = await store.getClientEventMetrics({ decision_key: "next_best_offer", recent_limit: 5 });
   const assignment = await store.addExperimentAssignment({
     decision_key: "next_best_offer",
     profile_key: "profile-1",
@@ -373,14 +374,23 @@ test("native postgres runtime writes audit, client events, and assignments", asy
     strategy: "fixed",
     bucket: 42
   });
+  const auditRows = await store.queryAudit({ decision_key: "next_best_offer", matched_rule: "branch_1", search: "solar" });
 
   assert.equal(audit.length, 1);
+  assert.equal(auditRows.length, 1);
+  assert.equal(auditRows[0].outputs.offer_id, "solar");
   assert.equal(event.accepted, true);
   assert.equal(duplicate.duplicate, true);
   assert.equal(count, 1);
+  assert.equal(eventMetrics.by_rule[0].key, "next_best_offer");
+  assert.equal(eventMetrics.by_variant[0].key, "treatment");
+  assert.equal(eventMetrics.by_message[0].key, "hero_message");
+  assert.equal(eventMetrics.by_surface[0].key, "homepage");
+  assert.equal(eventMetrics.recent_events[0].event_id, "evt-1");
   assert.equal(assignments.length, 1);
   assert.equal(assignment.variant_key, "treatment");
   assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO audit_log")));
+  assert.ok(calls.some((call) => call.sql.includes("entry_json::text ILIKE")));
   assert.ok(calls.some((call) => call.sql.includes("ON CONFLICT(event_id) DO NOTHING")));
 });
 
@@ -672,6 +682,21 @@ function nativeRuntimeClient() {
           });
           return { rows: [] };
         }
+        if (sql.startsWith("SELECT entry_json FROM audit_log")) {
+          const filters = extractAuditFilters(sql, params);
+          const rows = audit
+            .filter((row) => Object.entries(filters).every(([key, value]) => {
+              if (key === "search" || key === "matched_rule") {
+                const needle = String(value).toLowerCase().replaceAll("%", "").replaceAll('"', "");
+                return JSON.stringify(row.entry_json).toLowerCase().includes(needle);
+              }
+              return row[key] === value;
+            }))
+            .sort((a, b) => String(b.evaluated_at).localeCompare(String(a.evaluated_at)))
+            .slice(0, Number(params.at(-1) || 100))
+            .map((row) => ({ entry_json: row.entry_json }));
+          return { rows };
+        }
         if (sql.startsWith("INSERT INTO client_events")) {
           if (clientEvents.has(params[0])) return { rows: [] };
           const row = {
@@ -690,7 +715,7 @@ function nativeRuntimeClient() {
           clientEvents.set(params[0], row);
           return { rows: [{ event_json: row.event_json }] };
         }
-        if (sql.startsWith("SELECT event_json FROM client_events")) {
+        if (sql.startsWith("SELECT event_json FROM client_events WHERE event_id")) {
           const row = clientEvents.get(params[0]);
           return { rows: row ? [{ event_json: row.event_json }] : [] };
         }
@@ -698,6 +723,43 @@ function nativeRuntimeClient() {
           const filters = extractClientEventFilters(sql, params);
           const count = [...clientEvents.values()].filter((row) => Object.entries(filters).every(([key, value]) => row[key] === value)).length;
           return { rows: [{ count }] };
+        }
+        if (sql.includes("AS key, event_type") && sql.includes("FROM client_events")) {
+          const filters = extractClientEventFilters(sql, params);
+          const column = sql.match(/SELECT\s+([a-z_]+)\s+AS key/)?.[1] || "decision_key";
+          const grouped = new Map();
+          for (const row of [...clientEvents.values()].filter((item) => Object.entries(filters).every(([key, value]) => item[key] === value))) {
+            const key = `${row[column] || ""}:${row.event_type}`;
+            const existing = grouped.get(key) || {
+              key: row[column] || "",
+              event_type: row.event_type,
+              count: 0,
+              profiles: new Set(),
+              last_seen_at: ""
+            };
+            existing.count += 1;
+            existing.profiles.add(row.profile_key);
+            if (!existing.last_seen_at || row.occurred_at > existing.last_seen_at) existing.last_seen_at = row.occurred_at;
+            grouped.set(key, existing);
+          }
+          return {
+            rows: [...grouped.values()].map((row) => ({
+              key: row.key,
+              event_type: row.event_type,
+              count: row.count,
+              unique_profiles: row.profiles.size,
+              last_seen_at: row.last_seen_at
+            }))
+          };
+        }
+        if (sql.startsWith("SELECT event_json FROM client_events")) {
+          const filters = extractClientEventFilters(sql, params);
+          const rows = [...clientEvents.values()]
+            .filter((row) => Object.entries(filters).every(([key, value]) => row[key] === value))
+            .sort((a, b) => String(b.occurred_at).localeCompare(String(a.occurred_at)))
+            .slice(0, Number(params.at(-1) || 20))
+            .map((row) => ({ event_json: row.event_json }));
+          return { rows };
         }
         if (sql.startsWith("INSERT INTO experiment_assignments")) {
           assignments.push({
@@ -747,6 +809,20 @@ function nativeRuntimeClient() {
       }
     }
   };
+}
+
+function extractAuditFilters(sql, params) {
+  const filters = {};
+  for (const key of ["decision_key", "profile_key", "result"]) {
+    const match = sql.match(new RegExp(`${key} = \\$(\\d+)`));
+    if (match) filters[key] = params[Number(match[1]) - 1];
+  }
+  if (sql.includes("matched_rule") || sql.includes("entry_json::text ILIKE")) {
+    const matches = [...sql.matchAll(/entry_json::text ILIKE \$(\d+)/g)].map((match) => Number(match[1]) - 1);
+    if (matches[0] != null) filters.matched_rule = params[matches[0]];
+    if (matches[1] != null) filters.search = params[matches[1]];
+  }
+  return filters;
 }
 
 function extractMeiroDeliveryFilters(sql, params) {

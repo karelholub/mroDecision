@@ -142,6 +142,40 @@ export class PostgresNativeReadStore {
     );
   }
 
+  async queryAudit(params = {}) {
+    const values = [];
+    const where = [];
+    for (const key of ["decision_key", "profile_key", "result"]) {
+      if (params[key]) {
+        values.push(String(params[key]));
+        where.push(`${key} = $${values.length}`);
+      }
+    }
+    if (params.from) {
+      values.push(String(params.from));
+      where.push(`evaluated_at >= $${values.length}`);
+    }
+    if (params.to) {
+      values.push(String(params.to));
+      where.push(`evaluated_at <= $${values.length}`);
+    }
+    if (params.matched_rule) {
+      values.push(`%"${String(params.matched_rule)}"%`);
+      where.push(`entry_json::text ILIKE $${values.length}`);
+    }
+    if (params.search) {
+      values.push(`%${String(params.search)}%`);
+      where.push(`entry_json::text ILIKE $${values.length}`);
+    }
+    const requestedLimit = Number(params.limit || 100);
+    values.push(Math.min(Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 100, 1000));
+    const result = await this.client.query(
+      `SELECT entry_json FROM audit_log ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY evaluated_at DESC LIMIT $${values.length}`,
+      values
+    );
+    return result.rows.map((row) => parseJson(row.entry_json, {}));
+  }
+
   async addExperimentAssignment(input = {}) {
     const assignment = {
       id: input.id || randomId(16),
@@ -238,6 +272,68 @@ export class PostgresNativeReadStore {
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const result = await this.client.query(`SELECT COUNT(*) AS count FROM client_events ${where}`, values);
     return Number(result.rows[0]?.count || 0);
+  }
+
+  async getClientEventMetrics(params = {}) {
+    const values = [];
+    const where = [];
+    for (const key of ["decision_key", "profile_key", "event_type", "variant_key", "message_id", "surface"]) {
+      if (params[key]) {
+        values.push(String(params[key]));
+        where.push(`${key} = $${values.length}`);
+      }
+    }
+    if (params.event_object) {
+      values.push(String(params.event_object), String(params.event_object));
+      where.push(`(variant_key = $${values.length - 1} OR message_id = $${values.length})`);
+    }
+    if (params.from) {
+      values.push(String(params.from));
+      where.push(`occurred_at >= $${values.length}`);
+    }
+    if (params.to) {
+      values.push(String(params.to));
+      where.push(`occurred_at <= $${values.length}`);
+    }
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    const requestedLimit = Number(params.limit || 10);
+    const limit = Math.min(Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 10, 100);
+    const group = async (column) => {
+      const result = await this.client.query(
+        `SELECT ${column} AS key, event_type, COUNT(*) AS count, COUNT(DISTINCT profile_key) AS unique_profiles, MAX(occurred_at) AS last_seen_at
+         FROM client_events
+         ${whereSql}
+         GROUP BY ${column}, event_type
+         ORDER BY count DESC, key ASC
+         LIMIT $${values.length + 1}`,
+        [...values, limit]
+      );
+      return result.rows.map(rowToClientEventMetric);
+    };
+    const recentLimit = Math.min(Number(params.recent_limit || 20) || 20, 100);
+    const recent = await this.client.query(
+      `SELECT event_json FROM client_events ${whereSql} ORDER BY occurred_at DESC LIMIT $${values.length + 1}`,
+      [...values, recentLimit]
+    );
+    return {
+      generated_at: new Date().toISOString(),
+      filters: {
+        decision_key: params.decision_key || "",
+        profile_key: params.profile_key || "",
+        event_type: params.event_type || "",
+        variant_key: params.variant_key || "",
+        message_id: params.message_id || "",
+        surface: params.surface || "",
+        from: params.from || "",
+        to: params.to || ""
+      },
+      by_rule: await group("decision_key"),
+      by_variant: await group("variant_key"),
+      by_message: await group("message_id"),
+      by_surface: await group("surface"),
+      by_profile: await group("profile_key"),
+      recent_events: recent.rows.map((row) => parseJson(row.event_json, {}))
+    };
   }
 
   async listLookupTables() {
@@ -1111,6 +1207,16 @@ function rowToMeiroDelivery(row) {
     error: row.error || "",
     response_preview: row.response_preview || "",
     payload: parseJson(row.payload_json, {})
+  };
+}
+
+function rowToClientEventMetric(row) {
+  return {
+    key: row.key || "(empty)",
+    event_type: row.event_type,
+    count: Number(row.count || 0),
+    unique_profiles: Number(row.unique_profiles || 0),
+    last_seen_at: row.last_seen_at ? isoValue(row.last_seen_at) : null
   };
 }
 
