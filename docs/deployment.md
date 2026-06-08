@@ -98,6 +98,8 @@ DEE_POSTGRES_SNAPSHOT_TABLE=dee_store_snapshots
 
 This mode stores the full DEE SQLite-compatible snapshot in a managed Postgres JSONB table. It gives managed-database persistence, provider backups, and easier restore workflows, but it is intentionally reported as a single-writer adapter. Do not use it for horizontal write scaling across multiple active DEE replicas.
 
+Snapshot saves use optimistic revision protection. If two active writers point at the same snapshot table, the later stale writer will fail with a revision conflict instead of silently overwriting newer data. Stop the stale instance, restart it so it reloads the latest snapshot, and keep only one active writer until the native row-level adapter is available.
+
 Unsupported adapter values fail startup with a clear error. This is deliberate: production deployments should not silently fall back to local-file storage when a managed database was expected. `/v1/ready` and Settings runtime metadata report the active adapter and its capabilities.
 
 Recommended path:

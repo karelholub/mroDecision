@@ -67,6 +67,10 @@ export async function loadPostgresStore() {
   }
 }
 
+export const postgresSnapshotInternals = {
+  writeSnapshot
+};
+
 async function loadPg() {
   try {
     return await import("pg");
@@ -101,7 +105,7 @@ async function readSnapshot(pool, table) {
 async function writeSnapshot(pool, table, snapshot, previousRevision) {
   const revision = Number(previousRevision || 0) + 1;
   const savedAt = new Date().toISOString();
-  await pool.query(
+  const result = await pool.query(
     `
       INSERT INTO ${table} (id, revision, saved_at, snapshot_json)
       VALUES ($1, $2, $3, $4::jsonb)
@@ -109,9 +113,13 @@ async function writeSnapshot(pool, table, snapshot, previousRevision) {
         revision = EXCLUDED.revision,
         saved_at = EXCLUDED.saved_at,
         snapshot_json = EXCLUDED.snapshot_json
+      WHERE ${table}.revision = $5
     `,
-    ["singleton", revision, savedAt, JSON.stringify(snapshot)]
+    ["singleton", revision, savedAt, JSON.stringify(snapshot), Number(previousRevision || 0)]
   );
+  if (result.rowCount !== 1) {
+    throw new Error("Postgres snapshot revision conflict. Another DEE writer updated the snapshot; restart this instance before saving again.");
+  }
   return { revision, saved_at: savedAt, snapshot };
 }
 
