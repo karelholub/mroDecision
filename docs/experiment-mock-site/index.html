@@ -3,126 +3,263 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DEE Experiment Mock Site</title>
+    <title>DEE Website Integration Lab</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <header class="topbar">
-      <div>
-        <strong>Northwind Energy</strong>
-        <span>Experiment-enabled demo site</span>
+    <header class="site-shell">
+      <div class="brand">
+        <span class="brand-mark">D</span>
+        <div>
+          <strong>DEE Website Lab</strong>
+          <span>SDK, decisions, experiments, messages, and feedback events</span>
+        </div>
       </div>
-      <button id="new-profile" type="button">New visitor</button>
+      <nav aria-label="Demo sections">
+        <a href="#shopping">Shopping</a>
+        <a href="#account">Account</a>
+        <a href="#diagnostics">Diagnostics</a>
+      </nav>
     </header>
 
     <main>
-      <section class="hero" id="hero">
-        <div class="hero-copy">
-          <span id="variant-badge">Waiting for DEE</span>
-          <h1 id="hero-title">Smarter home energy, tested in real time.</h1>
-          <p id="hero-body">Use this page to call DEE, render the assigned experiment variant, and send exposure/impression feedback.</p>
-          <div class="hero-actions">
-            <a id="primary-cta" href="#plans">Explore plans</a>
-            <button id="secondary-cta" type="button">Send exposure</button>
-          </div>
+      <section class="lab-hero">
+        <div>
+          <span class="eyebrow">Integration-ready mock site</span>
+          <h1>Test how DEE personalizes a real website journey.</h1>
+          <p>
+            This page loads the reusable DEE Web SDK, evaluates multiple placements, renders returned content,
+            and sends exposure, impression, and conversion feedback with idempotency-safe payloads.
+          </p>
         </div>
+        <aside class="connection-card">
+          <div class="card-head">
+            <h2>Runtime setup</h2>
+            <span id="connection-state">Not initialized</span>
+          </div>
+          <form id="runtime-form">
+            <label>
+              DEE base URL
+              <input id="dee-base-url" value="http://localhost:8090" autocomplete="off" />
+            </label>
+            <label>
+              Client token
+              <input id="dee-token" type="password" value="dev-admin-token" autocomplete="off" />
+            </label>
+            <div class="form-grid">
+              <label>
+                Hero experiment key
+                <input id="hero-decision-key" value="smoke_experiment" autocomplete="off" />
+              </label>
+              <label>
+                Offer decision key
+                <input id="offer-decision-key" value="next_best_offer" autocomplete="off" />
+              </label>
+            </div>
+            <div class="form-grid">
+              <label>
+                Message decision key
+                <input id="message-decision-key" value="inapp_homepage_message" autocomplete="off" />
+              </label>
+              <label>
+                Request surface
+                <input id="request-surface" value="homepage" autocomplete="off" />
+              </label>
+            </div>
+            <div class="form-grid">
+              <label>
+                Profile key
+                <input id="profile-key" autocomplete="off" />
+              </label>
+              <label>
+                Identifier email
+                <input id="identifier-email" autocomplete="off" />
+              </label>
+            </div>
+            <div class="form-grid">
+              <label>
+                Enrichment
+                <select id="profile-enrichment">
+                  <option value="always">Fetch from Meiro when possible</option>
+                  <option value="off">Use local payload only</option>
+                  <option value="missing_only">Fetch only missing fields</option>
+                </select>
+              </label>
+              <label>
+                QA override
+                <select id="qa-override">
+                  <option value="">Normal assignment</option>
+                  <option value="__holdout">Force holdout</option>
+                  <option value="control">Force control</option>
+                  <option value="treatment">Force treatment</option>
+                  <option value="destination_focus">Force destination_focus</option>
+                  <option value="green_offer">Force green_offer</option>
+                </select>
+              </label>
+            </div>
+            <div class="form-grid">
+              <label>
+                Lead score
+                <input id="lead-score" type="number" value="82" />
+              </label>
+              <label>
+                Sustainability score
+                <input id="sustainability-score" type="number" value="74" />
+              </label>
+            </div>
+            <label class="check-row">
+              <input id="send-local-payload" type="checkbox" />
+              Include local attributes in evaluation requests
+            </label>
+            <label class="check-row">
+              <input id="auto-exposure" type="checkbox" checked />
+              SDK sends experiment exposure after render
+            </label>
+            <div class="button-row">
+              <button class="primary" type="submit">Apply and evaluate all</button>
+              <button id="new-visitor" type="button">New visitor</button>
+            </div>
+          </form>
+        </aside>
       </section>
 
-      <section class="workspace">
-        <form id="decision-form" class="panel controls">
-          <div>
-            <h2>Experiment request</h2>
-            <p>Configure the DEE endpoint and profile context used by this mock website.</p>
-          </div>
+      <section class="kpi-strip" aria-label="Integration coverage">
+        <article>
+          <span>SDK placements</span>
+          <strong id="metric-placements">0</strong>
+        </article>
+        <article>
+          <span>Decisions</span>
+          <strong id="metric-decisions">0</strong>
+        </article>
+        <article>
+          <span>Feedback events</span>
+          <strong id="metric-events">0</strong>
+        </article>
+        <article>
+          <span>Last result</span>
+          <strong id="metric-result">Idle</strong>
+        </article>
+      </section>
 
-          <label>
-            DEE base URL
-            <input id="dee-base-url" value="http://localhost:8090" />
-          </label>
-          <label>
-            Client token
-            <input id="dee-token" type="password" value="dev-admin-token" />
-          </label>
-          <div class="grid-two">
-            <label>
-              Decision key
-              <input id="decision-key" value="smoke_experiment" />
-            </label>
-            <label>
-              Surface
-              <input id="surface" value="homepage_hero" />
-            </label>
+      <section class="journey-grid" id="shopping">
+        <article class="commerce-stage hero-stage">
+          <div class="stage-copy">
+            <span class="eyebrow">Homepage hero experiment</span>
+            <div
+              id="hero-placement"
+              data-dee-placement="homepage_hero"
+              data-dee-surface="homepage_hero"
+              data-dee-decision-key="homepage_hero_experiment"
+              data-dee-template="hero"
+              data-dee-object-type="experiment"
+              data-dee-object-id="homepage_hero"
+            >
+              <span class="variant-badge">Static fallback</span>
+              <h2>Make every trip feel easier from the first click.</h2>
+              <p>Fallback content stays visible if DEE is unreachable or returns no renderable content.</p>
+              <a href="#checkout" data-track-conversion="hero_cta">Find a deal</a>
+            </div>
           </div>
-          <div class="grid-two">
-            <label>
-              Profile key
-              <input id="profile-key" />
-            </label>
-            <label>
-              Force variant
-              <select id="force-variant">
-                <option value="">Use assignment</option>
-                <option value="__holdout">holdout</option>
-                <option value="control">control</option>
-                <option value="treatment">treatment</option>
-              </select>
-            </label>
+        </article>
+
+        <article class="commerce-stage">
+          <div class="stage-head">
+            <div>
+              <span class="eyebrow">Next best offer carousel</span>
+              <h2>Recommended offers</h2>
+            </div>
+            <button data-evaluate-placement="#offer-carousel" type="button">Refresh offers</button>
           </div>
-          <div class="grid-two">
-            <label>
-              Lead score
-              <input id="lead-score" type="number" value="82" />
-            </label>
-            <label>
-              Session id
-              <input id="session-id" />
-            </label>
+          <div
+            id="offer-carousel"
+            class="meiro-banner"
+            data-dee-placement="offer_carousel"
+            data-dee-surface="homepage_offers"
+            data-dee-decision-key="next_best_offer"
+            data-dee-template="cards"
+            data-dee-object-type="offer_carousel"
+            data-dee-object-id="homepage_offers"
+          >
+            <div class="meiro-banner-track" data-dee-track>
+              <a class="meiro-banner-item" href="https://www.flyin.com/en/offers/exclusive-discounts-to-abu-dhabi" target="_blank" rel="noopener noreferrer">
+                <img src="https://ui.cltp.co/offers-ui/OfferPages/offers/cms/abu-dhabi.png" alt="Exclusive Discounts to Abu Dhabi" />
+                <p>Save up to 15% on your trip!</p>
+              </a>
+              <a class="meiro-banner-item" href="https://www.flyin.com/en/offers/exclusive-discounts-to-morocco" target="_blank" rel="noopener noreferrer">
+                <img src="https://ui.cltp.co/offers-ui/OfferPages/offers/cms/morocco.png" alt="Exclusive Discounts to Morocco" />
+                <p>Exclusive Discounts to Morocco</p>
+              </a>
+              <a class="meiro-banner-item" href="https://www.flyin.com/en/offers/special-discounts-on-trips-to-dubai" target="_blank" rel="noopener noreferrer">
+                <img src="https://ui.cltp.co/flyin/prod/merchandising/upload_5a8985aedd1a62dcd0497b1416ec5188.jpg" alt="Special Discounts on Trips to Dubai" />
+                <p>Enjoy deals on flights, hotels and packages.</p>
+              </a>
+            </div>
           </div>
-          <label class="checkbox">
-            <input id="auto-exposure" type="checkbox" checked />
-            Send exposure automatically after a successful assignment
-          </label>
-          <label class="checkbox">
-            <input id="local-profile-payload" type="checkbox" />
-            Send local demo attributes instead of relying on DEE profile enrichment
-          </label>
+        </article>
+
+        <article class="commerce-stage" id="account">
+          <div class="stage-head">
+            <div>
+              <span class="eyebrow">In-app message</span>
+              <h2>Account notification</h2>
+            </div>
+            <button data-evaluate-placement="#message-placement" type="button">Evaluate message</button>
+          </div>
+          <div
+            id="message-placement"
+            class="message-slot"
+            data-dee-placement="account_alert"
+            data-dee-surface="account"
+            data-dee-decision-key="inapp_homepage_message"
+            data-dee-template="message"
+            data-dee-object-type="inapp_message"
+            data-dee-object-id="account_alert"
+          >
+            <span>Static alert</span>
+            <strong>Your travel preferences are ready to personalize.</strong>
+            <p>DEE can replace this with a reusable message template and decision-specific content overrides.</p>
+          </div>
+        </article>
+
+        <article class="commerce-stage checkout-card" id="checkout">
+          <span class="eyebrow">Conversion goal</span>
+          <h2>Complete demo conversion</h2>
+          <p>Use these actions after rendering decisions to validate conversion tracking and experiment operations rollups.</p>
           <div class="button-row">
-            <button class="primary" type="submit">Evaluate variant</button>
             <button id="send-exposure" type="button">Send exposure</button>
             <button id="send-impression" type="button">Send impression</button>
-            <button id="send-conversion" type="button">Send conversion</button>
+            <button id="send-conversion" class="primary" type="button">Send conversion</button>
           </div>
-        </form>
-
-        <section class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>DEE response</h2>
-              <p>Rendered state, event status, and raw payloads.</p>
-            </div>
-            <span id="status-pill">Idle</span>
-          </div>
-          <div id="summary" class="summary-grid"></div>
-          <pre id="output"></pre>
-        </section>
+        </article>
       </section>
 
-      <section id="plans" class="plans">
-        <article>
-          <span>Solar</span>
-          <strong>Lower daytime grid usage</strong>
-        </article>
-        <article>
-          <span>Smart tariff</span>
-          <strong>Shift usage to better hours</strong>
-        </article>
-        <article>
-          <span>Efficiency</span>
-          <strong>Personalized home audit</strong>
-        </article>
+      <section class="diagnostics" id="diagnostics">
+        <div class="panel">
+          <div class="card-head">
+            <h2>Placement decisions</h2>
+            <button id="evaluate-all" type="button">Evaluate all</button>
+          </div>
+          <div id="decision-list" class="decision-list"></div>
+        </div>
+        <div class="panel">
+          <div class="card-head">
+            <h2>Raw request and response</h2>
+            <button id="copy-payload" type="button">Copy latest</button>
+          </div>
+          <pre id="raw-output"></pre>
+        </div>
+        <div class="panel log-panel">
+          <div class="card-head">
+            <h2>Event log</h2>
+            <button id="clear-log" type="button">Clear</button>
+          </div>
+          <ol id="event-log"></ol>
+        </div>
       </section>
     </main>
 
+    <script src="../dee-web-sdk/dee-web-sdk.js"></script>
     <script src="./site.js"></script>
   </body>
 </html>

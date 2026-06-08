@@ -134,18 +134,18 @@ Meiro Pipes integration templates are available in [docs/meiro-pipes](docs/meiro
 - Profile Destination send function for scheduled/batch decisions
 - Example SQL for storing the latest `next_best_offer` result as a profile attribute
 
-## Experiment Mock Website
+## Website Integration Lab
 
-A standalone mock website for testing external app experiment calls is available at [docs/experiment-mock-site](docs/experiment-mock-site).
+A standalone SDK-driven website lab for testing external app integrations is available at [docs/experiment-mock-site](docs/experiment-mock-site). It covers multi-placement SDK evaluation, next-best-offer rendering, in-app message rendering, experiment variant/holdout QA, profile enrichment modes, local attribute payloads, and feedback events.
 
-Run DEE through Docker Compose, then serve the mock site on port `8091`:
+Run DEE through Docker Compose, then serve the docs folder on port `8091`:
 
 ```bash
 docker compose up -d --build
-python3 -m http.server 8091 --directory docs/experiment-mock-site
+python3 -m http.server 8091 --directory docs
 ```
 
-Open `http://localhost:8091`, enter a published experiment `decision_key`, and click **Evaluate variant**. The page calls:
+Open `http://localhost:8091/experiment-mock-site/`, enter the published decision keys for the hero experiment, offer decision, and in-app message, then click **Apply and evaluate all**. The page loads [docs/dee-web-sdk/dee-web-sdk.js](docs/dee-web-sdk/dee-web-sdk.js) and exercises:
 
 - `POST /v1/client/evaluate`
 - `POST /v1/client/exposure`

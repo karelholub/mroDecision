@@ -65,6 +65,7 @@
         profile_key: decision?.profile_key || profileKey(),
         rule_version: decision?.rule_version || null,
         variant_key: variantKey || null,
+        message_id: messageId(decision),
         surface: placement,
         object_type: element.dataset.deeObjectType || "placement",
         object_id: element.dataset.deeObjectId || placement,
@@ -76,7 +77,9 @@
         },
         ...(extra?.event ? { event: extra.event } : {})
       };
-      return post(`/v1/client/${type}`, payload, { keepalive: true });
+      const response = await post(`/v1/client/${type}`, payload, { keepalive: true });
+      element.dispatchEvent(new CustomEvent("dee:event", { detail: { type, payload, response } }));
+      return response;
     }
 
     function buildEvaluateRequest(element, overrides) {
@@ -144,6 +147,10 @@
         placement,
         Date.now()
       ].join(":");
+    }
+
+    function messageId(decision) {
+      return decision?.outputs?.message_id || decision?.outputs?.message?.id || "";
     }
 
     return {
