@@ -1,4 +1,45 @@
+import { randomBytes } from "node:crypto";
 import { nativePostgresAdapterInfo } from "./storePostgresNativeSchema.js";
+
+const allowedSettingKeys = new Set([
+  "environment_label",
+  "audit_retention_days",
+  "client_event_retention_days",
+  "bootstrap_tokens_enabled",
+  "meiro_url",
+  "meiro_source_slug",
+  "meiro_api_url",
+  "meiro_api_token",
+  "meiro_feedback_url",
+  "meiro_skill_url",
+  "meiro_cli_url",
+  "meiro_cli_token",
+  "meiro_profile_cache_ttl_seconds",
+  "schema_sync_interval_minutes",
+  "schema_sync_identifier_type",
+  "schema_sync_identifier_value",
+  "assistant_llm_enabled",
+  "assistant_llm_provider",
+  "assistant_llm_base_url",
+  "assistant_llm_model",
+  "assistant_llm_api_key",
+  "assistant_llm_policy",
+  "assistant_llm_timeout_ms",
+  "schema_last_synced_at",
+  "schema_last_sync_status",
+  "schema_last_sync_error",
+  "schema_last_sync_count"
+]);
+
+const assistantProviderSettingKeys = [
+  "assistant_llm_enabled",
+  "assistant_llm_provider",
+  "assistant_llm_base_url",
+  "assistant_llm_model",
+  "assistant_llm_api_key",
+  "assistant_llm_policy",
+  "assistant_llm_timeout_ms"
+];
 
 export class PostgresNativeReadStore {
   constructor(client, options = {}) {
@@ -103,6 +144,102 @@ export class PostgresNativeReadStore {
   async getSettings() {
     const result = await this.client.query("SELECT key, value_json FROM settings ORDER BY key ASC", []);
     return Object.fromEntries(result.rows.map((row) => [row.key, parseJson(row.value_json)]));
+  }
+
+  async updateSettings(input, author = "system") {
+    const now = new Date().toISOString();
+    const before = await this.getSettings();
+    if (Object.hasOwn(input, "bootstrap_tokens_enabled") && input.bootstrap_tokens_enabled === false && !(await this.hasActiveAdminToken())) {
+      throw new Error("Create an active DB admin token before disabling bootstrap tokens");
+    }
+    await this.transaction(async () => {
+      for (const [key, value] of Object.entries(input || {})) {
+        if (!allowedSettingKeys.has(key)) continue;
+        await this.client.query(
+          `INSERT INTO settings (key, value_json, updated_at, updated_by)
+           VALUES ($1, $2::jsonb, $3, $4)
+           ON CONFLICT(key) DO UPDATE SET
+             value_json = EXCLUDED.value_json,
+             updated_at = EXCLUDED.updated_at,
+             updated_by = EXCLUDED.updated_by`,
+          [key, JSON.stringify(value ?? null), now, author]
+        );
+      }
+    });
+    const updated = await this.getSettings();
+    await this.recordAssistantProviderConfigEvent(input || {}, before, updated, author, now);
+    return updated;
+  }
+
+  async replaceSchemaItems(kind, items, author = "system") {
+    if (!["attribute", "segment", "context"].includes(kind)) throw new Error("Schema kind must be attribute, segment, or context");
+    if (!Array.isArray(items)) throw new Error("Schema items must be an array");
+    const now = new Date().toISOString();
+    await this.transaction(async () => {
+      await this.client.query("DELETE FROM schema_items WHERE kind = $1", [kind]);
+      for (const item of items) {
+        if (!item || typeof item !== "object" || !item.name) throw new Error("Each schema item must include a name");
+        await this.client.query(
+          `INSERT INTO schema_items (kind, name, type, dimension, source, raw_json, updated_at, author)
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+           ON CONFLICT(kind, name) DO UPDATE SET
+             type = EXCLUDED.type,
+             dimension = EXCLUDED.dimension,
+             source = EXCLUDED.source,
+             raw_json = EXCLUDED.raw_json,
+             updated_at = EXCLUDED.updated_at,
+             author = EXCLUDED.author`,
+          [
+            kind,
+            String(item.name),
+            String(item.type || (kind === "segment" ? "boolean" : "string")),
+            item.dimension ? String(item.dimension) : "",
+            item.source ? String(item.source) : "manual",
+            JSON.stringify(item),
+            now,
+            author
+          ]
+        );
+      }
+    });
+    return this.listSchemaItems({ kind });
+  }
+
+  async hasActiveAdminToken() {
+    const result = await this.client.query("SELECT scopes_json FROM api_tokens WHERE revoked_at IS NULL", []);
+    return result.rows.some((row) => {
+      const scopes = parseJson(row.scopes_json, []);
+      return Array.isArray(scopes) && scopes.includes("admin");
+    });
+  }
+
+  async recordAssistantProviderConfigEvent(input, before, after, author = "system", now = new Date().toISOString()) {
+    const touched = assistantProviderSettingKeys.filter((key) => Object.hasOwn(input, key));
+    if (!touched.length) return;
+    const changes = {};
+    for (const key of touched) {
+      const previous = assistantProviderSettingValue(key, before[key]);
+      const current = assistantProviderSettingValue(key, after[key]);
+      if (previous !== current) changes[key] = { from: previous, to: current };
+    }
+    if (!Object.keys(changes).length) return;
+    await this.client.query(
+      `INSERT INTO assistant_provider_config_events (id, changed_at, changed_by, changes_json, snapshot_json)
+       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb)`,
+      [randomId(), now, author || "system", JSON.stringify(changes), JSON.stringify(assistantProviderSnapshot(after))]
+    );
+  }
+
+  async transaction(fn) {
+    await this.client.query("BEGIN", []);
+    try {
+      const result = await fn();
+      await this.client.query("COMMIT", []);
+      return result;
+    } catch (error) {
+      await this.client.query("ROLLBACK", []).catch(() => {});
+      throw error;
+    }
   }
 }
 
@@ -233,6 +370,29 @@ function isoValue(value) {
 
 function normalizeRuleSetType(type) {
   return ["decision", "inapp_message", "experiment"].includes(type) ? type : "decision";
+}
+
+function randomId() {
+  return randomBytes(8).toString("hex");
+}
+
+function assistantProviderSnapshot(settings = {}) {
+  return {
+    enabled: settings.assistant_llm_enabled === true,
+    provider: String(settings.assistant_llm_provider || "openai"),
+    base_url: String(settings.assistant_llm_base_url || ""),
+    model: String(settings.assistant_llm_model || ""),
+    policy: String(settings.assistant_llm_policy || "balanced"),
+    api_key: assistantProviderSettingValue("assistant_llm_api_key", settings.assistant_llm_api_key),
+    timeout_ms: Number(settings.assistant_llm_timeout_ms || 0)
+  };
+}
+
+function assistantProviderSettingValue(key, value) {
+  if (key === "assistant_llm_api_key") return value ? "configured" : "not_configured";
+  if (key === "assistant_llm_enabled") return value === true ? "enabled" : "disabled";
+  if (value == null || value === "") return "";
+  return String(value);
 }
 
 function nativeReadDeploymentReadiness(error = null) {
