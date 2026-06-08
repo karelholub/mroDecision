@@ -320,12 +320,153 @@ test("native postgres rule writes upsert rule versions transactionally", async (
   assert.ok(calls.some((call) => call.sql.startsWith("DELETE FROM rule_versions")));
 });
 
+test("native postgres content writes replace lookup tables with version history", async () => {
+  const { client, calls, lookups, lookupVersions } = nativeContentClient();
+  const store = new PostgresNativeReadStore(client);
+
+  const created = await store.replaceLookupTable(
+    "offer_tiers",
+    {
+      name: "Offer tiers",
+      key_column: "offer_id",
+      rows: [{ offer_id: "solar", tier: "green" }],
+      metadata: { owner: "marketing" }
+    },
+    "editor"
+  );
+  const updated = await store.replaceLookupTable(
+    "offer_tiers",
+    { rows: [{ offer_id: "solar", tier: "premium" }, { offer_id: "loan", tier: "finance" }] },
+    "editor"
+  );
+  const versions = await store.listLookupTableVersions("offer_tiers");
+  const firstVersion = await store.getLookupTableVersion("offer_tiers", 1);
+
+  assert.equal(created.version, 1);
+  assert.equal(updated.version, 2);
+  assert.equal(lookups.get("offer_tiers").name, "Offer tiers");
+  assert.equal(lookups.get("offer_tiers").key_column, "offer_id");
+  assert.equal(lookupVersions.get("offer_tiers").length, 2);
+  assert.deepEqual(versions.map((item) => item.version), [2, 1]);
+  assert.equal(versions[0].row_count, 2);
+  assert.equal(firstVersion.rows[0].tier, "green");
+  assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO lookup_tables")));
+  assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO lookup_table_versions")));
+});
+
+test("native postgres content writes upsert messages with version history", async () => {
+  const { client, calls, messages, messageVersions } = nativeContentClient();
+  const store = new PostgresNativeReadStore(client);
+
+  const created = await store.upsertMessage(
+    "homepage_banner",
+    {
+      name: "Homepage banner",
+      surface: "homepage",
+      content_schema: { fields: ["title", "cta_url"] },
+      default_content: { title: "Welcome", cta_url: "https://example.com" },
+      metadata: { template_type: "banner" }
+    },
+    "editor"
+  );
+  const updated = await store.upsertMessage(
+    "homepage_banner",
+    { default_content: { title: "Welcome back", cta_url: "https://example.com/offer" } },
+    "editor"
+  );
+  const versions = await store.listMessageVersions("homepage_banner");
+  const firstVersion = await store.getMessageVersion("homepage_banner", 1);
+
+  assert.equal(created.version, 1);
+  assert.equal(updated.version, 2);
+  assert.equal(messages.get("homepage_banner").surface, "homepage");
+  assert.equal(messages.get("homepage_banner").content_schema_json.fields[0], "title");
+  assert.equal(messageVersions.get("homepage_banner").length, 2);
+  assert.deepEqual(versions.map((item) => item.version), [2, 1]);
+  assert.deepEqual(versions[0].content_keys, ["title", "cta_url"]);
+  assert.equal(firstVersion.default_content.title, "Welcome");
+  assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO messages")));
+  assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO message_versions")));
+});
+
 function fakeClient(calls, responses) {
   return {
     async query(sql, params = []) {
       calls.push({ sql, params });
       const match = Object.entries(responses).find(([key]) => sql.includes(key));
       return { rows: match ? match[1] : [] };
+    }
+  };
+}
+
+function nativeContentClient() {
+  const calls = [];
+  const lookups = new Map();
+  const lookupVersions = new Map();
+  const messages = new Map();
+  const messageVersions = new Map();
+  return {
+    calls,
+    lookups,
+    lookupVersions,
+    messages,
+    messageVersions,
+    client: {
+      async query(sql, params = []) {
+        calls.push({ sql, params });
+        if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [] };
+        if (sql.startsWith("SELECT * FROM lookup_tables WHERE id")) {
+          const row = lookups.get(params[0]);
+          return { rows: row ? [row] : [] };
+        }
+        if (sql.startsWith("INSERT INTO lookup_tables")) {
+          lookups.set(params[0], lookupRowFromParams(params));
+          return { rows: [] };
+        }
+        if (sql.startsWith("INSERT INTO lookup_table_versions")) {
+          const list = lookupVersions.get(params[0]) || [];
+          const row = lookupVersionRowFromParams(params);
+          const existingIndex = list.findIndex((item) => item.version === row.version);
+          if (existingIndex >= 0) list[existingIndex] = row;
+          else list.push(row);
+          lookupVersions.set(params[0], list);
+          return { rows: [] };
+        }
+        if (sql.startsWith("SELECT * FROM lookup_table_versions WHERE id = $1 AND version")) {
+          return { rows: (lookupVersions.get(params[0]) || []).filter((row) => row.version === params[1]) };
+        }
+        if (sql.startsWith("SELECT * FROM lookup_table_versions WHERE id")) {
+          return { rows: [...(lookupVersions.get(params[0]) || [])].sort((a, b) => b.version - a.version) };
+        }
+        if (sql.startsWith("SELECT * FROM messages WHERE id")) {
+          const row = messages.get(params[0]);
+          return { rows: row ? [row] : [] };
+        }
+        if (sql.startsWith("SELECT MAX(version) AS version FROM message_versions")) {
+          const max = Math.max(0, ...(messageVersions.get(params[0]) || []).map((row) => Number(row.version || 0)));
+          return { rows: [{ version: max || null }] };
+        }
+        if (sql.startsWith("INSERT INTO messages")) {
+          messages.set(params[0], messageRowFromParams(params));
+          return { rows: [] };
+        }
+        if (sql.startsWith("INSERT INTO message_versions")) {
+          const list = messageVersions.get(params[0]) || [];
+          const row = messageVersionRowFromParams(params);
+          const existingIndex = list.findIndex((item) => item.version === row.version);
+          if (existingIndex >= 0) list[existingIndex] = row;
+          else list.push(row);
+          messageVersions.set(params[0], list);
+          return { rows: [] };
+        }
+        if (sql.startsWith("SELECT * FROM message_versions WHERE id = $1 AND version")) {
+          return { rows: (messageVersions.get(params[0]) || []).filter((row) => row.version === params[1]) };
+        }
+        if (sql.startsWith("SELECT * FROM message_versions WHERE id")) {
+          return { rows: [...(messageVersions.get(params[0]) || [])].sort((a, b) => b.version - a.version) };
+        }
+        return { rows: [] };
+      }
     }
   };
 }
@@ -383,6 +524,62 @@ function nativeRuleClient() {
         return { rows: [] };
       }
     }
+  };
+}
+
+function lookupRowFromParams(params) {
+  return {
+    id: params[0],
+    name: params[1],
+    key_column: params[2],
+    rows_json: JSON.parse(params[3]),
+    metadata_json: JSON.parse(params[4]),
+    updated_at: params[5],
+    author: params[6],
+    version: params[7]
+  };
+}
+
+function lookupVersionRowFromParams(params) {
+  return {
+    id: params[0],
+    version: params[1],
+    name: params[2],
+    key_column: params[3],
+    rows_json: JSON.parse(params[4]),
+    metadata_json: JSON.parse(params[5]),
+    updated_at: params[6],
+    author: params[7]
+  };
+}
+
+function messageRowFromParams(params) {
+  return {
+    id: params[0],
+    name: params[1],
+    surface: params[2],
+    status: params[3],
+    content_schema_json: JSON.parse(params[4]),
+    default_content_json: JSON.parse(params[5]),
+    metadata_json: JSON.parse(params[6]),
+    updated_at: params[7],
+    author: params[8],
+    version: params[9]
+  };
+}
+
+function messageVersionRowFromParams(params) {
+  return {
+    id: params[0],
+    version: params[1],
+    name: params[2],
+    surface: params[3],
+    status: params[4],
+    content_schema_json: JSON.parse(params[5]),
+    default_content_json: JSON.parse(params[6]),
+    metadata_json: JSON.parse(params[7]),
+    updated_at: params[8],
+    author: params[9]
   };
 }
 

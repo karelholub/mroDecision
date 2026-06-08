@@ -104,6 +104,83 @@ export class PostgresNativeReadStore {
     return result.rows.map(rowToLookupTable);
   }
 
+  async getLookupTable(id) {
+    const result = await this.client.query("SELECT * FROM lookup_tables WHERE id = $1", [id]);
+    const row = result.rows[0];
+    return row ? rowToLookupTable(row) : null;
+  }
+
+  async replaceLookupTable(id, input = {}, author = "system") {
+    if (!id) throw new Error("Lookup table id is required");
+    const existing = await this.getLookupTable(id);
+    const now = new Date().toISOString();
+    const table = {
+      id,
+      name: input.name || existing?.name || id,
+      key_column: input.key_column || existing?.key_column || "key",
+      rows: Array.isArray(input.rows) ? input.rows : [],
+      metadata: isPlainObject(input.metadata) ? input.metadata : existing?.metadata || {},
+      updated_at: now,
+      author,
+      version: Number(existing?.version || 0) + 1
+    };
+    await this.transaction(async () => {
+      await this.client.query(
+        `INSERT INTO lookup_tables (id, name, key_column, rows_json, metadata_json, updated_at, author, version)
+         VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8)
+         ON CONFLICT(id) DO UPDATE SET
+           name = EXCLUDED.name,
+           key_column = EXCLUDED.key_column,
+           rows_json = EXCLUDED.rows_json,
+           metadata_json = EXCLUDED.metadata_json,
+           updated_at = EXCLUDED.updated_at,
+           author = EXCLUDED.author,
+           version = EXCLUDED.version`,
+        lookupTableParams(table)
+      );
+      await this.insertLookupVersion(table);
+    });
+    return table;
+  }
+
+  async insertLookupVersion(table) {
+    await this.client.query(
+      `INSERT INTO lookup_table_versions (id, version, name, key_column, rows_json, metadata_json, updated_at, author)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8)
+       ON CONFLICT(id, version) DO UPDATE SET
+         name = EXCLUDED.name,
+         key_column = EXCLUDED.key_column,
+         rows_json = EXCLUDED.rows_json,
+         metadata_json = EXCLUDED.metadata_json,
+         updated_at = EXCLUDED.updated_at,
+         author = EXCLUDED.author`,
+      [
+        table.id,
+        Number(table.version || 1),
+        table.name,
+        table.key_column || "key",
+        JSON.stringify(Array.isArray(table.rows) ? table.rows : []),
+        JSON.stringify(isPlainObject(table.metadata) ? table.metadata : {}),
+        table.updated_at || new Date().toISOString(),
+        table.author || "system"
+      ]
+    );
+  }
+
+  async listLookupTableVersions(id) {
+    if (!(await this.getLookupTable(id))) throw new Error(`Lookup table not found: ${id}`);
+    const result = await this.client.query("SELECT * FROM lookup_table_versions WHERE id = $1 ORDER BY version DESC", [id]);
+    return result.rows.map(rowToLookupTableVersionSummary);
+  }
+
+  async getLookupTableVersion(id, requestedVersion) {
+    if (!(await this.getLookupTable(id))) throw new Error(`Lookup table not found: ${id}`);
+    const result = await this.client.query("SELECT * FROM lookup_table_versions WHERE id = $1 AND version = $2", [id, Number(requestedVersion)]);
+    const row = result.rows[0];
+    if (!row) throw new Error(`Lookup table version not found: ${requestedVersion}`);
+    return rowToLookupTable(row);
+  }
+
   async listMessages(params = {}) {
     const values = [];
     const where = [];
@@ -120,6 +197,99 @@ export class PostgresNativeReadStore {
       values
     );
     return result.rows.map(rowToMessage);
+  }
+
+  async getMessage(id) {
+    const result = await this.client.query("SELECT * FROM messages WHERE id = $1", [id]);
+    const row = result.rows[0];
+    return row ? rowToMessage(row) : null;
+  }
+
+  async latestMessageVersion(id) {
+    const result = await this.client.query("SELECT MAX(version) AS version FROM message_versions WHERE id = $1", [id]);
+    return Number(result.rows[0]?.version || 0);
+  }
+
+  async upsertMessage(id, input = {}, author = "system") {
+    if (!id) throw new Error("Message id is required");
+    const existing = await this.getMessage(id);
+    const now = new Date().toISOString();
+    const nextVersion = Number(existing?.version || await this.latestMessageVersion(id) || 0) + 1;
+    const message = {
+      id,
+      name: input.name || existing?.name || id,
+      surface: input.surface || existing?.surface || "",
+      status: ["active", "archived"].includes(input.status) ? input.status : existing?.status || "active",
+      content_schema: isPlainObject(input.content_schema) ? input.content_schema : existing?.content_schema || {},
+      default_content: isPlainObject(input.default_content) ? input.default_content : existing?.default_content || {},
+      metadata: isPlainObject(input.metadata) ? input.metadata : existing?.metadata || {},
+      updated_at: now,
+      author,
+      version: nextVersion
+    };
+    await this.transaction(async () => {
+      await this.client.query(
+        `INSERT INTO messages (
+          id, name, surface, status, content_schema_json, default_content_json, metadata_json, updated_at, author, version
+        ) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, $10)
+        ON CONFLICT(id) DO UPDATE SET
+          name = EXCLUDED.name,
+          surface = EXCLUDED.surface,
+          status = EXCLUDED.status,
+          content_schema_json = EXCLUDED.content_schema_json,
+          default_content_json = EXCLUDED.default_content_json,
+          metadata_json = EXCLUDED.metadata_json,
+          updated_at = EXCLUDED.updated_at,
+          author = EXCLUDED.author,
+          version = EXCLUDED.version`,
+        messageParams(message)
+      );
+      await this.insertMessageVersion(message);
+    });
+    return message;
+  }
+
+  async insertMessageVersion(message) {
+    await this.client.query(
+      `INSERT INTO message_versions (
+         id, version, name, surface, status, content_schema_json, default_content_json, metadata_json, updated_at, author
+       ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10)
+       ON CONFLICT(id, version) DO UPDATE SET
+         name = EXCLUDED.name,
+         surface = EXCLUDED.surface,
+         status = EXCLUDED.status,
+         content_schema_json = EXCLUDED.content_schema_json,
+         default_content_json = EXCLUDED.default_content_json,
+         metadata_json = EXCLUDED.metadata_json,
+         updated_at = EXCLUDED.updated_at,
+         author = EXCLUDED.author`,
+      [
+        message.id,
+        Number(message.version || 1),
+        message.name,
+        message.surface || "",
+        message.status || "active",
+        JSON.stringify(message.content_schema || {}),
+        JSON.stringify(message.default_content || {}),
+        JSON.stringify(isPlainObject(message.metadata) ? message.metadata : {}),
+        message.updated_at || new Date().toISOString(),
+        message.author || "system"
+      ]
+    );
+  }
+
+  async listMessageVersions(id) {
+    if (!(await this.getMessage(id))) throw new Error(`Message not found: ${id}`);
+    const result = await this.client.query("SELECT * FROM message_versions WHERE id = $1 ORDER BY version DESC", [id]);
+    return result.rows.map(rowToMessageVersionSummary);
+  }
+
+  async getMessageVersion(id, requestedVersion) {
+    if (!(await this.getMessage(id))) throw new Error(`Message not found: ${id}`);
+    const result = await this.client.query("SELECT * FROM message_versions WHERE id = $1 AND version = $2", [id, Number(requestedVersion)]);
+    const row = result.rows[0];
+    if (!row) throw new Error(`Message version not found: ${requestedVersion}`);
+    return rowToMessage(row);
   }
 
   async listConditionBlocks() {
@@ -492,6 +662,20 @@ function rowToLookupTable(row) {
   };
 }
 
+function rowToLookupTableVersionSummary(row) {
+  const rows = parseJson(row.rows_json, []);
+  return {
+    id: row.id,
+    version: Number(row.version || 1),
+    name: row.name,
+    key_column: row.key_column,
+    row_count: Array.isArray(rows) ? rows.length : 0,
+    metadata: parseJson(row.metadata_json, {}),
+    updated_at: isoValue(row.updated_at),
+    author: row.author
+  };
+}
+
 function rowToMessage(row) {
   return {
     id: row.id,
@@ -504,6 +688,21 @@ function rowToMessage(row) {
     updated_at: isoValue(row.updated_at),
     author: row.author,
     version: Number(row.version || 1)
+  };
+}
+
+function rowToMessageVersionSummary(row) {
+  const message = rowToMessage(row);
+  return {
+    id: message.id,
+    version: message.version,
+    name: message.name,
+    surface: message.surface,
+    status: message.status,
+    content_keys: Object.keys(message.default_content || {}),
+    metadata: message.metadata,
+    updated_at: message.updated_at,
+    author: message.author
   };
 }
 
@@ -575,6 +774,34 @@ function ruleSetParams(ruleSet) {
     JSON.stringify(ruleSet.draft || {}),
     ruleSet.created_at || new Date().toISOString(),
     ruleSet.updated_at || new Date().toISOString()
+  ];
+}
+
+function lookupTableParams(table) {
+  return [
+    table.id,
+    table.name,
+    table.key_column || "key",
+    JSON.stringify(Array.isArray(table.rows) ? table.rows : []),
+    JSON.stringify(isPlainObject(table.metadata) ? table.metadata : {}),
+    table.updated_at || new Date().toISOString(),
+    table.author || "system",
+    Number(table.version || 1)
+  ];
+}
+
+function messageParams(message) {
+  return [
+    message.id,
+    message.name,
+    message.surface || "",
+    message.status || "active",
+    JSON.stringify(message.content_schema || {}),
+    JSON.stringify(message.default_content || {}),
+    JSON.stringify(isPlainObject(message.metadata) ? message.metadata : {}),
+    message.updated_at || new Date().toISOString(),
+    message.author || "system",
+    Number(message.version || 1)
   ];
 }
 
