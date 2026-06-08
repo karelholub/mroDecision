@@ -480,6 +480,29 @@ test("native postgres experiment operations report variants and assignments", as
   assert.ok(calls.some((call) => call.sql.includes("date_trunc('hour'")));
 });
 
+test("native postgres campaign operations report assets and conflicts", async () => {
+  const { client, calls } = nativeCampaignClient();
+  const store = new PostgresNativeReadStore(client);
+
+  const campaigns = await store.listCampaignOperations({ window_hours: 720 });
+  const conflicts = await store.listRuleConflicts({ window_hours: 720 });
+  const campaign = campaigns[0];
+
+  assert.equal(campaign.campaign, "Summer / Web");
+  assert.equal(campaign.rules, 2);
+  assert.equal(campaign.messages, 1);
+  assert.equal(campaign.requests, 2);
+  assert.equal(campaign.client_events.exposure, 2);
+  assert.equal(campaign.conversion_rate, 0.5);
+  assert.equal(campaign.dependencies[0].message_id, "hero_message");
+  assert.equal(campaign.conflict_count, 1);
+  assert.equal(conflicts.count, 1);
+  assert.equal(conflicts.conflicts[0].type, "cross_surface_eligibility");
+  assert.deepEqual(conflicts.by_rule.web_rule.map((item) => item.type), ["cross_surface_eligibility"]);
+  assert.ok(calls.some((call) => call.sql.includes("FROM audit_log")));
+  assert.ok(calls.some((call) => call.sql.includes("FROM client_events")));
+});
+
 test("native postgres content writes replace lookup tables with version history", async () => {
   const { client, calls, lookups, lookupVersions } = nativeContentClient();
   const store = new PostgresNativeReadStore(client);
@@ -1117,6 +1140,121 @@ function nativeExperimentClient() {
         return { rows: [] };
       }
     }
+  };
+}
+
+function nativeCampaignClient() {
+  const calls = [];
+  const rules = [
+    campaignRule("web_rule", "Web Eligibility", "homepage", "eligible"),
+    campaignRule("mobile_rule", "Mobile Suppression", "mobile_app", "ineligible")
+  ];
+  const messages = [
+    {
+      id: "hero_message",
+      name: "Hero Message",
+      surface: "homepage",
+      status: "active",
+      content_schema_json: {},
+      default_content_json: { title: "Summer" },
+      metadata_json: { campaign: { name: "Summer", folder: "Web" }, template_type: "banner" },
+      updated_at: "2026-06-01T11:00:00.000Z",
+      author: "tester",
+      version: 1
+    }
+  ];
+  const auditRows = [
+    { decision_key: "web_rule", profile_key: "profile-1", evaluated_at: "2026-06-01T12:00:00.000Z" },
+    { decision_key: "mobile_rule", profile_key: "profile-2", evaluated_at: "2026-06-01T12:10:00.000Z" }
+  ];
+  const clientEvents = [
+    campaignEvent("web_rule", "exposure", "profile-1", "2026-06-01T12:01:00.000Z"),
+    campaignEvent("web_rule", "conversion", "profile-1", "2026-06-01T12:02:00.000Z"),
+    campaignEvent("mobile_rule", "exposure", "profile-2", "2026-06-01T12:11:00.000Z")
+  ];
+  return {
+    calls,
+    client: {
+      async query(sql, params = []) {
+        calls.push({ sql, params });
+        if (sql.includes("FROM rule_sets rs")) return { rows: rules.map((rule) => ({ ...rule, latest_version: 1, last_published_at: rule.updated_at })) };
+        if (sql.startsWith("SELECT * FROM rule_sets WHERE decision_key")) return { rows: rules.filter((rule) => rule.decision_key === params[0]) };
+        if (sql.includes("FROM rule_versions")) return { rows: [{ version: 1, published_at: "2026-06-01T10:00:00.000Z", author: "publisher", definition_json: {}, metadata_json: {} }] };
+        if (sql.includes("FROM messages")) return { rows: messages };
+        if (sql.includes("FROM audit_log")) {
+          return {
+            rows: groupRows(auditRows, "decision_key").map(({ key, count }) => ({
+              decision_key: key,
+              requests: count,
+              unique_profiles: new Set(auditRows.filter((row) => row.decision_key === key).map((row) => row.profile_key)).size,
+              last_seen_at: auditRows.filter((row) => row.decision_key === key).sort((a, b) => String(b.evaluated_at).localeCompare(String(a.evaluated_at)))[0]?.evaluated_at
+            }))
+          };
+        }
+        if (sql.includes("event_type, COUNT(*) AS count") && sql.includes("FROM client_events")) {
+          const rows = [];
+          for (const decision of groupRows(clientEvents, "decision_key")) {
+            for (const eventType of groupRows(clientEvents.filter((row) => row.decision_key === decision.key), "event_type")) {
+              rows.push({
+                decision_key: decision.key,
+                event_type: eventType.key,
+                count: eventType.count,
+                last_seen_at: clientEvents.filter((row) => row.decision_key === decision.key && row.event_type === eventType.key).at(-1)?.occurred_at
+              });
+            }
+          }
+          return { rows };
+        }
+        if (sql.startsWith("SELECT decision_key, event_json")) {
+          return { rows: clientEvents.map((event) => ({ decision_key: event.decision_key, event_json: event, occurred_at: event.occurred_at })) };
+        }
+        return { rows: [] };
+      }
+    }
+  };
+}
+
+function campaignRule(decisionKey, name, surface, result) {
+  return {
+    decision_key: decisionKey,
+    name,
+    description: "",
+    input_schema_json: {},
+    output_schema_json: {},
+    type: "decision",
+    priority: 0,
+    surface,
+    cache_policy_json: {},
+    metadata_json: { campaign: { name: "Summer", folder: "Web" } },
+    author: "tester",
+    status: "published",
+    tags_json: [],
+    draft_json: {
+      branches: [
+        {
+          id: "same_audience",
+          when: { source: "attribute", key: "lead_score", operator: "gte", value: 80 },
+          result,
+          outputs: { message_id: "hero_message" }
+        }
+      ],
+      fallback: { result: "deferred", outputs: {} }
+    },
+    created_at: "2026-06-01T10:00:00.000Z",
+    updated_at: "2026-06-01T10:30:00.000Z"
+  };
+}
+
+function campaignEvent(decisionKey, eventType, profileKey, occurredAt) {
+  return {
+    event_id: `${decisionKey}_${eventType}`,
+    event_type: eventType,
+    occurred_at: occurredAt,
+    decision_key: decisionKey,
+    profile_key: profileKey,
+    variant_key: "",
+    message_id: "hero_message",
+    surface: decisionKey === "web_rule" ? "homepage" : "mobile_app"
   };
 }
 

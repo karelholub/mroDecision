@@ -357,13 +357,13 @@ async function routeApi(req, res, url) {
 
   if (req.method === "GET" && pathname === "/v1/campaigns") {
     requireScope(req, "viewer");
-    sendJson(res, 200, { campaigns: store.listCampaignOperations(Object.fromEntries(url.searchParams)) });
+    sendJson(res, 200, { campaigns: await storeCall("listCampaignOperations", Object.fromEntries(url.searchParams)) });
     return;
   }
 
   if (req.method === "GET" && pathname === "/v1/rule-conflicts") {
     requireScope(req, "viewer");
-    sendJson(res, 200, store.listRuleConflicts(Object.fromEntries(url.searchParams)));
+    sendJson(res, 200, await storeCall("listRuleConflicts", Object.fromEntries(url.searchParams)));
     return;
   }
 
