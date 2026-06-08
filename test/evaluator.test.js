@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateDecision } from "../src/evaluator.js";
+import { evaluateDecision, evaluateDecisionAsync } from "../src/evaluator.js";
 
 test("evaluates basic branch rule sets", () => {
   const result = evaluateDecision({
@@ -263,4 +263,54 @@ test("evaluates graph frequency cap nodes from client events", () => {
   } });
   assert.equal(capped.result, "suppressed");
   assert.deepEqual(capped.outputs, { reason: "frequency_cap" });
+});
+
+test("evaluates graph frequency cap nodes with async client event counter", async () => {
+  const base = {
+    now: new Date("2026-05-27T12:00:00.000Z"),
+    lookupTables: [],
+    request: {
+      decision_key: "message_cap",
+      profile_key: "profile-1",
+      identifiers: [],
+      attributes: {},
+      segments: {},
+      context: {}
+    },
+    version: {
+      version: 1,
+      definition: {
+        graph: {
+          entry: "cap",
+          nodes: [
+            {
+              id: "cap",
+              type: "frequency_cap",
+              event_type: "impression",
+              message_id: "hero_offer",
+              max: 2,
+              window_days: 7,
+              next: "show",
+              capped: "hide"
+            },
+            { id: "show", type: "output", result: "eligible", outputs: { message_id: "hero_offer" } },
+            { id: "hide", type: "output", result: "suppressed", outputs: { reason: "frequency_cap" } }
+          ]
+        }
+      }
+    }
+  };
+
+  const result = await evaluateDecisionAsync({
+    ...base,
+    clientEventCounter: async (params) => {
+      assert.equal(params.event_type, "impression");
+      assert.equal(params.message_id, "hero_offer");
+      assert.equal(params.since, "2026-05-20T12:00:00.000Z");
+      return 2;
+    }
+  });
+
+  assert.equal(result.result, "suppressed");
+  assert.equal(result.trace.find((item) => item.node_id === "cap").event_count, 2);
 });

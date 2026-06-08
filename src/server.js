@@ -9,7 +9,7 @@ import { applyAssistantPlan, rollbackAssistantPlan } from "./assistantPlanner.js
 import { config } from "./config.js";
 import { createClientResultCache } from "./clientCache.js";
 import { createClientTrafficMetrics } from "./clientTrafficMetrics.js";
-import { evaluateDecision } from "./evaluator.js";
+import { evaluateDecision, evaluateDecisionAsync } from "./evaluator.js";
 import { notFound, readJson, sendBuffer, sendError, sendJson, sendText, serveStatic } from "./http.js";
 import { createProfileCache, profileCacheKey } from "./profileCache.js";
 import { profileCacheWithDiagnostics } from "./profileDiagnostics.js";
@@ -229,7 +229,7 @@ async function routeApi(req, res, url) {
       ruleExists: (key) => planRules.some((rule) => rule.decision_key === key),
       schemaItems: planSchemaItems,
       lookupTables: planLookupTables,
-      clientEventCounter: createClientEventCounter()
+      clientEventCounter: (params) => store.countClientEvents(params)
     };
     const plan = await createAssistantPlanWithProvider(body, context, await storeCall("getSettings"));
     validateAssistantPlan(plan);
@@ -1966,11 +1966,11 @@ async function evaluateClientRequest(body) {
       profile_cache: profileCache
     };
   }
-  const evaluated = evaluateDecision({
+  const evaluated = await evaluateDecisionAsync({
     request,
     version,
     lookupTables: await storeCall("listLookupTables"),
-    clientEventCounter: createClientEventCounter()
+    clientEventCounter: (params) => storeCall("countClientEvents", params)
   });
   const assigned = assignExperimentVariant(ruleSet, request, evaluated);
   const messageResolved = await resolveMessageOutputs(
@@ -2253,7 +2253,7 @@ async function resolveMessageOutputs(outputs, ruleSet, request, evaluatedAt) {
   if (!message) {
     return unavailableMessage(outputs, "message_not_found", `Message not found: ${messageId}`);
   }
-  const availability = messageAvailability(message, ruleSet, request, evaluatedAt);
+  const availability = await messageAvailability(message, ruleSet, request, evaluatedAt);
   if (!availability.available) {
     return unavailableMessage(outputs, availability.reason, availability.message, message);
   }
@@ -2298,7 +2298,7 @@ function unavailableMessage(outputs, reason, message, messageRecord = null) {
   };
 }
 
-function messageAvailability(message, ruleSet, request, evaluatedAt) {
+async function messageAvailability(message, ruleSet, request, evaluatedAt) {
   const lifecycle = message.metadata?.lifecycle || message.metadata?.delivery || {};
   const nowMs = Date.parse(evaluatedAt || createdAtIso());
   if (message.status !== "active") {
@@ -2326,7 +2326,7 @@ function messageAvailability(message, ruleSet, request, evaluatedAt) {
   const ttlSeconds = Number(lifecycle.ttl_seconds || message.metadata?.ttl_seconds || 0);
   if (Number.isFinite(ttlSeconds) && ttlSeconds > 0) {
     const since = new Date(nowMs - ttlSeconds * 1000).toISOString();
-    const impressions = createClientEventCounter()({
+    const impressions = await storeCall("countClientEvents", {
       event_type: "impression",
       decision_key: ruleSet.decision_key,
       profile_key: request.profile_key,
