@@ -6,6 +6,13 @@ export function meiroFeedbackEndpoint(settings = {}) {
   return new URL("collect/decision-engine-feedback", base.endsWith("/") ? base : `${base}/`).toString();
 }
 
+export function meiroCollectorEndpoint(settings = {}) {
+  const base = String(settings.meiro_url || "").trim();
+  const slug = String(settings.meiro_source_slug || "").trim();
+  if (!base || !slug) return "";
+  return new URL(["collect", slug].join("/"), base.endsWith("/") ? base : `${base}/`).toString();
+}
+
 export function buildDecisionFeedbackPayload(decision = {}, request = {}, options = {}) {
   const evaluatedAt = decision.evaluated_at || options.evaluated_at || new Date().toISOString();
   const context = request.context && typeof request.context === "object" ? request.context : {};
@@ -40,4 +47,30 @@ export function buildDecisionFeedbackPayload(decision = {}, request = {}, option
   }
 
   return payload;
+}
+
+export function buildDecisionCollectorEventPayload(decision = {}, request = {}, options = {}) {
+  const feedback = buildDecisionFeedbackPayload(decision, request, options);
+  return {
+    event_type: options.event_type || "decision_result",
+    event_time: feedback.evaluated_at,
+    identifiers: feedback.identifiers,
+    event_payload: {
+      decision_key: feedback.decision_key,
+      profile_key: feedback.profile_key,
+      result: feedback.result,
+      rule_version: feedback.rule_version,
+      ttl_seconds: feedback.ttl_seconds,
+      cache_scope: feedback.cache_scope,
+      outputs: feedback.outputs,
+      matched_rules: feedback.matched_rules,
+      errors: feedback.errors,
+      cache: feedback.cache,
+      profile_cache: feedback.profile_cache,
+      experiment: feedback.experiment,
+      context: feedback.context,
+      delivery: feedback.delivery,
+      surface_result: feedback.surface_result || null
+    }
+  };
 }

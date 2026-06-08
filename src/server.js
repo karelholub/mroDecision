@@ -11,7 +11,12 @@ import { createClientResultCache } from "./clientCache.js";
 import { createClientTrafficMetrics } from "./clientTrafficMetrics.js";
 import { evaluateDecision, evaluateDecisionAsync } from "./evaluator.js";
 import { notFound, readJson, sendBuffer, sendError, sendJson, sendText, serveStatic } from "./http.js";
-import { buildDecisionFeedbackPayload, meiroFeedbackEndpoint } from "./meiroFeedback.js";
+import {
+  buildDecisionCollectorEventPayload,
+  buildDecisionFeedbackPayload,
+  meiroCollectorEndpoint,
+  meiroFeedbackEndpoint
+} from "./meiroFeedback.js";
 import { createProfileCache, profileCacheKey } from "./profileCache.js";
 import { profileCacheWithDiagnostics } from "./profileDiagnostics.js";
 import { createRateLimiter } from "./rateLimiter.js";
@@ -1065,12 +1070,14 @@ async function testMeiroProfileConnection(input = {}) {
 
 async function testMeiroCollectorConnection(input = {}) {
   const settings = store.getSettings();
-  const base = String(input.meiro_url || settings.meiro_url || "").trim();
-  const slug = String(input.meiro_source_slug || settings.meiro_source_slug || "").trim();
-  if (!base) badRequest("meiro_url is required");
-  if (!slug) badRequest("meiro_source_slug is required");
-  const url = new URL(["collect", slug].join("/"), base.endsWith("/") ? base : `${base}/`);
-  const payload = {
+  const endpoint = meiroCollectorEndpoint({
+    ...settings,
+    meiro_url: input.meiro_url || settings.meiro_url,
+    meiro_source_slug: input.meiro_source_slug || settings.meiro_source_slug
+  });
+  if (!String(input.meiro_url || settings.meiro_url || "").trim()) badRequest("meiro_url is required");
+  if (!String(input.meiro_source_slug || settings.meiro_source_slug || "").trim()) badRequest("meiro_source_slug is required");
+  const decision = {
     decision_key: "connection_test",
     profile_key: "dee-settings-test",
     result: "test",
@@ -1079,7 +1086,8 @@ async function testMeiroCollectorConnection(input = {}) {
     errors: [],
     evaluated_at: createdAtIso()
   };
-  return deliverMeiroPayload("collector", url.toString(), payload);
+  const payload = buildDecisionCollectorEventPayload(decision, { identifiers: [], context: { request_source: "dee_settings" } }, { source: "settings_test", endpoint });
+  return deliverMeiroPayload("collector", endpoint, payload);
 }
 
 async function testMeiroFeedbackConnection(input = {}) {
@@ -1178,12 +1186,19 @@ function queueSurfaceDecisionFeedbackDelivery(surfaceResult, request, options = 
 
 async function deliverDecisionFeedback(decision, request, options = {}) {
   const settings = await storeCall("getSettings");
-  const endpoint = meiroFeedbackEndpoint(settings);
-  if (!endpoint) return null;
-  const payload = buildDecisionFeedbackPayload(decision, request, { ...options, endpoint });
-  const result = await deliverMeiroPayload("feedback", endpoint, payload, "decision payload");
+  const feedbackEndpoint = meiroFeedbackEndpoint(settings);
+  const collectorEndpoint = meiroCollectorEndpoint(settings);
+  const results = [];
+  if (feedbackEndpoint) {
+    const payload = buildDecisionFeedbackPayload(decision, request, { ...options, endpoint: feedbackEndpoint });
+    results.push(await deliverMeiroPayload("feedback", feedbackEndpoint, payload, "decision payload"));
+  }
+  if (collectorEndpoint) {
+    const payload = buildDecisionCollectorEventPayload(decision, request, { ...options, endpoint: collectorEndpoint });
+    results.push(await deliverMeiroPayload("collector", collectorEndpoint, payload, "decision event"));
+  }
   await saveStore();
-  return result;
+  return results;
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {

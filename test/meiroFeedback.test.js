@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildDecisionFeedbackPayload, meiroFeedbackEndpoint } from "../src/meiroFeedback.js";
+import {
+  buildDecisionCollectorEventPayload,
+  buildDecisionFeedbackPayload,
+  meiroCollectorEndpoint,
+  meiroFeedbackEndpoint
+} from "../src/meiroFeedback.js";
 
 test("Meiro feedback endpoint prefers explicit setting and falls back to base URL", () => {
   assert.equal(
@@ -15,6 +20,11 @@ test("Meiro feedback endpoint prefers explicit setting and falls back to base UR
     "https://sse-demo.eu1.pipes.meiro.io/collect/decision-engine-feedback"
   );
   assert.equal(meiroFeedbackEndpoint({}), "");
+  assert.equal(
+    meiroCollectorEndpoint({ meiro_url: "https://sse-demo.eu1.pipes.meiro.io", meiro_source_slug: "decision-engine-feedback" }),
+    "https://sse-demo.eu1.pipes.meiro.io/collect/decision-engine-feedback"
+  );
+  assert.equal(meiroCollectorEndpoint({ meiro_url: "https://sse-demo.eu1.pipes.meiro.io" }), "");
 });
 
 test("decision feedback payload includes decision, request, and surface metadata", () => {
@@ -55,4 +65,35 @@ test("decision feedback payload includes decision, request, and surface metadata
   assert.equal(payload.delivery.surface, "homepage_hero");
   assert.equal(payload.delivery.sync_id, "sync-1");
   assert.equal(payload.surface_result.candidate_count, 2);
+});
+
+test("decision collector payload wraps decisions as Meiro event envelopes", () => {
+  const payload = buildDecisionCollectorEventPayload(
+    {
+      decision_key: "next_best_offer",
+      profile_key: "profile-1",
+      result: "eligible",
+      outputs: { offer_id: "solar" },
+      rule_version: 1,
+      matched_rules: ["solar_branch"],
+      errors: [],
+      evaluated_at: "2026-06-08T10:00:00.000Z"
+    },
+    {
+      identifiers: [{ typeId: "email", value: "karel.holub@meiro.io" }],
+      context: { request_source: "client_evaluate", surface: "homepage" }
+    },
+    {
+      endpoint: "https://example.test/collect/decision-engine-feedback",
+      source: "client_evaluate"
+    }
+  );
+
+  assert.equal(payload.event_type, "decision_result");
+  assert.equal(payload.event_time, "2026-06-08T10:00:00.000Z");
+  assert.equal(payload.identifiers[0].value, "karel.holub@meiro.io");
+  assert.equal(payload.event_payload.decision_key, "next_best_offer");
+  assert.equal(payload.event_payload.outputs.offer_id, "solar");
+  assert.equal(payload.event_payload.context.surface, "homepage");
+  assert.equal(payload.event_payload.delivery.endpoint, "https://example.test/collect/decision-engine-feedback");
 });
