@@ -205,7 +205,7 @@ Status: started with experiment significance calculations, confidence labels, mi
 ## Recommended Next Sprint
 
 1. Add deeper production prompt hardening and provider governance for the optional LLM-backed assistant. Provider latency/error observability, admin test connection, redacted config history, per-plan governance reports, prompt-contract metadata, provider policy presets, and durable redacted per-call audit trails are implemented.
-2. Add a native row-level managed-database adapter for enterprise deployments. The adapter registry, SQLite capability reporting, Postgres snapshot adapter, native Postgres schema contract, and deployment-readiness diagnostics are implemented; the async row-level Postgres-backed store remains.
+2. Add a native row-level managed-database adapter for enterprise deployments. The adapter registry, SQLite capability reporting, Postgres snapshot adapter, native Postgres schema contract, native migration runner, first read-only native store contract, and deployment-readiness diagnostics are implemented; async write paths and full server adapter wiring remain.
 3. Add deeper personalization helpers such as content-variant previews and audience-specific copy comparisons. Audience comparison previews are implemented for message personalization.
 4. Add assistant provider usage analytics and configuration audit history. Redacted configuration history is implemented.
 5. Add external delivery hints for managed assets, such as CDN host validation and downstream render diagnostics. Downstream rule-output asset usage reporting is implemented.
