@@ -1757,7 +1757,7 @@ select.invalid {
   min-width: 0;
   height: 100vh;
   display: grid;
-  grid-template-rows: 64px minmax(0, 1fr);
+  grid-template-rows: 52px minmax(0, 1fr);
 }
 
 body[data-current-view="overview"] .app-frame {
@@ -1774,16 +1774,17 @@ body[data-current-view="overview"] .topbar {
   z-index: 10;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
-  padding: 12px 28px;
+  min-height: 52px;
+  padding: 8px 28px;
   border-bottom: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(10px);
 }
 
 .topbar > div:first-child {
-  display: grid;
+  display: none;
   gap: 2px;
   min-width: 0;
 }
@@ -3624,7 +3625,7 @@ header {
 }
 
 .rule-workbench {
-  min-height: calc(100vh - 184px);
+  min-height: calc(100vh - 172px);
   min-width: 0;
 }
 
@@ -3642,7 +3643,7 @@ header {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: 12px;
-  height: calc(100vh - 184px);
+  height: calc(100vh - 172px);
   min-height: 560px;
   overflow: hidden;
 }
@@ -3747,9 +3748,10 @@ header {
 
 .rule-editor-detail-panel {
   display: grid;
-  min-height: calc(100vh - 184px);
+  min-height: 0;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
+  margin-top: 18px;
 }
 
 .rule-editor-detail-panel[hidden] {
@@ -3758,16 +3760,15 @@ header {
 
 .rule-detail-dialog {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
   min-width: 0;
   min-height: 0;
-  height: calc(100vh - 184px);
-  min-height: 620px;
+  height: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--shadow-soft);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .rule-detail-header {
@@ -3812,44 +3813,45 @@ header {
 
 .rule-editor-pane {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto minmax(230px, 0.38fr);
-  gap: 12px;
-  height: 100%;
-  overflow: hidden;
-  padding: 0;
+  grid-template-rows: auto auto auto auto;
+  gap: 16px;
+  height: auto;
+  overflow: visible;
+  padding: 16px;
   border: 0;
   background: transparent;
   box-shadow: none;
 }
 
 .rule-editor-pane.logic-open {
-  grid-template-rows: minmax(280px, auto) minmax(560px, auto) auto minmax(230px, auto);
-  overflow: auto;
+  grid-template-rows: auto auto auto auto;
+  overflow: visible;
 }
 
 .rule-editor-pane.publish-open {
-  grid-template-rows: minmax(280px, auto) minmax(360px, auto) auto minmax(230px, auto);
-  overflow: auto;
+  grid-template-rows: auto auto auto auto;
+  overflow: visible;
 }
 
 .rule-editor-pane.logic-open.publish-open {
-  grid-template-rows: minmax(280px, auto) minmax(560px, auto) minmax(360px, auto) auto minmax(230px, auto);
+  grid-template-rows: auto auto auto auto;
 }
 
 .rule-editor-pane.logic-open .rule-editor-main {
-  min-height: 280px;
+  min-height: 0;
 }
 
 .rule-editor-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(250px, 300px);
-  gap: 12px;
-  overflow: hidden;
+  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.75fr);
+  gap: 16px;
+  align-items: start;
+  overflow: visible;
 }
 
 .rule-editor-main > .rule-builder-pane,
 .rule-editor-main > .rule-inspector {
-  height: 100%;
+  height: auto;
   max-height: 100%;
 }
 
@@ -3863,7 +3865,7 @@ header {
 
 .rule-builder-pane,
 .rule-inspector {
-  overflow: auto;
+  overflow: visible;
   padding: 16px;
 }
 
@@ -3942,13 +3944,12 @@ header {
 .rule-builder-panel {
   display: grid;
   min-height: 0;
-  height: min(760px, 68vh);
-  min-height: 560px;
+  height: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--shadow-soft);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .rule-builder-panel[hidden] {
@@ -3957,9 +3958,9 @@ header {
 
 .rule-builder-panel-inner {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .publish-review-inline {
@@ -4019,7 +4020,7 @@ header {
 .inline-builder-shell {
   min-height: 0;
   margin: 0;
-  overflow: auto;
+  overflow: visible;
   padding: 16px;
 }
 
@@ -4030,8 +4031,8 @@ header {
 
 .rule-bottom-drawer {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
+  grid-template-rows: auto auto;
+  overflow: visible;
 }
 
 .drawer-tabs {
