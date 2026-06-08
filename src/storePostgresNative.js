@@ -71,6 +71,10 @@ export class PostgresNativeReadStore {
     }
   }
 
+  async save() {
+    return undefined;
+  }
+
   async listRuleSets() {
     const result = await this.client.query(
       `SELECT
@@ -97,6 +101,143 @@ export class PostgresNativeReadStore {
   async getVersionsForRuleSet(key) {
     const result = await this.client.query("SELECT * FROM rule_versions WHERE decision_key = $1 ORDER BY version ASC", [key]);
     return result.rows.map(rowToVersion);
+  }
+
+  async listVersions(key) {
+    const ruleSet = await this.getRuleSet(key);
+    if (!ruleSet) throw new Error(`Rule set not found: ${key}`);
+    return ruleSet.versions;
+  }
+
+  async getVersion(key, requestedVersion) {
+    const ruleSet = await this.getRuleSet(key);
+    if (!ruleSet) throw new Error(`Rule set not found: ${key}`);
+    if (requestedVersion != null) {
+      const version = ruleSet.versions.find((item) => Number(item.version) === Number(requestedVersion));
+      if (!version) throw new Error(`Rule version not found: ${requestedVersion}`);
+      return version;
+    }
+    const latest = ruleSet.versions.at(-1);
+    if (!latest) throw new Error(`Rule set has no published version: ${key}`);
+    return latest;
+  }
+
+  async addAudit(entry) {
+    await this.client.query(
+      `INSERT INTO audit_log (
+        evaluated_at, decision_key, profile_key, rule_version, result,
+        outputs_json, matched_rules_json, errors_json, entry_json
+      ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb)`,
+      [
+        entry.evaluated_at || new Date().toISOString(),
+        entry.decision_key || "",
+        entry.profile_key || "",
+        Number(entry.rule_version || 0),
+        entry.result || "",
+        JSON.stringify(entry.outputs || {}),
+        JSON.stringify(entry.matched_rules || []),
+        JSON.stringify(entry.errors || []),
+        JSON.stringify(entry || {})
+      ]
+    );
+  }
+
+  async addExperimentAssignment(input = {}) {
+    const assignment = {
+      id: input.id || randomId(16),
+      assigned_at: input.assigned_at || new Date().toISOString(),
+      decision_key: input.decision_key || "",
+      profile_key: input.profile_key || "",
+      rule_version: Number(input.rule_version || 0),
+      variant_key: input.variant_key || "",
+      strategy: input.strategy || "",
+      reason: input.reason || "",
+      bucket: input.bucket == null ? null : Number(input.bucket),
+      assignment_json: isPlainObject(input.assignment) ? input.assignment : {}
+    };
+    await this.client.query(
+      `INSERT INTO experiment_assignments (
+        id, assigned_at, decision_key, profile_key, rule_version, variant_key,
+        strategy, reason, bucket, assignment_json
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)`,
+      [
+        assignment.id,
+        assignment.assigned_at,
+        assignment.decision_key,
+        assignment.profile_key,
+        assignment.rule_version,
+        assignment.variant_key,
+        assignment.strategy,
+        assignment.reason,
+        assignment.bucket,
+        JSON.stringify(assignment.assignment_json)
+      ]
+    );
+    return assignment;
+  }
+
+  async addClientEvent(input = {}) {
+    const event = {
+      event_id: input.event_id || `evt_${randomId(16)}`,
+      event_type: input.event_type,
+      occurred_at: input.occurred_at || new Date().toISOString(),
+      decision_key: input.decision_key || "",
+      profile_key: input.profile_key || "",
+      rule_version: input.rule_version ?? null,
+      variant_key: input.variant_key || "",
+      message_id: input.message_id || "",
+      surface: input.surface || "",
+      context: input.context || {},
+      event: isPlainObject(input.event) ? input.event : {}
+    };
+    const result = await this.client.query(
+      `INSERT INTO client_events (
+        event_id, event_type, occurred_at, decision_key, profile_key,
+        rule_version, variant_key, message_id, surface, context_json, event_json
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb)
+      ON CONFLICT(event_id) DO NOTHING
+      RETURNING event_json`,
+      [
+        event.event_id,
+        event.event_type,
+        event.occurred_at,
+        event.decision_key,
+        event.profile_key,
+        event.rule_version,
+        event.variant_key,
+        event.message_id,
+        event.surface,
+        JSON.stringify(event.context),
+        JSON.stringify(event)
+      ]
+    );
+    if (!result.rows.length) {
+      const existing = await this.client.query("SELECT event_json FROM client_events WHERE event_id = $1", [event.event_id]);
+      return {
+        ...(parseJson(existing.rows[0]?.event_json, event)),
+        accepted: false,
+        duplicate: true
+      };
+    }
+    return { ...event, accepted: true, duplicate: false };
+  }
+
+  async countClientEvents(params = {}) {
+    const values = [];
+    const conditions = [];
+    for (const key of ["event_type", "decision_key", "profile_key", "variant_key", "message_id", "surface"]) {
+      if (params[key]) {
+        values.push(params[key]);
+        conditions.push(`${key} = $${values.length}`);
+      }
+    }
+    if (params.since) {
+      values.push(params.since);
+      conditions.push(`occurred_at >= $${values.length}`);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const result = await this.client.query(`SELECT COUNT(*) AS count FROM client_events ${where}`, values);
+    return Number(result.rows[0]?.count || 0);
   }
 
   async listLookupTables() {
@@ -997,8 +1138,8 @@ function resetApprovalForDraftEdit(metadata = {}, author = "") {
   };
 }
 
-function randomId() {
-  return randomBytes(8).toString("hex");
+function randomId(bytes = 8) {
+  return randomBytes(bytes).toString("hex");
 }
 
 function assistantProviderSnapshot(settings = {}) {

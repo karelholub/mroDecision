@@ -72,6 +72,22 @@ server.listen(config.port, () => {
 });
 scheduleSchemaSync();
 
+function maybeAwait(value) {
+  return value && typeof value.then === "function" ? value : Promise.resolve(value);
+}
+
+async function saveStore() {
+  if (typeof store.save !== "function") return;
+  await maybeAwait(store.save());
+}
+
+async function storeCall(method, ...args) {
+  if (typeof store[method] !== "function") {
+    throw new Error(`Store adapter does not support ${method}`);
+  }
+  return maybeAwait(store[method](...args));
+}
+
 async function routeApi(req, res, url) {
   const { pathname } = url;
 
@@ -90,7 +106,7 @@ async function routeApi(req, res, url) {
   }
 
   if (req.method === "GET" && pathname === "/v1/ready") {
-    const database = store.health();
+    const database = await storeCall("health");
     sendJson(res, database.ok ? 200 : 503, {
       status: database.ok ? "ready" : "not_ready",
       service: "meiro-decision-engine",
@@ -104,8 +120,8 @@ async function routeApi(req, res, url) {
     requireScope(req, "evaluate");
     const body = await readJson(req, config.requestBodyLimitBytes);
     validateEvaluateRequest(body);
-    const result = evaluateRequest(body);
-    await store.save();
+    const result = await evaluateRequest(body);
+    await saveStore();
     sendJson(res, 200, result);
     return;
   }
@@ -116,16 +132,17 @@ async function routeApi(req, res, url) {
     const profiles = body.profiles || body.requests || [];
     if (!Array.isArray(profiles)) badRequest("profiles must be an array");
     if (profiles.length > 500) badRequest("Batch limit is 500 profiles");
-    const results = profiles.map((profile) => {
+    const results = [];
+    for (const profile of profiles) {
       const request = {
         ...profile,
         decision_key: profile.decision_key || body.decision_key,
         rule_version: profile.rule_version ?? body.rule_version
       };
       validateEvaluateRequest(request);
-      return evaluateRequest(request);
-    });
-    await store.save();
+      results.push(await evaluateRequest(request));
+    }
+    await saveStore();
     sendJson(res, 200, { results });
     return;
   }
@@ -138,7 +155,7 @@ async function routeApi(req, res, url) {
     enforceClientTokenContext(req, body);
     enforceAllowedDecision(req, body.decision_key);
     const result = await evaluateClientRequest(body);
-    await store.save();
+    await saveStore();
     sendJson(res, 200, result);
     return;
   }
@@ -157,7 +174,7 @@ async function routeApi(req, res, url) {
     validateClientSurfaceRequest(body);
     enforceClientTokenContext(req, body);
     const result = await evaluateClientSurface(body, req.auth);
-    await store.save();
+    await saveStore();
     sendJson(res, 200, result);
     return;
   }
@@ -169,7 +186,7 @@ async function routeApi(req, res, url) {
     validateClientSurfaceBatchRequest(body);
     enforceClientTokenContext(req, body);
     const result = await evaluateClientSurfaceBatch(req, body);
-    await store.save();
+    await saveStore();
     sendJson(res, 200, result);
     return;
   }
@@ -182,9 +199,9 @@ async function routeApi(req, res, url) {
     validateClientEventRequest(body);
     enforceClientTokenContext(req, body);
     enforceAllowedDecision(req, body.decision_key);
-    const event = store.addClientEvent(clientEventFromRequest(clientEventMatch[1], body, req));
+    const event = await storeCall("addClientEvent", clientEventFromRequest(clientEventMatch[1], body, req));
     if (event.accepted) {
-      await store.save();
+      await saveStore();
       clientResultCache.clear();
     }
     sendJson(res, event.accepted ? 202 : 200, {
@@ -197,7 +214,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "GET" && pathname === "/v1/rule-sets") {
     requireScope(req, "viewer");
-    sendJson(res, 200, { rule_sets: store.listRuleSets() });
+    sendJson(res, 200, { rule_sets: await storeCall("listRuleSets") });
     return;
   }
 
@@ -205,22 +222,25 @@ async function routeApi(req, res, url) {
     requireScope(req, "editor");
     const body = await readJson(req, config.requestBodyLimitBytes);
     const planStartedAt = Date.now();
+    const planRules = await storeCall("listRuleSets");
+    const planSchemaItems = await storeCall("listSchemaItems");
+    const planLookupTables = await storeCall("listLookupTables");
     const context = {
-      ruleExists: (key) => Boolean(store.getRuleSet(key)),
-      schemaItems: store.listSchemaItems(),
-      lookupTables: store.listLookupTables(),
-      clientEventCounter: (params) => store.countClientEvents(params)
+      ruleExists: (key) => planRules.some((rule) => rule.decision_key === key),
+      schemaItems: planSchemaItems,
+      lookupTables: planLookupTables,
+      clientEventCounter: createClientEventCounter()
     };
-    const plan = await createAssistantPlanWithProvider(body, context, store.getSettings());
+    const plan = await createAssistantPlanWithProvider(body, context, await storeCall("getSettings"));
     validateAssistantPlan(plan);
     plan.governance = createAssistantGovernanceReport(plan, plan.provider);
-    store.recordAssistantProviderPlanEvent({
+    await storeCall("recordAssistantProviderPlanEvent", {
       request: body,
       plan,
       planned_by: req.auth.name,
       duration_ms: Date.now() - planStartedAt
     });
-    await store.save();
+    await saveStore();
     sendJson(res, 200, { plan });
     return;
   }
@@ -234,7 +254,7 @@ async function routeApi(req, res, url) {
     const applied = applyAssistantPlan(body.plan, store, req.auth.name, {
       approved_action_ids: body.approved_action_ids
     });
-    await store.save();
+    await saveStore();
     clientResultCache.clear();
     sendJson(res, 200, applied);
     return;
@@ -244,7 +264,7 @@ async function routeApi(req, res, url) {
     requireScope(req, "editor");
     const body = await readJson(req, config.requestBodyLimitBytes);
     const result = rollbackAssistantPlan(body.rollback, store, req.auth.name);
-    await store.save();
+    await saveStore();
     clientResultCache.clear();
     sendJson(res, 200, result);
     return;
@@ -311,7 +331,7 @@ async function routeApi(req, res, url) {
   if (req.method === "POST" && pathname === "/v1/campaigns/actions") {
     requireScope(req, "editor");
     const result = applyCampaignAction(await readJson(req, config.requestBodyLimitBytes), req.auth.name);
-    await store.save();
+    await saveStore();
     clientResultCache.clear();
     sendJson(res, 200, result);
     return;
@@ -322,8 +342,8 @@ async function routeApi(req, res, url) {
     const body = await readJson(req, config.requestBodyLimitBytes);
     validateRuleSetPayload(body);
     validateRuleDefinition(body.draft || body.definition || {}, body.input_schema || {});
-    const ruleSet = store.createRuleSet(body, req.auth.name);
-    await store.save();
+    const ruleSet = await storeCall("createRuleSet", body, req.auth.name);
+    await saveStore();
     clientResultCache.clear();
     sendJson(res, 201, { rule_set: publicRuleSet(ruleSet) });
     return;
@@ -340,7 +360,7 @@ async function routeApi(req, res, url) {
     const body = await readJson(req, config.batchRequestBodyLimitBytes);
     validateBundle(body);
     const imported = store.importBundle(body, req.auth.name);
-    await store.save();
+    await saveStore();
     clientResultCache.clear();
     sendJson(res, 200, { imported });
     return;
@@ -356,7 +376,7 @@ async function routeApi(req, res, url) {
     requireScope(req, "admin");
     const body = await readJson(req, config.requestBodyLimitBytes);
     const token = store.createApiToken(body, req.auth.name);
-    await store.save();
+    await saveStore();
     sendJson(res, 201, { token });
     return;
   }
@@ -365,20 +385,21 @@ async function routeApi(req, res, url) {
   if (tokenMatch && req.method === "DELETE") {
     requireScope(req, "admin");
     const token = store.revokeApiToken(decodeURIComponent(tokenMatch[1]), req.auth.name);
-    await store.save();
+    await saveStore();
     sendJson(res, 200, { token });
     return;
   }
 
   if (req.method === "GET" && pathname === "/v1/settings") {
     requireScope(req, "viewer");
+    const settings = await storeCall("getSettings");
     sendJson(res, 200, {
-      settings: publicSettings(store.getSettings()),
+      settings: publicSettings(settings),
       runtime: {
         direct_url: `http://localhost:${config.port}`,
         docker_url: "http://localhost:8090",
         db_path: config.dbPath,
-        store_adapter: store.health(),
+        store_adapter: await storeCall("health"),
         store_adapters: listStoreAdapters(),
         client_rate_limit: clientRateLimiter.metrics(),
         client_traffic: clientTrafficMetrics.metrics(),
@@ -396,8 +417,8 @@ async function routeApi(req, res, url) {
 
   if (req.method === "PUT" && pathname === "/v1/settings") {
     requireScope(req, "admin");
-    const settings = store.updateSettings(await readJson(req, config.requestBodyLimitBytes), req.auth.name);
-    await store.save();
+    const settings = await storeCall("updateSettings", await readJson(req, config.requestBodyLimitBytes), req.auth.name);
+    await saveStore();
     scheduleSchemaSync();
     sendJson(res, 200, {
       settings: publicSettings(settings),
@@ -414,7 +435,7 @@ async function routeApi(req, res, url) {
   if (req.method === "POST" && pathname === "/v1/settings/test-connection") {
     requireScope(req, "admin");
     const result = await testSettingsConnection(await readJson(req, config.requestBodyLimitBytes));
-    await store.save();
+    await saveStore();
     sendJson(res, 200, result);
     return;
   }
@@ -438,41 +459,41 @@ async function routeApi(req, res, url) {
 
   if (req.method === "GET" && pathname === "/v1/lookup-tables") {
     requireScope(req, "viewer");
-    sendJson(res, 200, { lookup_tables: store.listLookupTables() });
+    sendJson(res, 200, { lookup_tables: await storeCall("listLookupTables") });
     return;
   }
 
   if (req.method === "GET" && pathname === "/v1/messages") {
     requireScope(req, "viewer");
-    sendJson(res, 200, { messages: store.listMessages(Object.fromEntries(url.searchParams)) });
+    sendJson(res, 200, { messages: await storeCall("listMessages", Object.fromEntries(url.searchParams)) });
     return;
   }
 
   const messageAssetContentMatch = pathname.match(/^\/v1\/message-assets\/([^/]+)\/content$/);
   if (messageAssetContentMatch && req.method === "GET") {
-    const asset = store.getMessageAsset(decodeURIComponent(messageAssetContentMatch[1]), true);
+    const asset = await storeCall("getMessageAsset", decodeURIComponent(messageAssetContentMatch[1]), true);
     sendBuffer(res, 200, Buffer.from(asset.content_base64, "base64"), asset.content_type);
     return;
   }
 
   if (req.method === "GET" && pathname === "/v1/message-assets") {
     requireScope(req, "viewer");
-    sendJson(res, 200, { assets: store.listMessageAssets() });
+    sendJson(res, 200, { assets: await storeCall("listMessageAssets") });
     return;
   }
 
   if (req.method === "POST" && pathname === "/v1/message-assets") {
     requireScope(req, "editor");
-    const asset = store.createMessageAsset(await readJson(req, config.batchRequestBodyLimitBytes), req.auth.name);
-    await store.save();
+    const asset = await storeCall("createMessageAsset", await readJson(req, config.batchRequestBodyLimitBytes), req.auth.name);
+    await saveStore();
     sendJson(res, 201, { asset });
     return;
   }
 
   if (req.method === "POST" && pathname === "/v1/message-assets/cleanup") {
     requireScope(req, "editor");
-    const result = store.cleanupMessageAssets();
-    await store.save();
+    const result = await storeCall("cleanupMessageAssets");
+    await saveStore();
     sendJson(res, 200, result);
     return;
   }
@@ -480,10 +501,10 @@ async function routeApi(req, res, url) {
   const messageAssetMatch = pathname.match(/^\/v1\/message-assets\/([^/]+)$/);
   if (messageAssetMatch && req.method === "DELETE") {
     requireScope(req, "editor");
-    const result = store.deleteMessageAsset(decodeURIComponent(messageAssetMatch[1]), {
+    const result = await storeCall("deleteMessageAsset", decodeURIComponent(messageAssetMatch[1]), {
       force: url.searchParams.get("force") === "true"
     });
-    await store.save();
+    await saveStore();
     sendJson(res, 200, result);
     return;
   }
@@ -506,7 +527,7 @@ async function routeApi(req, res, url) {
     const body = await readJson(req, config.requestBodyLimitBytes);
     validateEvaluateRequest(body.request || {});
     const profile = store.upsertEvaluationProfile(decodeURIComponent(evaluationProfileMatch[1]), body, req.auth.name);
-    await store.save();
+    await saveStore();
     sendJson(res, 200, { profile });
     return;
   }
@@ -514,7 +535,7 @@ async function routeApi(req, res, url) {
   if (evaluationProfileMatch && req.method === "DELETE") {
     requireScope(req, "editor");
     store.deleteEvaluationProfile(decodeURIComponent(evaluationProfileMatch[1]));
-    await store.save();
+    await saveStore();
     sendJson(res, 200, { deleted: true });
     return;
   }
@@ -523,7 +544,7 @@ async function routeApi(req, res, url) {
   if (conditionBlockMatch && req.method === "PUT") {
     requireScope(req, "editor");
     const block = store.upsertConditionBlock(decodeURIComponent(conditionBlockMatch[1]), await readJson(req, config.requestBodyLimitBytes), req.auth.name);
-    await store.save();
+    await saveStore();
     sendJson(res, 200, { condition_block: block });
     return;
   }
@@ -531,7 +552,7 @@ async function routeApi(req, res, url) {
   if (conditionBlockMatch && req.method === "DELETE") {
     requireScope(req, "editor");
     store.deleteConditionBlock(decodeURIComponent(conditionBlockMatch[1]));
-    await store.save();
+    await saveStore();
     sendJson(res, 200, { deleted: true });
     return;
   }
@@ -539,7 +560,7 @@ async function routeApi(req, res, url) {
   const messageVersionsMatch = pathname.match(/^\/v1\/messages\/([^/]+)\/versions$/);
   if (messageVersionsMatch && req.method === "GET") {
     requireScope(req, "viewer");
-    sendJson(res, 200, { versions: store.listMessageVersions(decodeURIComponent(messageVersionsMatch[1])) });
+    sendJson(res, 200, { versions: await storeCall("listMessageVersions", decodeURIComponent(messageVersionsMatch[1])) });
     return;
   }
 
@@ -547,7 +568,7 @@ async function routeApi(req, res, url) {
   if (messageVersionMatch && req.method === "GET") {
     requireScope(req, "viewer");
     sendJson(res, 200, {
-      message: store.getMessageVersion(decodeURIComponent(messageVersionMatch[1]), Number(messageVersionMatch[2]))
+      message: await storeCall("getMessageVersion", decodeURIComponent(messageVersionMatch[1]), Number(messageVersionMatch[2]))
     });
     return;
   }
@@ -556,9 +577,9 @@ async function routeApi(req, res, url) {
   if (messageVersionDiffMatch && req.method === "GET") {
     requireScope(req, "viewer");
     const id = decodeURIComponent(messageVersionDiffMatch[1]);
-    const left = store.getMessageVersion(id, Number(messageVersionDiffMatch[2]));
+    const left = await storeCall("getMessageVersion", id, Number(messageVersionDiffMatch[2]));
     const compareTo = url.searchParams.get("compare_to") || "current";
-    const right = compareTo === "current" ? store.getMessage(id) : store.getMessageVersion(id, Number(compareTo));
+    const right = compareTo === "current" ? await storeCall("getMessage", id) : await storeCall("getMessageVersion", id, Number(compareTo));
     if (!right) notFoundError(`Message not found: ${id}`);
     sendJson(res, 200, {
       left: messageDiffRef(left),
@@ -571,8 +592,8 @@ async function routeApi(req, res, url) {
   const messageMatch = pathname.match(/^\/v1\/messages\/([^/]+)$/);
   if (messageMatch && req.method === "PUT") {
     requireScope(req, "editor");
-    const message = store.upsertMessage(decodeURIComponent(messageMatch[1]), await readJson(req, config.requestBodyLimitBytes), req.auth.name);
-    await store.save();
+    const message = await storeCall("upsertMessage", decodeURIComponent(messageMatch[1]), await readJson(req, config.requestBodyLimitBytes), req.auth.name);
+    await saveStore();
     clientResultCache.clear();
     sendJson(res, 200, { message });
     return;
@@ -581,7 +602,7 @@ async function routeApi(req, res, url) {
   const lookupExportMatch = pathname.match(/^\/v1\/lookup-tables\/([^/]+)\/export$/);
   if (lookupExportMatch && req.method === "GET") {
     requireScope(req, "viewer");
-    const table = store.listLookupTables().find((item) => item.id === decodeURIComponent(lookupExportMatch[1]));
+    const table = (await storeCall("listLookupTables")).find((item) => item.id === decodeURIComponent(lookupExportMatch[1]));
     if (!table) notFoundError(`Lookup table not found: ${decodeURIComponent(lookupExportMatch[1])}`);
     sendText(res, 200, lookupTableToCsv(table), "text/csv; charset=utf-8");
     return;
@@ -590,7 +611,7 @@ async function routeApi(req, res, url) {
   const lookupVersionsMatch = pathname.match(/^\/v1\/lookup-tables\/([^/]+)\/versions$/);
   if (lookupVersionsMatch && req.method === "GET") {
     requireScope(req, "viewer");
-    sendJson(res, 200, { versions: store.listLookupTableVersions(decodeURIComponent(lookupVersionsMatch[1])) });
+    sendJson(res, 200, { versions: await storeCall("listLookupTableVersions", decodeURIComponent(lookupVersionsMatch[1])) });
     return;
   }
 
@@ -598,7 +619,7 @@ async function routeApi(req, res, url) {
   if (lookupVersionMatch && req.method === "GET") {
     requireScope(req, "viewer");
     sendJson(res, 200, {
-      lookup_table: store.getLookupTableVersion(decodeURIComponent(lookupVersionMatch[1]), Number(lookupVersionMatch[2]))
+      lookup_table: await storeCall("getLookupTableVersion", decodeURIComponent(lookupVersionMatch[1]), Number(lookupVersionMatch[2]))
     });
     return;
   }
@@ -606,8 +627,8 @@ async function routeApi(req, res, url) {
   const lookupMatch = pathname.match(/^\/v1\/lookup-tables\/([^/]+)$/);
   if (lookupMatch && req.method === "PUT") {
     requireScope(req, "editor");
-    const table = store.replaceLookupTable(decodeURIComponent(lookupMatch[1]), await readJson(req, config.requestBodyLimitBytes), req.auth.name);
-    await store.save();
+    const table = await storeCall("replaceLookupTable", decodeURIComponent(lookupMatch[1]), await readJson(req, config.requestBodyLimitBytes), req.auth.name);
+    await saveStore();
     clientResultCache.clear();
     sendJson(res, 200, { lookup_table: table });
     return;
@@ -615,7 +636,7 @@ async function routeApi(req, res, url) {
 
   if (req.method === "GET" && pathname === "/v1/schema") {
     requireScope(req, "viewer");
-    sendJson(res, 200, { schema: store.listSchemaItems(Object.fromEntries(url.searchParams)) });
+    sendJson(res, 200, { schema: await storeCall("listSchemaItems", Object.fromEntries(url.searchParams)) });
     return;
   }
 
@@ -638,7 +659,7 @@ async function routeApi(req, res, url) {
       segments: diagnosed.replace.segments ? store.replaceSchemaItems("segment", diagnosed.valid.segments, req.auth.name) : [],
       context: diagnosed.replace.context ? store.replaceSchemaItems("context", diagnosed.valid.context, req.auth.name) : []
     };
-    await store.save();
+    await saveStore();
     sendJson(res, 200, { imported, diagnostics: diagnosed.diagnostics });
     return;
   }
@@ -649,11 +670,11 @@ async function routeApi(req, res, url) {
     try {
       const synced = await syncSchemaFromMeiroProfile(body, req.auth.name);
       recordSchemaSyncSuccess(synced, req.auth.name);
-      await store.save();
+      await saveStore();
       sendJson(res, 200, synced);
     } catch (error) {
       recordSchemaSyncError(error, req.auth.name);
-      await store.save();
+      await saveStore();
       throw error;
     }
     return;
@@ -665,11 +686,11 @@ async function routeApi(req, res, url) {
     try {
       const synced = await syncMeiroMetadata(body, req.auth.name);
       recordSchemaSyncSuccess(synced, req.auth.name);
-      await store.save();
+      await saveStore();
       sendJson(res, 200, synced);
     } catch (error) {
       recordSchemaSyncError(error, req.auth.name);
-      await store.save();
+      await saveStore();
       throw error;
     }
     return;
@@ -713,7 +734,7 @@ async function testSettingsConnection(input = {}) {
   if (target === "profile") return testMeiroProfileConnection(input);
   if (target === "collector") return testMeiroCollectorConnection(input);
   if (target === "feedback") return testMeiroFeedbackConnection(input);
-  if (target === "assistant_llm") return testAssistantProviderConnection(input, store.getSettings());
+  if (target === "assistant_llm") return testAssistantProviderConnection(input, await storeCall("getSettings"));
   badRequest("target must be profile, collector, feedback, or assistant_llm");
 }
 
@@ -1120,10 +1141,10 @@ async function runScheduledSchemaSync() {
   try {
     const synced = await syncSchemaFromMeiroProfile({}, "schema-scheduler");
     recordSchemaSyncSuccess(synced, "schema-scheduler");
-    await store.save();
+    await saveStore();
   } catch (error) {
     recordSchemaSyncError(error, "schema-scheduler");
-    await store.save();
+    await saveStore();
     console.warn(`Scheduled schema sync failed: ${error.message}`);
   }
 }
@@ -1564,7 +1585,7 @@ function normalizeCampaignDuplicateId(base, suffix) {
 async function routeRuleSet(req, res, key, suffix) {
   if (req.method === "GET" && suffix === "") {
     requireScope(req, "viewer");
-    const ruleSet = store.getRuleSet(key);
+    const ruleSet = await storeCall("getRuleSet", key);
     if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
     const latest = ruleSet.versions.at(-1);
     sendJson(res, 200, { rule_set: publicRuleSet(ruleSet), draft: ruleSet.draft, version: latest || null });
@@ -1573,27 +1594,27 @@ async function routeRuleSet(req, res, key, suffix) {
 
   if (req.method === "GET" && suffix === "versions") {
     requireScope(req, "viewer");
-    sendJson(res, 200, { versions: store.listVersions(key) });
+    sendJson(res, 200, { versions: await storeCall("listVersions", key) });
     return;
   }
 
   const versionMatch = suffix.match(/^versions\/(\d+)$/);
   if (req.method === "GET" && versionMatch) {
     requireScope(req, "viewer");
-    sendJson(res, 200, { version: store.getVersion(key, Number(versionMatch[1])) });
+    sendJson(res, 200, { version: await storeCall("getVersion", key, Number(versionMatch[1])) });
     return;
   }
 
   const versionDiffMatch = suffix.match(/^versions\/(\d+)\/diff$/);
   if (req.method === "GET" && versionDiffMatch) {
     requireScope(req, "viewer");
-    const left = store.getVersion(key, Number(versionDiffMatch[1]));
+    const left = await storeCall("getVersion", key, Number(versionDiffMatch[1]));
     const compareTo = new URL(req.url, `http://${req.headers.host || "localhost"}`).searchParams.get("compare_to") || "draft";
-    const ruleSet = store.getRuleSet(key);
+    const ruleSet = await storeCall("getRuleSet", key);
     if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
     const right = compareTo === "draft"
       ? { version: "draft", definition: ruleSet.draft }
-      : store.getVersion(key, Number(compareTo));
+      : await storeCall("getVersion", key, Number(compareTo));
     sendJson(res, 200, {
       left: { version: left.version, published_at: left.published_at, author: left.author },
       right: right.version === "draft"
@@ -1607,8 +1628,8 @@ async function routeRuleSet(req, res, key, suffix) {
   const versionRollbackMatch = suffix.match(/^versions\/(\d+)\/rollback$/);
   if (req.method === "POST" && versionRollbackMatch) {
     requireScope(req, "editor");
-    const ruleSet = store.rollbackDraftToVersion(key, Number(versionRollbackMatch[1]), req.auth.name);
-    await store.save();
+    const ruleSet = await storeCall("rollbackDraftToVersion", key, Number(versionRollbackMatch[1]), req.auth.name);
+    await saveStore();
     clientResultCache.clear();
     sendJson(res, 200, { rule_set: publicRuleSet(ruleSet), draft: ruleSet.draft });
     return;
@@ -1618,14 +1639,14 @@ async function routeRuleSet(req, res, key, suffix) {
     requireScope(req, "editor");
     const body = await readJson(req, config.requestBodyLimitBytes);
     validateRuleSetPayload(body, { partial: true });
-    const existing = store.getRuleSet(key);
+    const existing = await storeCall("getRuleSet", key);
     if (!existing) notFoundError(`Rule set not found: ${key}`);
     if (body.decision_key && body.decision_key !== key) {
       badRequest("decision_key is immutable for saved rule sets. Duplicate the rule to create a new key.");
     }
     validateRuleDefinition(body.draft || body.definition || {}, body.input_schema || existing.input_schema || {});
-    const ruleSet = store.updateDraft(key, body, req.auth.name);
-    await store.save();
+    const ruleSet = await storeCall("updateDraft", key, body, req.auth.name);
+    await saveStore();
     clientResultCache.clear();
     sendJson(res, 200, { rule_set: publicRuleSet(ruleSet), draft: ruleSet.draft });
     return;
@@ -1633,12 +1654,12 @@ async function routeRuleSet(req, res, key, suffix) {
 
   if (req.method === "POST" && suffix === "publish") {
     requireScope(req, "publisher");
-    const ruleSet = store.getRuleSet(key);
+    const ruleSet = await storeCall("getRuleSet", key);
     if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
     validateRuleDefinition(ruleSet.draft, ruleSet.input_schema || {});
     requireApprovedDraft(ruleSet);
-    const version = store.publish(key, req.auth.name);
-    await store.save();
+    const version = await storeCall("publish", key, req.auth.name);
+    await saveStore();
     clientResultCache.clear();
     sendJson(res, 200, { version, conflicts: ruleConflictsFor(key) });
     return;
@@ -1647,16 +1668,16 @@ async function routeRuleSet(req, res, key, suffix) {
   if (req.method === "POST" && suffix === "submit-review") {
     requireScope(req, "editor");
     const body = await readJson(req, config.requestBodyLimitBytes);
-    const ruleSet = store.getRuleSet(key);
+    const ruleSet = await storeCall("getRuleSet", key);
     if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
     validateRuleDefinition(ruleSet.draft, ruleSet.input_schema || {});
-    const updated = store.setRuleApproval(key, {
+    const updated = await storeCall("setRuleApproval", key, {
       status: "submitted",
       note: body.note || "",
       assigned_to: body.assigned_to || "",
       draft_hash: draftHash(ruleSet.draft)
     }, req.auth.name);
-    await store.save();
+    await saveStore();
     sendJson(res, 200, { rule_set: publicRuleSet(updated), approval: updated.metadata.approval, conflicts: ruleConflictsFor(key) });
     return;
   }
@@ -1664,25 +1685,25 @@ async function routeRuleSet(req, res, key, suffix) {
   if (req.method === "POST" && suffix === "approve") {
     requireScope(req, "publisher");
     const body = await readJson(req, config.requestBodyLimitBytes);
-    const ruleSet = store.getRuleSet(key);
+    const ruleSet = await storeCall("getRuleSet", key);
     if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
     validateRuleDefinition(ruleSet.draft, ruleSet.input_schema || {});
     const approval = ruleSet.metadata?.approval || {};
     if (approval.status !== "submitted" && !body.force) badRequest("Draft must be submitted for review before approval");
-    const updated = store.setRuleApproval(key, {
+    const updated = await storeCall("setRuleApproval", key, {
       status: "approved",
       note: body.note || approval.note || "",
       draft_hash: draftHash(ruleSet.draft)
     }, req.auth.name);
-    await store.save();
+    await saveStore();
     sendJson(res, 200, { rule_set: publicRuleSet(updated), approval: updated.metadata.approval, conflicts: ruleConflictsFor(key) });
     return;
   }
 
   if (req.method === "POST" && suffix === "archive") {
     requireScope(req, "editor");
-    const ruleSet = store.archiveRuleSet(key, req.auth.name);
-    await store.save();
+    const ruleSet = await storeCall("archiveRuleSet", key, req.auth.name);
+    await saveStore();
     clientResultCache.clear();
     sendJson(res, 200, { rule_set: publicRuleSet(ruleSet) });
     return;
@@ -1698,8 +1719,8 @@ async function routeRuleSet(req, res, key, suffix) {
       },
       { partial: false }
     );
-    const ruleSet = store.duplicateRuleSet(key, body, req.auth.name);
-    await store.save();
+    const ruleSet = await storeCall("duplicateRuleSet", key, body, req.auth.name);
+    await saveStore();
     clientResultCache.clear();
     sendJson(res, 201, { rule_set: publicRuleSet(ruleSet), draft: ruleSet.draft });
     return;
@@ -1707,7 +1728,7 @@ async function routeRuleSet(req, res, key, suffix) {
 
   if (req.method === "POST" && suffix === "test") {
     requireScope(req, "editor");
-    const ruleSet = store.getRuleSet(key);
+    const ruleSet = await storeCall("getRuleSet", key);
     if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
     validateRuleDefinition(ruleSet.draft, ruleSet.input_schema || {});
     const body = {
@@ -1721,7 +1742,7 @@ async function routeRuleSet(req, res, key, suffix) {
         version: 0,
         definition: ruleSet.draft
       },
-      lookupTables: store.listLookupTables()
+      lookupTables: await storeCall("listLookupTables")
     });
     sendJson(res, 200, { ...result, tested_version: "draft" });
     return;
@@ -1729,18 +1750,18 @@ async function routeRuleSet(req, res, key, suffix) {
 
   if (req.method === "POST" && suffix === "test-published") {
     requireScope(req, "editor");
-    const ruleSet = store.getRuleSet(key);
+    const ruleSet = await storeCall("getRuleSet", key);
     if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
     const body = {
       ...(await readJson(req, config.requestBodyLimitBytes)),
       decision_key: key
     };
     validateEvaluateRequest(body);
-    const version = store.getVersion(key, body.rule_version);
+    const version = await storeCall("getVersion", key, body.rule_version);
     const result = evaluateDecision({
       request: body,
       version,
-      lookupTables: store.listLookupTables()
+      lookupTables: await storeCall("listLookupTables")
     });
     sendJson(res, 200, { ...result, tested_version: "published" });
     return;
@@ -1893,18 +1914,18 @@ function csvCell(value) {
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
-function evaluateRequest(body) {
+async function evaluateRequest(body) {
   if (!body.decision_key) badRequest("decision_key is required");
   if (!body.profile_key) badRequest("profile_key is required");
   if (!Array.isArray(body.identifiers)) badRequest("identifiers must be an array");
 
-  const version = store.getVersion(body.decision_key, body.rule_version);
+  const version = await storeCall("getVersion", body.decision_key, body.rule_version);
   const result = evaluateDecision({
     request: body,
     version,
-    lookupTables: store.listLookupTables()
+    lookupTables: await storeCall("listLookupTables")
   });
-  store.addAudit({
+  await storeCall("addAudit", {
     ...result,
     inputs: {
       identifiers_count: body.identifiers.length,
@@ -1917,9 +1938,9 @@ function evaluateRequest(body) {
 }
 
 async function evaluateClientRequest(body) {
-  const ruleSet = store.getRuleSet(body.decision_key);
+  const ruleSet = await storeCall("getRuleSet", body.decision_key);
   if (!ruleSet) notFoundError(`Rule set not found: ${body.decision_key}`);
-  const version = store.getVersion(body.decision_key, body.rule_version);
+  const version = await storeCall("getVersion", body.decision_key, body.rule_version);
   const baseRequest = {
     identifiers: [],
     attributes: {},
@@ -1929,7 +1950,7 @@ async function evaluateClientRequest(body) {
   };
   const hydrated = await hydrateClientProfile(baseRequest);
   const request = hydrated.request;
-  const schemaItems = store.listSchemaItems();
+  const schemaItems = await storeCall("listSchemaItems");
   const adaptiveExperiment = isAdaptiveExperiment(ruleSet, version);
   const cached = adaptiveExperiment ? { hit: false, cache_key: null, skipped: true } : clientResultCache.get(request, ruleSet, version);
   if (!adaptiveExperiment && cached.hit) {
@@ -1948,11 +1969,11 @@ async function evaluateClientRequest(body) {
   const evaluated = evaluateDecision({
     request,
     version,
-    lookupTables: store.listLookupTables(),
-    clientEventCounter: (params) => store.countClientEvents(params)
+    lookupTables: await storeCall("listLookupTables"),
+    clientEventCounter: createClientEventCounter()
   });
   const assigned = assignExperimentVariant(ruleSet, request, evaluated);
-  const messageResolved = resolveMessageOutputs(
+  const messageResolved = await resolveMessageOutputs(
     assigned && !assigned.holdout ? { ...evaluated.outputs, ...(assigned.outputs || {}) } : evaluated.outputs,
     ruleSet,
     request,
@@ -1964,7 +1985,7 @@ async function evaluateClientRequest(body) {
   const profileCache = profileCacheWithDiagnostics(hydrated.cache, baseRequest, request, schemaItems, finalErrors);
   const ttlSeconds = Number(ruleSet.cache_policy?.client_ttl || 0);
   if (assigned && !assigned.holdout) {
-    store.addExperimentAssignment({
+    await storeCall("addExperimentAssignment", {
       assigned_at: evaluated.evaluated_at,
       decision_key: evaluated.decision_key,
       profile_key: evaluated.profile_key,
@@ -1976,7 +1997,7 @@ async function evaluateClientRequest(body) {
       assignment: assigned.bandit ? { bandit: assigned.bandit } : {}
     });
   } else if (assigned?.holdout) {
-    store.addExperimentAssignment({
+    await storeCall("addExperimentAssignment", {
       assigned_at: evaluated.evaluated_at,
       decision_key: evaluated.decision_key,
       profile_key: evaluated.profile_key,
@@ -1988,7 +2009,7 @@ async function evaluateClientRequest(body) {
       assignment: {}
     });
   }
-  store.addAudit({
+  await storeCall("addAudit", {
     ...evaluated,
     result: finalResult,
     outputs: finalOutputs,
@@ -2032,7 +2053,7 @@ async function evaluateClientRequest(body) {
 }
 
 async function hydrateClientProfile(request) {
-  const settings = store.getSettings();
+  const settings = await storeCall("getSettings");
   const mode = request.context?.profile_enrichment ?? request.context?.enrich_profile;
   const hasLocalPayload = hasProfilePayload(request);
   if (mode === false || mode === "off") {
@@ -2101,6 +2122,19 @@ async function hydrateClientProfile(request) {
       }
     };
   }
+}
+
+function createClientEventCounter() {
+  return (params) => {
+    if (typeof store.countClientEvents !== "function") {
+      throw new Error("Store adapter does not support countClientEvents");
+    }
+    const count = store.countClientEvents(params);
+    if (count && typeof count.then === "function") {
+      throw new Error("Async client event counters require the async evaluator path");
+    }
+    return count;
+  };
 }
 
 function hasProfilePayload(request) {
@@ -2212,10 +2246,10 @@ function mergeIdentifiers(...sets) {
   });
 }
 
-function resolveMessageOutputs(outputs, ruleSet, request, evaluatedAt) {
+async function resolveMessageOutputs(outputs, ruleSet, request, evaluatedAt) {
   const messageId = outputs.message_id || outputs.messageId || outputs.message?.id;
   if (!messageId) return { outputs, available: null, errors: [] };
-  const message = store.getMessage(String(messageId));
+  const message = await storeCall("getMessage", String(messageId));
   if (!message) {
     return unavailableMessage(outputs, "message_not_found", `Message not found: ${messageId}`);
   }
@@ -2292,7 +2326,7 @@ function messageAvailability(message, ruleSet, request, evaluatedAt) {
   const ttlSeconds = Number(lifecycle.ttl_seconds || message.metadata?.ttl_seconds || 0);
   if (Number.isFinite(ttlSeconds) && ttlSeconds > 0) {
     const since = new Date(nowMs - ttlSeconds * 1000).toISOString();
-    const impressions = store.countClientEvents({
+    const impressions = createClientEventCounter()({
       event_type: "impression",
       decision_key: ruleSet.decision_key,
       profile_key: request.profile_key,

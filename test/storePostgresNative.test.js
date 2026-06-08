@@ -293,6 +293,24 @@ test("native postgres rule writes publish and archive in transactions", async ()
   assert.ok(calls.some((call) => call.sql === "COMMIT"));
 });
 
+test("native postgres rule reads expose server-compatible version aliases", async () => {
+  const { client, rules, versions } = nativeRuleClient();
+  seedRule(rules, { decision_key: "next_best_offer", name: "Next Best Offer", status: "published" });
+  versions.set("next_best_offer", [
+    { version: 1, published_at: "2026-06-01T10:00:00.000Z", author: "publisher", definition_json: { fallback: { result: "deferred" } }, metadata_json: {} },
+    { version: 2, published_at: "2026-06-02T10:00:00.000Z", author: "publisher", definition_json: { fallback: { result: "eligible" } }, metadata_json: {} }
+  ]);
+  const store = new PostgresNativeReadStore(client);
+
+  const all = await store.listVersions("next_best_offer");
+  const latest = await store.getVersion("next_best_offer");
+  const first = await store.getVersion("next_best_offer", 1);
+
+  assert.equal(all.length, 2);
+  assert.equal(latest.version, 2);
+  assert.equal(first.definition.fallback.result, "deferred");
+});
+
 test("native postgres rule writes upsert rule versions transactionally", async () => {
   const { client, calls, rules, versions } = nativeRuleClient();
   seedRule(rules, { decision_key: "loan", name: "Loan", status: "draft" });
@@ -318,6 +336,52 @@ test("native postgres rule writes upsert rule versions transactionally", async (
   assert.ok(calls.some((call) => call.sql === "BEGIN"));
   assert.ok(calls.some((call) => call.sql === "COMMIT"));
   assert.ok(calls.some((call) => call.sql.startsWith("DELETE FROM rule_versions")));
+});
+
+test("native postgres runtime writes audit, client events, and assignments", async () => {
+  const { client, calls, audit, clientEvents, assignments } = nativeRuntimeClient();
+  const store = new PostgresNativeReadStore(client);
+
+  await store.addAudit({
+    evaluated_at: "2026-06-01T10:00:00.000Z",
+    decision_key: "next_best_offer",
+    profile_key: "profile-1",
+    rule_version: 2,
+    result: "eligible",
+    outputs: { offer_id: "solar" },
+    matched_rules: ["branch_1"],
+    errors: []
+  });
+  const event = await store.addClientEvent({
+    event_id: "evt-1",
+    event_type: "exposure",
+    occurred_at: "2026-06-01T10:01:00.000Z",
+    decision_key: "next_best_offer",
+    profile_key: "profile-1",
+    rule_version: 2,
+    variant_key: "treatment",
+    message_id: "hero_message",
+    surface: "homepage"
+  });
+  const duplicate = await store.addClientEvent({ ...event, event_id: "evt-1" });
+  const count = await store.countClientEvents({ event_type: "exposure", decision_key: "next_best_offer", profile_key: "profile-1" });
+  const assignment = await store.addExperimentAssignment({
+    decision_key: "next_best_offer",
+    profile_key: "profile-1",
+    rule_version: 2,
+    variant_key: "treatment",
+    strategy: "fixed",
+    bucket: 42
+  });
+
+  assert.equal(audit.length, 1);
+  assert.equal(event.accepted, true);
+  assert.equal(duplicate.duplicate, true);
+  assert.equal(count, 1);
+  assert.equal(assignments.length, 1);
+  assert.equal(assignment.variant_key, "treatment");
+  assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO audit_log")));
+  assert.ok(calls.some((call) => call.sql.includes("ON CONFLICT(event_id) DO NOTHING")));
 });
 
 test("native postgres content writes replace lookup tables with version history", async () => {
@@ -539,6 +603,81 @@ function nativeContentClient() {
   };
 }
 
+function nativeRuntimeClient() {
+  const calls = [];
+  const audit = [];
+  const clientEvents = new Map();
+  const assignments = [];
+  return {
+    calls,
+    audit,
+    clientEvents,
+    assignments,
+    client: {
+      async query(sql, params = []) {
+        calls.push({ sql, params });
+        if (sql.startsWith("INSERT INTO audit_log")) {
+          audit.push({
+            evaluated_at: params[0],
+            decision_key: params[1],
+            profile_key: params[2],
+            rule_version: params[3],
+            result: params[4],
+            outputs_json: JSON.parse(params[5]),
+            matched_rules_json: JSON.parse(params[6]),
+            errors_json: JSON.parse(params[7]),
+            entry_json: JSON.parse(params[8])
+          });
+          return { rows: [] };
+        }
+        if (sql.startsWith("INSERT INTO client_events")) {
+          if (clientEvents.has(params[0])) return { rows: [] };
+          const row = {
+            event_id: params[0],
+            event_type: params[1],
+            occurred_at: params[2],
+            decision_key: params[3],
+            profile_key: params[4],
+            rule_version: params[5],
+            variant_key: params[6],
+            message_id: params[7],
+            surface: params[8],
+            context_json: JSON.parse(params[9]),
+            event_json: JSON.parse(params[10])
+          };
+          clientEvents.set(params[0], row);
+          return { rows: [{ event_json: row.event_json }] };
+        }
+        if (sql.startsWith("SELECT event_json FROM client_events")) {
+          const row = clientEvents.get(params[0]);
+          return { rows: row ? [{ event_json: row.event_json }] : [] };
+        }
+        if (sql.startsWith("SELECT COUNT(*) AS count FROM client_events")) {
+          const filters = extractClientEventFilters(sql, params);
+          const count = [...clientEvents.values()].filter((row) => Object.entries(filters).every(([key, value]) => row[key] === value)).length;
+          return { rows: [{ count }] };
+        }
+        if (sql.startsWith("INSERT INTO experiment_assignments")) {
+          assignments.push({
+            id: params[0],
+            assigned_at: params[1],
+            decision_key: params[2],
+            profile_key: params[3],
+            rule_version: params[4],
+            variant_key: params[5],
+            strategy: params[6],
+            reason: params[7],
+            bucket: params[8],
+            assignment_json: JSON.parse(params[9])
+          });
+          return { rows: [] };
+        }
+        return { rows: [] };
+      }
+    }
+  };
+}
+
 function nativeRuleClient() {
   const calls = [];
   const rules = new Map();
@@ -593,6 +732,15 @@ function nativeRuleClient() {
       }
     }
   };
+}
+
+function extractClientEventFilters(sql, params) {
+  const filters = {};
+  for (const key of ["event_type", "decision_key", "profile_key", "variant_key", "message_id", "surface"]) {
+    const match = sql.match(new RegExp(`${key} = \\$(\\d+)`));
+    if (match) filters[key] = params[Number(match[1]) - 1];
+  }
+  return filters;
 }
 
 function lookupRowFromParams(params) {
