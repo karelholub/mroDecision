@@ -313,7 +313,7 @@ async function routeApi(req, res, url) {
     requireScope(req, "viewer");
     sendJson(res, 200, {
       metrics: {
-        ...store.getMetrics({ window_hours: url.searchParams.get("window_hours") }),
+        ...await storeCall("getMetrics", { window_hours: url.searchParams.get("window_hours") }),
         client_cache: clientResultCache.metrics(),
         profile_cache: meiroProfileCache.metrics(),
         client_rate_limit: clientRateLimiter.metrics(),

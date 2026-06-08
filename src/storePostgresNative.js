@@ -274,6 +274,239 @@ export class PostgresNativeReadStore {
     return Number(result.rows[0]?.count || 0);
   }
 
+  async addPrecomputeRun(input = {}) {
+    const run = {
+      id: input.id || `pre_${randomId(16)}`,
+      received_at: input.received_at || new Date().toISOString(),
+      source: input.source || "",
+      surface: input.surface || "",
+      sync_id: input.sync_id || "",
+      profile_count: Number(input.profile_count || 0),
+      candidate_evaluations: Number(input.candidate_evaluations || 0),
+      eligible_count: Number(input.eligible_count || 0),
+      not_selected_count: Number(input.not_selected_count || 0),
+      error_count: Number(input.error_count || 0),
+      metadata: isPlainObject(input.metadata) ? input.metadata : {}
+    };
+    await this.client.query(
+      `INSERT INTO precompute_runs (
+        id, received_at, source, surface, sync_id, profile_count, candidate_evaluations,
+        eligible_count, not_selected_count, error_count, run_json
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)`,
+      [
+        run.id,
+        run.received_at,
+        run.source,
+        run.surface,
+        run.sync_id,
+        run.profile_count,
+        run.candidate_evaluations,
+        run.eligible_count,
+        run.not_selected_count,
+        run.error_count,
+        JSON.stringify(run.metadata)
+      ]
+    );
+    return run;
+  }
+
+  async getMetrics(options = {}) {
+    const now = Date.now();
+    const windowHours = normalizeMetricsWindowHours(options.window_hours);
+    const sinceWindow = new Date(now - windowHours * 60 * 60 * 1000).toISOString();
+    const sincePreviousWindow = new Date(now - windowHours * 2 * 60 * 60 * 1000).toISOString();
+    const since24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    const since7d = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const [rules, lookups, schemaItems, settings] = await Promise.all([
+      this.listRuleSets(),
+      this.listLookupTables(),
+      this.listSchemaItems(),
+      this.getSettings()
+    ]);
+    const auditSummary = await this.client.query(
+      `SELECT
+        COUNT(*) AS total_requests,
+        SUM(CASE WHEN evaluated_at >= $1 THEN 1 ELSE 0 END) AS requests_window,
+        SUM(CASE WHEN evaluated_at >= $2 THEN 1 ELSE 0 END) AS requests_24h,
+        SUM(CASE WHEN evaluated_at >= $3 THEN 1 ELSE 0 END) AS requests_7d,
+        COUNT(DISTINCT profile_key) AS unique_profiles,
+        COUNT(DISTINCT CASE WHEN evaluated_at >= $1 THEN profile_key END) AS unique_profiles_window
+       FROM audit_log`,
+      [sinceWindow, since24h, since7d]
+    );
+    const resultDistribution = await this.client.query(
+      "SELECT result, COUNT(*) AS count FROM audit_log WHERE evaluated_at >= $1 GROUP BY result ORDER BY count DESC, result ASC LIMIT 8",
+      [sinceWindow]
+    );
+    const ruleUsage = await this.client.query(
+      `SELECT
+        decision_key,
+        COUNT(*) AS requests,
+        SUM(CASE WHEN evaluated_at >= $1 THEN 1 ELSE 0 END) AS requests_24h,
+        MAX(evaluated_at) AS last_evaluated_at,
+        COUNT(DISTINCT profile_key) AS unique_profiles
+       FROM audit_log
+       WHERE evaluated_at >= $2
+       GROUP BY decision_key
+       ORDER BY requests DESC, decision_key ASC
+       LIMIT 10`,
+      [since24h, sinceWindow]
+    );
+    const clientEventSummary = await this.client.query(
+      `SELECT
+        event_type,
+        COUNT(*) AS count,
+        SUM(CASE WHEN occurred_at >= $1 THEN 1 ELSE 0 END) AS count_window,
+        SUM(CASE WHEN occurred_at >= $2 THEN 1 ELSE 0 END) AS count_24h,
+        COUNT(DISTINCT profile_key) AS unique_profiles,
+        COUNT(DISTINCT CASE WHEN occurred_at >= $1 THEN profile_key END) AS unique_profiles_window
+       FROM client_events
+       GROUP BY event_type
+       ORDER BY event_type ASC`,
+      [sinceWindow, since24h]
+    );
+    const precomputeRuns = await this.client.query(
+      "SELECT * FROM precompute_runs WHERE received_at >= $1 ORDER BY received_at DESC LIMIT 100",
+      [sinceWindow]
+    );
+    const auditRow = auditSummary.rows[0] || {};
+    const eventRows = clientEventSummary.rows || [];
+    return {
+      generated_at: new Date().toISOString(),
+      window: {
+        hours: windowHours,
+        from: sinceWindow,
+        to: new Date(now).toISOString(),
+        label: metricsWindowLabel(windowHours)
+      },
+      requests: {
+        total: Number(auditRow.total_requests || 0),
+        window: Number(auditRow.requests_window || 0),
+        last_24h: Number(auditRow.requests_24h || 0),
+        last_7d: Number(auditRow.requests_7d || 0),
+        unique_profiles: Number(auditRow.unique_profiles || 0),
+        unique_profiles_window: Number(auditRow.unique_profiles_window || 0)
+      },
+      rules: {
+        total: rules.length,
+        published: rules.filter((rule) => rule.status === "published").length,
+        draft: rules.filter((rule) => rule.status === "draft").length,
+        archived: rules.filter((rule) => rule.status === "archived").length
+      },
+      lookups: { total: lookups.length },
+      schema: {
+        total: schemaItems.length,
+        attributes: schemaItems.filter((item) => item.kind === "attribute").length,
+        segments: schemaItems.filter((item) => item.kind === "segment").length,
+        context: schemaItems.filter((item) => item.kind === "context").length,
+        last_sync_status: settings.schema_last_sync_status || "never",
+        last_synced_at: settings.schema_last_synced_at || "",
+        last_sync_count: Number(settings.schema_last_sync_count || 0)
+      },
+      client_events: {
+        total: eventRows.reduce((sum, row) => sum + Number(row.count || 0), 0),
+        last_24h: eventRows.reduce((sum, row) => sum + Number(row.count_24h || 0), 0),
+        window: eventRows.reduce((sum, row) => sum + Number(row.count_window || 0), 0),
+        by_type: eventRows.map((row) => ({
+          event_type: row.event_type,
+          count: Number(row.count_window || 0),
+          total_count: Number(row.count || 0),
+          count_24h: Number(row.count_24h || 0),
+          unique_profiles: Number(row.unique_profiles_window || 0),
+          total_unique_profiles: Number(row.unique_profiles || 0)
+        }))
+      },
+      precompute: precomputeRunMetrics(precomputeRuns.rows.map(rowToPrecomputeRun)),
+      result_distribution: resultDistribution.rows.map((row) => ({ result: row.result, count: Number(row.count || 0) })),
+      rule_usage: ruleUsage.rows.map((row) => ({
+        decision_key: row.decision_key,
+        requests: Number(row.requests || 0),
+        requests_window: Number(row.requests || 0),
+        requests_24h: Number(row.requests_24h || 0),
+        unique_profiles: Number(row.unique_profiles || 0),
+        last_evaluated_at: row.last_evaluated_at ? isoValue(row.last_evaluated_at) : null
+      })),
+      anomaly_baseline: await this.getMetricsAnomalyBaseline({
+        current_from: sinceWindow,
+        previous_from: sincePreviousWindow,
+        to: new Date(now).toISOString(),
+        window_hours: windowHours
+      })
+    };
+  }
+
+  async getMetricsAnomalyBaseline({ current_from, previous_from, to, window_hours }) {
+    const auditRows = await this.client.query(
+      `SELECT
+        SUM(CASE WHEN evaluated_at >= $1 AND evaluated_at <= $2 THEN 1 ELSE 0 END) AS current_requests,
+        SUM(CASE WHEN evaluated_at >= $3 AND evaluated_at < $1 THEN 1 ELSE 0 END) AS previous_requests,
+        COUNT(DISTINCT CASE WHEN evaluated_at >= $1 AND evaluated_at <= $2 THEN profile_key END) AS current_profiles,
+        COUNT(DISTINCT CASE WHEN evaluated_at >= $3 AND evaluated_at < $1 THEN profile_key END) AS previous_profiles
+       FROM audit_log`,
+      [current_from, to, previous_from]
+    );
+    const eventRows = await this.client.query(
+      `SELECT
+        SUM(CASE WHEN occurred_at >= $1 AND occurred_at <= $2 THEN 1 ELSE 0 END) AS current_events,
+        SUM(CASE WHEN occurred_at >= $3 AND occurred_at < $1 THEN 1 ELSE 0 END) AS previous_events
+       FROM client_events`,
+      [current_from, to, previous_from]
+    );
+    const audit = auditRows.rows[0] || {};
+    const events = eventRows.rows[0] || {};
+    const currentRequests = Number(audit.current_requests || 0);
+    const previousRequests = Number(audit.previous_requests || 0);
+    const currentProfiles = Number(audit.current_profiles || 0);
+    const previousProfiles = Number(audit.previous_profiles || 0);
+    const currentEvents = Number(events.current_events || 0);
+    const previousEvents = Number(events.previous_events || 0);
+    const currentCoverage = currentRequests ? currentEvents / currentRequests : 0;
+    const previousCoverage = previousRequests ? previousEvents / previousRequests : 0;
+    const signals = [
+      anomalySignal({
+        id: "request_volume",
+        label: "Request volume",
+        current: currentRequests,
+        previous: previousRequests,
+        unit: "requests",
+        detail: "Evaluations in the selected window compared with the previous matching window."
+      }),
+      anomalySignal({
+        id: "unique_profiles",
+        label: "Unique profiles",
+        current: currentProfiles,
+        previous: previousProfiles,
+        unit: "profiles",
+        detail: "Distinct profile keys evaluated in the selected window."
+      }),
+      anomalySignal({
+        id: "client_feedback",
+        label: "Client feedback",
+        current: currentEvents,
+        previous: previousEvents,
+        unit: "events",
+        detail: "Client impressions, exposures, and conversions in the selected window."
+      }),
+      anomalySignal({
+        id: "feedback_coverage",
+        label: "Feedback coverage",
+        current: currentCoverage,
+        previous: previousCoverage,
+        unit: "ratio",
+        detail: "Client feedback events per evaluation request."
+      })
+    ];
+    return {
+      window_hours,
+      current_from,
+      previous_from,
+      previous_to: current_from,
+      generated_at: new Date().toISOString(),
+      signals,
+      alerts: signals.map((signal) => anomalyAlertFromSignal(signal)).filter(Boolean)
+    };
+  }
+
   async getClientEventMetrics(params = {}) {
     const values = [];
     const where = [];
@@ -1210,6 +1443,45 @@ function rowToMeiroDelivery(row) {
   };
 }
 
+function rowToPrecomputeRun(row) {
+  const payload = parseJson(row.run_json, {});
+  return {
+    id: row.id,
+    received_at: isoValue(row.received_at),
+    source: row.source || "",
+    surface: row.surface || "",
+    sync_id: row.sync_id || "",
+    profile_count: Number(row.profile_count || 0),
+    candidate_evaluations: Number(row.candidate_evaluations || 0),
+    eligible_count: Number(row.eligible_count || 0),
+    not_selected_count: Number(row.not_selected_count || 0),
+    error_count: Number(row.error_count || 0),
+    diagnostics: payload.diagnostics || null
+  };
+}
+
+function precomputeRunMetrics(runs = []) {
+  const latest = runs[0] || null;
+  const totals = runs.reduce(
+    (acc, run) => {
+      acc.runs += 1;
+      acc.profiles += Number(run.profile_count || 0);
+      acc.candidate_evaluations += Number(run.candidate_evaluations || 0);
+      acc.eligible += Number(run.eligible_count || 0);
+      acc.not_selected += Number(run.not_selected_count || 0);
+      acc.errors += Number(run.error_count || 0);
+      return acc;
+    },
+    { runs: 0, profiles: 0, candidate_evaluations: 0, eligible: 0, not_selected: 0, errors: 0 }
+  );
+  return {
+    ...totals,
+    eligibility_rate: totals.profiles ? totals.eligible / totals.profiles : 0,
+    error_rate: totals.profiles ? totals.errors / totals.profiles : 0,
+    latest_run: latest
+  };
+}
+
 function rowToClientEventMetric(row) {
   return {
     key: row.key || "(empty)",
@@ -1217,6 +1489,66 @@ function rowToClientEventMetric(row) {
     count: Number(row.count || 0),
     unique_profiles: Number(row.unique_profiles || 0),
     last_seen_at: row.last_seen_at ? isoValue(row.last_seen_at) : null
+  };
+}
+
+function normalizeMetricsWindowHours(value) {
+  const parsed = Number(value || 24);
+  const allowed = [1, 6, 24, 72, 168, 720];
+  return allowed.includes(parsed) ? parsed : 24;
+}
+
+function metricsWindowLabel(hours) {
+  if (hours === 1) return "Last hour";
+  if (hours < 24) return `Last ${hours} hours`;
+  if (hours === 24) return "Last 24 hours";
+  if (hours === 72) return "Last 3 days";
+  if (hours === 168) return "Last 7 days";
+  if (hours === 720) return "Last 30 days";
+  return `Last ${hours} hours`;
+}
+
+function anomalySignal({ id, label, current, previous, unit, detail }) {
+  const delta = Number(current || 0) - Number(previous || 0);
+  const change = Number(previous || 0) > 0 ? delta / Number(previous || 0) : (Number(current || 0) > 0 ? 1 : 0);
+  return {
+    id,
+    label,
+    current: Number(current || 0),
+    previous: Number(previous || 0),
+    delta,
+    change,
+    unit,
+    detail,
+    level: anomalyLevel({ id, current: Number(current || 0), previous: Number(previous || 0), change })
+  };
+}
+
+function anomalyLevel({ id, current, previous, change }) {
+  if (id === "feedback_coverage") {
+    if (current < 0.1 && previous >= 0.25) return "warn";
+    if (current < 0.05 && previous >= 0.5) return "error";
+    return "ok";
+  }
+  if (previous < 5 && current < 5) return "ok";
+  if (previous >= 5 && change <= -0.75) return "error";
+  if (previous >= 5 && change <= -0.5) return "warn";
+  if (previous >= 10 && change >= 2) return "warn";
+  return "ok";
+}
+
+function anomalyAlertFromSignal(signal) {
+  if (!["warn", "error"].includes(signal.level)) return null;
+  const direction = signal.delta >= 0 ? "up" : "down";
+  const percent = Math.round(Math.abs(signal.change || 0) * 100);
+  return {
+    id: signal.id,
+    level: signal.level,
+    message: `${signal.label} is ${direction} ${percent}% versus the previous window.`,
+    detail: signal.detail,
+    current: signal.current,
+    previous: signal.previous,
+    unit: signal.unit
   };
 }
 

@@ -338,8 +338,8 @@ test("native postgres rule writes upsert rule versions transactionally", async (
   assert.ok(calls.some((call) => call.sql.startsWith("DELETE FROM rule_versions")));
 });
 
-test("native postgres runtime writes audit, client events, and assignments", async () => {
-  const { client, calls, audit, clientEvents, assignments } = nativeRuntimeClient();
+test("native postgres runtime writes audit, client events, assignments, and metrics", async () => {
+  const { client, calls, audit, clientEvents, assignments, precomputeRuns } = nativeRuntimeClient();
   const store = new PostgresNativeReadStore(client);
 
   await store.addAudit({
@@ -366,6 +366,18 @@ test("native postgres runtime writes audit, client events, and assignments", asy
   const duplicate = await store.addClientEvent({ ...event, event_id: "evt-1" });
   const count = await store.countClientEvents({ event_type: "exposure", decision_key: "next_best_offer", profile_key: "profile-1" });
   const eventMetrics = await store.getClientEventMetrics({ decision_key: "next_best_offer", recent_limit: 5 });
+  const precomputeRun = await store.addPrecomputeRun({
+    received_at: "2026-06-01T10:02:00.000Z",
+    source: "meiro_pipes_inapp_precompute",
+    surface: "homepage",
+    sync_id: "sync-1",
+    profile_count: 10,
+    candidate_evaluations: 20,
+    eligible_count: 4,
+    not_selected_count: 6,
+    error_count: 0,
+    metadata: { diagnostics: { matched_rule_count: 1 } }
+  });
   const assignment = await store.addExperimentAssignment({
     decision_key: "next_best_offer",
     profile_key: "profile-1",
@@ -375,6 +387,7 @@ test("native postgres runtime writes audit, client events, and assignments", asy
     bucket: 42
   });
   const auditRows = await store.queryAudit({ decision_key: "next_best_offer", matched_rule: "branch_1", search: "solar" });
+  const metrics = await store.getMetrics({ window_hours: 720 });
 
   assert.equal(audit.length, 1);
   assert.equal(auditRows.length, 1);
@@ -387,9 +400,18 @@ test("native postgres runtime writes audit, client events, and assignments", asy
   assert.equal(eventMetrics.by_message[0].key, "hero_message");
   assert.equal(eventMetrics.by_surface[0].key, "homepage");
   assert.equal(eventMetrics.recent_events[0].event_id, "evt-1");
+  assert.equal(precomputeRun.profile_count, 10);
+  assert.equal(precomputeRuns.length, 1);
+  assert.equal(metrics.requests.total, 1);
+  assert.equal(metrics.client_events.total, 1);
+  assert.equal(metrics.rule_usage[0].decision_key, "next_best_offer");
+  assert.equal(metrics.result_distribution[0].result, "eligible");
+  assert.equal(metrics.precompute.profiles, 10);
+  assert.equal(metrics.precompute.latest_run.sync_id, "sync-1");
   assert.equal(assignments.length, 1);
   assert.equal(assignment.variant_key, "treatment");
   assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO audit_log")));
+  assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO precompute_runs")));
   assert.ok(calls.some((call) => call.sql.includes("entry_json::text ILIKE")));
   assert.ok(calls.some((call) => call.sql.includes("ON CONFLICT(event_id) DO NOTHING")));
 });
@@ -659,15 +681,29 @@ function nativeRuntimeClient() {
   const clientEvents = new Map();
   const assignments = [];
   const meiroDeliveries = [];
+  const precomputeRuns = [];
   return {
     calls,
     audit,
     clientEvents,
     assignments,
     meiroDeliveries,
+    precomputeRuns,
     client: {
       async query(sql, params = []) {
         calls.push({ sql, params });
+        if (sql.includes("FROM rule_sets rs")) return { rows: [] };
+        if (sql.startsWith("SELECT * FROM lookup_tables")) return { rows: [] };
+        if (sql.startsWith("SELECT * FROM schema_items")) return { rows: [] };
+        if (sql.startsWith("SELECT key, value_json FROM settings")) {
+          return {
+            rows: [
+              { key: "schema_last_sync_status", value_json: '"ok"' },
+              { key: "schema_last_synced_at", value_json: '"2026-06-01T10:00:00.000Z"' },
+              { key: "schema_last_sync_count", value_json: "0" }
+            ]
+          };
+        }
         if (sql.startsWith("INSERT INTO audit_log")) {
           audit.push({
             evaluated_at: params[0],
@@ -697,6 +733,32 @@ function nativeRuntimeClient() {
             .map((row) => ({ entry_json: row.entry_json }));
           return { rows };
         }
+        if (sql.includes("COUNT(*) AS total_requests") && sql.includes("FROM audit_log")) {
+          return {
+            rows: [{
+              total_requests: audit.length,
+              requests_window: audit.length,
+              requests_24h: audit.length,
+              requests_7d: audit.length,
+              unique_profiles: new Set(audit.map((row) => row.profile_key)).size,
+              unique_profiles_window: new Set(audit.map((row) => row.profile_key)).size
+            }]
+          };
+        }
+        if (sql.startsWith("SELECT result, COUNT(*) AS count FROM audit_log")) {
+          return { rows: groupRows(audit, "result").map(({ key, count }) => ({ result: key, count })) };
+        }
+        if (sql.includes("decision_key,") && sql.includes("FROM audit_log") && sql.includes("GROUP BY decision_key")) {
+          return {
+            rows: groupRows(audit, "decision_key").map(({ key, count }) => ({
+              decision_key: key,
+              requests: count,
+              requests_24h: count,
+              unique_profiles: new Set(audit.filter((row) => row.decision_key === key).map((row) => row.profile_key)).size,
+              last_evaluated_at: audit.filter((row) => row.decision_key === key).sort((a, b) => String(b.evaluated_at).localeCompare(String(a.evaluated_at)))[0]?.evaluated_at
+            }))
+          };
+        }
         if (sql.startsWith("INSERT INTO client_events")) {
           if (clientEvents.has(params[0])) return { rows: [] };
           const row = {
@@ -723,6 +785,18 @@ function nativeRuntimeClient() {
           const filters = extractClientEventFilters(sql, params);
           const count = [...clientEvents.values()].filter((row) => Object.entries(filters).every(([key, value]) => row[key] === value)).length;
           return { rows: [{ count }] };
+        }
+        if (sql.includes("COUNT(*) AS count") && sql.includes("count_window") && sql.includes("FROM client_events")) {
+          return {
+            rows: groupRows([...clientEvents.values()], "event_type").map(({ key, count }) => ({
+              event_type: key,
+              count,
+              count_window: count,
+              count_24h: count,
+              unique_profiles: new Set([...clientEvents.values()].filter((row) => row.event_type === key).map((row) => row.profile_key)).size,
+              unique_profiles_window: new Set([...clientEvents.values()].filter((row) => row.event_type === key).map((row) => row.profile_key)).size
+            }))
+          };
         }
         if (sql.includes("AS key, event_type") && sql.includes("FROM client_events")) {
           const filters = extractClientEventFilters(sql, params);
@@ -776,6 +850,38 @@ function nativeRuntimeClient() {
           });
           return { rows: [] };
         }
+        if (sql.startsWith("INSERT INTO precompute_runs")) {
+          precomputeRuns.push({
+            id: params[0],
+            received_at: params[1],
+            source: params[2],
+            surface: params[3],
+            sync_id: params[4],
+            profile_count: params[5],
+            candidate_evaluations: params[6],
+            eligible_count: params[7],
+            not_selected_count: params[8],
+            error_count: params[9],
+            run_json: JSON.parse(params[10])
+          });
+          return { rows: [] };
+        }
+        if (sql.startsWith("SELECT * FROM precompute_runs")) {
+          return { rows: [...precomputeRuns].sort((a, b) => String(b.received_at).localeCompare(String(a.received_at))) };
+        }
+        if (sql.includes("current_requests") && sql.includes("FROM audit_log")) {
+          return {
+            rows: [{
+              current_requests: audit.length,
+              previous_requests: 0,
+              current_profiles: new Set(audit.map((row) => row.profile_key)).size,
+              previous_profiles: 0
+            }]
+          };
+        }
+        if (sql.includes("current_events") && sql.includes("FROM client_events")) {
+          return { rows: [{ current_events: clientEvents.size, previous_events: 0 }] };
+        }
         if (sql.startsWith("INSERT INTO meiro_deliveries")) {
           meiroDeliveries.push({
             id: params[0],
@@ -823,6 +929,12 @@ function extractAuditFilters(sql, params) {
     if (matches[1] != null) filters.search = params[matches[1]];
   }
   return filters;
+}
+
+function groupRows(rows, key) {
+  const counts = new Map();
+  for (const row of rows) counts.set(row[key] || "", (counts.get(row[key] || "") || 0) + 1);
+  return [...counts.entries()].map(([groupKey, count]) => ({ key: groupKey, count }));
 }
 
 function extractMeiroDeliveryFilters(sql, params) {
