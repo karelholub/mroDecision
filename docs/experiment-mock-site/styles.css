@@ -309,6 +309,112 @@ select {
   gap: 18px;
 }
 
+.configuration-stage {
+  display: grid;
+  gap: 16px;
+}
+
+.configuration-summary {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  background: #f8fbff;
+}
+
+.configuration-summary .variant-badge {
+  background: var(--navy);
+  color: #fff;
+}
+
+.configuration-summary p {
+  max-width: 920px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.feature-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.feature-toggle-grid article,
+.merchandising-demo article {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 13px;
+  background: #fff;
+}
+
+.feature-toggle-grid article[data-enabled="true"] {
+  border-color: rgba(15, 143, 129, 0.35);
+  background: #effbf8;
+}
+
+.feature-toggle-grid article[data-enabled="false"] {
+  background: #f7f8fb;
+  opacity: 0.72;
+}
+
+.feature-toggle-grid span,
+.merchandising-demo span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.feature-toggle-grid strong {
+  display: block;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+
+.merchandising-demo {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.merchandising-demo article {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 150px;
+}
+
+.merchandising-demo strong {
+  line-height: 1.25;
+}
+
+.merchandising-demo small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.price-card strong {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 26px;
+}
+
+.price-struck {
+  color: var(--muted);
+  font-size: 17px;
+  text-decoration: line-through;
+}
+
+[data-discount-price] {
+  color: var(--danger);
+}
+
 .hero-stage {
   min-height: 430px;
   grid-row: span 2;
@@ -554,6 +660,11 @@ pre {
     grid-template-columns: 1fr;
   }
 
+  .feature-toggle-grid,
+  .merchandising-demo {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .hero-stage {
     grid-row: auto;
   }
@@ -567,6 +678,8 @@ pre {
 
   .form-grid,
   .kpi-strip,
+  .feature-toggle-grid,
+  .merchandising-demo,
   dl,
   #event-log li {
     grid-template-columns: 1fr;

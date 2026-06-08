@@ -12,6 +12,7 @@ const elements = {
   runtimeForm: document.querySelector("#runtime-form"),
   baseUrl: document.querySelector("#dee-base-url"),
   token: document.querySelector("#dee-token"),
+  configDecisionKey: document.querySelector("#config-decision-key"),
   heroDecisionKey: document.querySelector("#hero-decision-key"),
   offerDecisionKey: document.querySelector("#offer-decision-key"),
   messageDecisionKey: document.querySelector("#message-decision-key"),
@@ -124,6 +125,7 @@ function initializeSdk(options = {}) {
     fallback: "keep",
     maxItems: 8,
     renderers: {
+      configuration: renderWebsiteConfiguration,
       hero: renderHero,
       message: renderMessage,
       cards: renderCards
@@ -289,6 +291,44 @@ async function renderCards(element, decision, config) {
   return true;
 }
 
+async function renderWebsiteConfiguration(element, decision) {
+  if (decision.result !== "eligible") return false;
+  const outputs = decision.outputs || {};
+  const configuration = outputs.configuration || outputs.feature_flags || {};
+  if (!configuration || typeof configuration !== "object") return false;
+  const variantLabel = document.querySelector("#configuration-variant");
+  const rationale = document.querySelector("#configuration-rationale");
+  if (variantLabel) {
+    variantLabel.textContent = decision.experiment?.variant_key
+      ? `Variant ${decision.experiment.variant_key}`
+      : "DEE configuration";
+  }
+  if (rationale) {
+    rationale.textContent = outputs.rationale || outputs.description || "DEE returned this website feature configuration for the current profile and context.";
+  }
+  for (const [key, value] of Object.entries(configuration)) {
+    const enabled = Boolean(value);
+    document.querySelectorAll(`[data-feature-state="${cssEscape(key)}"]`).forEach((target) => {
+      target.textContent = enabled ? "Visible / eligible" : "Hidden / not eligible";
+    });
+    document.querySelectorAll(`[data-feature-card="${cssEscape(key)}"]`).forEach((target) => {
+      target.dataset.enabled = String(enabled);
+    });
+    document.querySelectorAll(`[data-config-feature="${cssEscape(key)}"]`).forEach((target) => {
+      target.hidden = !enabled;
+      target.dataset.enabled = String(enabled);
+    });
+  }
+  document.querySelectorAll("[data-discount-price]").forEach((target) => {
+    target.hidden = !Boolean(configuration.discounted_prices_visible);
+  });
+  document.querySelectorAll("[data-regular-price]").forEach((target) => {
+    target.classList.toggle("price-struck", Boolean(configuration.discounted_prices_visible));
+  });
+  element.dataset.renderedVariant = decision.experiment?.variant_key || "";
+  return true;
+}
+
 function cardsFromDecision(decision) {
   const outputs = decision.outputs || {};
   if (Array.isArray(outputs.cards)) return outputs.cards;
@@ -365,6 +405,7 @@ function saveSettings() {
   const saved = {
     baseUrl: elements.baseUrl.value,
     token: elements.token.value,
+    configDecisionKey: elements.configDecisionKey.value,
     heroDecisionKey: elements.heroDecisionKey.value,
     offerDecisionKey: elements.offerDecisionKey.value,
     messageDecisionKey: elements.messageDecisionKey.value,
@@ -412,18 +453,26 @@ function placementsList() {
 }
 
 function applyPlacementSettings() {
+  const config = document.querySelector("#website-configuration");
   const hero = document.querySelector("#hero-placement");
   const offers = document.querySelector("#offer-carousel");
   const message = document.querySelector("#message-placement");
+  if (config) config.dataset.deeDecisionKey = elements.configDecisionKey.value.trim();
   if (hero) hero.dataset.deeDecisionKey = elements.heroDecisionKey.value.trim();
   if (offers) offers.dataset.deeDecisionKey = elements.offerDecisionKey.value.trim();
   if (message) message.dataset.deeDecisionKey = elements.messageDecisionKey.value.trim();
   const surface = elements.requestSurface.value.trim();
   if (surface) {
+    if (config) config.dataset.deeSurface = `${surface}_configuration`;
     if (hero) hero.dataset.deeSurface = `${surface}_hero`;
     if (offers) offers.dataset.deeSurface = `${surface}_offers`;
     if (message) message.dataset.deeSurface = `${surface}_message`;
   }
+}
+
+function cssEscape(value) {
+  if (window.CSS?.escape) return window.CSS.escape(String(value));
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
 }
 
 function safeUrl(value) {

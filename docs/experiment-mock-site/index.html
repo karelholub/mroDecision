@@ -48,29 +48,35 @@
             </label>
             <div class="form-grid">
               <label>
+                Website config key
+                <input id="config-decision-key" value="website_configuration" autocomplete="off" />
+              </label>
+              <label>
                 Hero experiment key
                 <input id="hero-decision-key" value="smoke_experiment" autocomplete="off" />
               </label>
+            </div>
+            <div class="form-grid">
               <label>
                 Offer decision key
                 <input id="offer-decision-key" value="next_best_offer" autocomplete="off" />
               </label>
-            </div>
-            <div class="form-grid">
               <label>
                 Message decision key
                 <input id="message-decision-key" value="inapp_homepage_message" autocomplete="off" />
               </label>
+            </div>
+            <div class="form-grid">
               <label>
                 Request surface
                 <input id="request-surface" value="homepage" autocomplete="off" />
               </label>
-            </div>
-            <div class="form-grid">
               <label>
                 Profile key
                 <input id="profile-key" autocomplete="off" />
               </label>
+            </div>
+            <div class="form-grid">
               <label>
                 Identifier email
                 <input id="identifier-email" autocomplete="off" />
@@ -92,6 +98,7 @@
                   <option value="__holdout">Force holdout</option>
                   <option value="control">Force control</option>
                   <option value="treatment">Force treatment</option>
+                  <option value="merchandising_variant">Force merchandising_variant</option>
                   <option value="destination_focus">Force destination_focus</option>
                   <option value="green_offer">Force green_offer</option>
                 </select>
@@ -140,6 +147,81 @@
           <span>Last result</span>
           <strong id="metric-result">Idle</strong>
         </article>
+      </section>
+
+      <section
+        id="website-configuration"
+        class="commerce-stage configuration-stage"
+        data-dee-placement="website_configuration"
+        data-dee-surface="homepage_configuration"
+        data-dee-decision-key="website_configuration"
+        data-dee-template="configuration"
+        data-dee-object-type="experiment"
+        data-dee-object-id="website_configuration"
+      >
+        <div class="stage-head">
+          <div>
+            <span class="eyebrow">Website configuration experiment</span>
+            <h2>One DEE decision controls five page features</h2>
+          </div>
+          <button data-evaluate-placement="#website-configuration" type="button">Refresh configuration</button>
+        </div>
+        <div class="configuration-summary">
+          <span class="variant-badge" id="configuration-variant">Static fallback</span>
+          <p id="configuration-rationale">The page starts with a safe default configuration, then DEE can switch feature visibility and eligibility by assigned variant.</p>
+        </div>
+        <div class="feature-toggle-grid" aria-label="Feature states from DEE">
+          <article data-feature-card="discounted_prices_visible">
+            <span>Discounted prices</span>
+            <strong data-feature-state="discounted_prices_visible">Fallback</strong>
+          </article>
+          <article data-feature-card="testimonials_visible">
+            <span>Testimonials</span>
+            <strong data-feature-state="testimonials_visible">Fallback</strong>
+          </article>
+          <article data-feature-card="free_shipping_eligible">
+            <span>Free shipping</span>
+            <strong data-feature-state="free_shipping_eligible">Fallback</strong>
+          </article>
+          <article data-feature-card="outlet_collection_visible">
+            <span>Outlet collection</span>
+            <strong data-feature-state="outlet_collection_visible">Fallback</strong>
+          </article>
+          <article data-feature-card="recommended_products_visible">
+            <span>Recommended products</span>
+            <strong data-feature-state="recommended_products_visible">Fallback</strong>
+          </article>
+        </div>
+        <div class="merchandising-demo">
+          <article class="price-card" data-config-feature="discounted_prices_visible">
+            <span>Summer city break</span>
+            <strong>
+              <span data-regular-price>€849</span>
+              <span data-discount-price>€699</span>
+            </strong>
+            <small data-config-note>Discount badge is controlled by DEE.</small>
+          </article>
+          <article class="shipping-card" data-config-feature="free_shipping_eligible">
+            <span>Delivery promise</span>
+            <strong>Free shipping unlocked</strong>
+            <small>Visible when the variant makes the visitor eligible.</small>
+          </article>
+          <article class="testimonial-card" data-config-feature="testimonials_visible">
+            <span>Customer proof</span>
+            <strong>“Booking was fast, clear, and the offer matched my plans.”</strong>
+            <small>Testimonials can be toggled for trust-building tests.</small>
+          </article>
+          <article class="outlet-card" data-config-feature="outlet_collection_visible">
+            <span>Outlet collection</span>
+            <strong>Last-minute outlet deals</strong>
+            <small>Useful for margin or inventory experiments.</small>
+          </article>
+          <article class="recommendation-card" data-config-feature="recommended_products_visible">
+            <span>Recommended products</span>
+            <strong>Suggested add-ons: airport transfer, lounge, flexible ticket</strong>
+            <small>Recommendations can be shown or hidden as one config flag.</small>
+          </article>
+        </div>
       </section>
 
       <section class="journey-grid" id="shopping">

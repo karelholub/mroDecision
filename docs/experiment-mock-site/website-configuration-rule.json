@@ -1,0 +1,135 @@
+{
+  "name": "Website Configuration Experiment",
+  "decision_key": "website_configuration",
+  "description": "Two-variant web configuration experiment controlling discounted prices, testimonials, free shipping, outlet collection, and recommended products.",
+  "type": "experiment",
+  "surface": "homepage_configuration",
+  "priority": 70,
+  "tags": ["example", "website", "experiment", "merchandising"],
+  "input_schema": {
+    "attributes": {
+      "lead_score": "number",
+      "customer_lifetime_value": "number",
+      "web_engagement_score": "number"
+    },
+    "segments": {
+      "demo_site_visitor": "boolean"
+    },
+    "context": {
+      "channel": "string",
+      "surface": "string",
+      "placement": "string",
+      "page_url": "string"
+    }
+  },
+  "output_schema": {
+    "configuration": "object",
+    "rationale": "string",
+    "template": "string",
+    "campaign": "string"
+  },
+  "cache_policy": {
+    "client_ttl": 300,
+    "scope": "profile"
+  },
+  "metadata": {
+    "campaign": "Homepage Merchandising Optimization",
+    "folder": "Website experiments",
+    "ttl_seconds": 300,
+    "experiment": {
+      "status": "running",
+      "unit": "profile",
+      "mode": "fixed",
+      "baseline_variant": "control",
+      "goal": {
+        "event": "conversion",
+        "minimum_detectable_lift_pct": 8,
+        "baseline_conversion_rate_pct": 4
+      },
+      "schedule": {
+        "daily_eligible_profiles": 1000
+      },
+      "variants": [
+        {
+          "key": "control",
+          "weight": 50,
+          "baseline": true,
+          "outputs": {
+            "template": "configuration",
+            "campaign": "Homepage Merchandising Optimization",
+            "rationale": "Control keeps the current merchandising mix: testimonials, outlet collection, and recommendations are visible; discounted prices and free shipping are not promoted.",
+            "configuration": {
+              "discounted_prices_visible": false,
+              "testimonials_visible": true,
+              "free_shipping_eligible": false,
+              "outlet_collection_visible": true,
+              "recommended_products_visible": true
+            }
+          }
+        },
+        {
+          "key": "merchandising_variant",
+          "weight": 50,
+          "outputs": {
+            "template": "configuration",
+            "campaign": "Homepage Merchandising Optimization",
+            "rationale": "Treatment emphasizes immediate purchase motivation: discounted prices, free shipping, testimonials, and recommendations are visible while outlet is suppressed.",
+            "configuration": {
+              "discounted_prices_visible": true,
+              "testimonials_visible": true,
+              "free_shipping_eligible": true,
+              "outlet_collection_visible": false,
+              "recommended_products_visible": true
+            }
+          }
+        }
+      ]
+    }
+  },
+  "draft": {
+    "fallback": {
+      "result": "eligible",
+      "outputs": {
+        "template": "configuration",
+        "campaign": "Homepage Merchandising Optimization",
+        "rationale": "Eligible website visitor; experiment assignment supplies the final configuration.",
+        "configuration": {
+          "discounted_prices_visible": false,
+          "testimonials_visible": true,
+          "free_shipping_eligible": false,
+          "outlet_collection_visible": true,
+          "recommended_products_visible": true
+        }
+      }
+    },
+    "branches": [
+      {
+        "id": "web_homepage_visitor",
+        "label": "Website homepage configuration request",
+        "when": {
+          "all": [
+            {
+              "source": "context",
+              "key": "channel",
+              "operator": "equals",
+              "value": "web"
+            }
+          ]
+        },
+        "result": "eligible",
+        "outputs": {
+          "template": "configuration",
+          "campaign": "Homepage Merchandising Optimization",
+          "rationale": "Eligible website visitor; experiment assignment supplies the final configuration.",
+          "configuration": {
+            "discounted_prices_visible": false,
+            "testimonials_visible": true,
+            "free_shipping_eligible": false,
+            "outlet_collection_visible": true,
+            "recommended_products_visible": true
+          }
+        }
+      }
+    ]
+  }
+}
