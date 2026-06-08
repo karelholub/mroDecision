@@ -189,7 +189,7 @@ aside input {
 
 .settings-layout {
   display: grid;
-  grid-template-columns: minmax(210px, 0.32fr) minmax(0, 1fr);
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
   min-height: calc(100vh - 160px);
@@ -198,6 +198,7 @@ aside input {
 .settings-tabs {
   position: sticky;
   top: 92px;
+  z-index: 2;
   align-self: start;
   display: grid;
   gap: 6px;
@@ -252,10 +253,11 @@ aside input {
 }
 
 .settings-summary-panel {
-  grid-column: 1 / -1;
+  grid-column: 2;
   display: grid;
   gap: 12px;
   min-width: 0;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 16px;
@@ -265,13 +267,15 @@ aside input {
 
 .settings-health-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 10px;
 }
 
 .settings-health-item {
   display: grid;
   gap: 3px;
+  min-width: 0;
+  align-content: start;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -283,9 +287,11 @@ aside input {
 }
 
 .settings-health-item span {
+  min-width: 0;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .settings-health-item small {
@@ -1714,13 +1720,20 @@ aside input {
 
 @media (min-width: 1500px) {
   .settings-layout {
-    grid-template-columns: minmax(210px, 0.72fr) minmax(0, 2.1fr) minmax(230px, 0.8fr);
+    grid-template-columns: minmax(220px, 280px) minmax(520px, 1fr) minmax(300px, 380px);
+  }
+
+  body[data-current-view="settings"]:not(.assistant-open) .assistant-fab {
+    right: 424px;
   }
 
   .settings-summary-panel {
     position: sticky;
     top: 92px;
-    grid-column: auto;
+    grid-column: 3;
+    grid-row: 1;
+    max-height: calc(100vh - 150px);
+    overflow: auto;
   }
 
   .settings-health-summary {
