@@ -160,6 +160,7 @@ async function evaluatePlacement(element) {
   try {
     const request = state.sdk.buildEvaluateRequest(element, overrides);
     const decision = await state.sdk.evaluatePlacement(element, overrides);
+    renderSuppressedMessage(element, decision);
     state.lastPayload = { request, response: decision };
     elements.rawOutput.textContent = JSON.stringify(state.lastPayload, null, 2);
     elements.metrics.result.textContent = decision.result || "OK";
@@ -541,8 +542,22 @@ function applyPlacementSettings() {
     if (dom) dom.dataset.deeSurface = `${surface}_visual_editor`;
     if (hero) hero.dataset.deeSurface = `${surface}_hero`;
     if (offers) offers.dataset.deeSurface = `${surface}_offers`;
-    if (message) message.dataset.deeSurface = `${surface}_message`;
+    if (message) message.dataset.deeSurface = surface;
   }
+}
+
+function renderSuppressedMessage(element, decision) {
+  if (!element || element.dataset.deeTemplate !== "message" || decision?.result === "eligible") return;
+  const availability = decision?.outputs?.message?.availability;
+  const reason = availability?.reason || decision?.outputs?.suppression_reason || decision?.result || "not_eligible";
+  const detail = availability?.message || "DEE did not return an eligible message for this placement.";
+  element.classList.remove("message-slot-live");
+  element.innerHTML = `
+    <span>DEE message suppressed</span>
+    <strong>${escapeHtml(reason)}</strong>
+    <p>${escapeHtml(detail)}</p>
+    <small>Check that the rule surface, message surface, and request surface describe the same placement.</small>
+  `;
 }
 
 function cssEscape(value) {

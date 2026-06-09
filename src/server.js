@@ -2525,7 +2525,7 @@ async function messageAvailability(message, ruleSet, request, evaluatedAt) {
   if (message.status !== "active") {
     return { available: false, reason: "message_inactive", message: `Message ${message.id} is ${message.status}` };
   }
-  if (message.surface && ruleSet.surface && message.surface !== ruleSet.surface) {
+  if (message.surface && ruleSet.surface && !messageSurfaceCompatible(message.surface, ruleSet.surface)) {
     return { available: false, reason: "surface_mismatch", message: `Message ${message.id} is for surface ${message.surface}` };
   }
   const startsAt = lifecycle.starts_at || message.metadata?.starts_at;
@@ -2573,6 +2573,14 @@ async function messageAvailability(message, ruleSet, request, evaluatedAt) {
     ttl_seconds: Number.isFinite(ttlSeconds) && ttlSeconds > 0 ? ttlSeconds : 0,
     priority: Number(message.metadata?.priority ?? lifecycle.priority ?? 0) || 0
   };
+}
+
+function messageSurfaceCompatible(messageSurface, ruleSurface) {
+  const messageValue = String(messageSurface || "").trim();
+  const ruleValue = String(ruleSurface || "").trim();
+  if (!messageValue || !ruleValue) return true;
+  if (messageValue === ruleValue) return true;
+  return ruleValue === `${messageValue}_message`;
 }
 
 async function evaluateClientSurface(body, auth) {
