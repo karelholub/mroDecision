@@ -52,15 +52,21 @@
                 <input id="config-decision-key" value="website_configuration" autocomplete="off" />
               </label>
               <label>
-                Hero experiment key
-                <input id="hero-decision-key" value="smoke_experiment" autocomplete="off" />
+                DOM modification key
+                <input id="dom-decision-key" value="homepage_dom_experiment" autocomplete="off" />
               </label>
             </div>
             <div class="form-grid">
               <label>
+                Hero experiment key
+                <input id="hero-decision-key" value="smoke_experiment" autocomplete="off" />
+              </label>
+              <label>
                 Offer decision key
                 <input id="offer-decision-key" value="next_best_offer" autocomplete="off" />
               </label>
+            </div>
+            <div class="form-grid">
               <label>
                 Message decision key
                 <input id="message-decision-key" value="inapp_homepage_message" autocomplete="off" />
@@ -242,6 +248,41 @@
               <p>Fallback content stays visible if DEE is unreachable or returns no renderable content.</p>
               <a href="#checkout" data-track-conversion="hero_cta">Find a deal</a>
             </div>
+          </div>
+        </article>
+
+        <article
+          id="dom-modification-placement"
+          class="commerce-stage visual-edit-stage"
+          data-dee-placement="homepage_dom_modifications"
+          data-dee-surface="homepage_visual_editor"
+          data-dee-decision-key="homepage_dom_experiment"
+          data-dee-template="dom_modifications"
+          data-dee-object-type="experiment"
+          data-dee-object-id="homepage_dom_modifications"
+        >
+          <div class="stage-head">
+            <div>
+              <span class="eyebrow">Visual editor runtime</span>
+              <h2 data-demo-selector="headline">Structured DOM modifications</h2>
+            </div>
+            <button data-evaluate-placement="#dom-modification-placement" type="button">Apply modifications</button>
+          </div>
+          <p data-demo-selector="body">
+            This placement demonstrates the future visual editor output: selectors, modification types, and guarded HTML.
+          </p>
+          <div class="visual-edit-demo-grid">
+            <article data-demo-selector="trust">
+              <span>Trust panel</span>
+              <strong>Fallback copy</strong>
+            </article>
+            <article data-demo-selector="cta">
+              <span>CTA panel</span>
+              <a href="#checkout" data-dee-conversion="visual_editor_cta">Fallback CTA</a>
+            </article>
+          </div>
+          <div data-demo-selector="insert-target" class="insert-target">
+            <span>Inserted content appears here.</span>
           </div>
         </article>
 

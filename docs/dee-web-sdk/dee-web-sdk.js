@@ -97,9 +97,10 @@
         dispatchSkipped(element, postcheck.reason, { decision, ...(postcheck.detail || {}) });
         return decision;
       }
-      const rendered = await renderDecision(element, decision);
+      const renderResult = await renderDecision(element, decision);
+      const rendered = renderResult.rendered;
       state.decisions.set(element, decision);
-      element.dispatchEvent(new CustomEvent("dee:decision", { detail: { decision, rendered } }));
+      element.dispatchEvent(new CustomEvent("dee:decision", { detail: { decision, rendered, diagnostics: renderResult.diagnostics || [] } }));
       if (rendered && config.autoExposure && decision.experiment?.variant_key) {
         await sendEvent(element, "exposure", decision).catch((error) => log("Exposure failed", error));
       }
@@ -189,11 +190,17 @@
     }
 
     async function renderDecision(element, decision) {
-      if (decision.result !== "eligible") return false;
+      if (decision.result !== "eligible") return { rendered: false, diagnostics: [] };
       const template = decision.outputs?.template || element.dataset.deeTemplate || "cards";
       const renderer = config.renderers[template] || defaultRenderers[template] || defaultRenderers.cards;
-      const rendered = await renderer(element, decision, config);
-      return rendered !== false;
+      const result = await renderer(element, decision, config);
+      if (result && typeof result === "object" && "rendered" in result) {
+        return {
+          rendered: result.rendered !== false,
+          diagnostics: Array.isArray(result.diagnostics) ? result.diagnostics : []
+        };
+      }
+      return { rendered: result !== false, diagnostics: [] };
     }
 
     async function post(path, payload, options) {
@@ -246,6 +253,8 @@
   }
 
   const defaultRenderers = {
+    dom_modifications: renderDomModifications,
+    dom_modification: renderDomModifications,
     html_fragment: renderHtmlFragment,
     web_layer: renderHtmlFragment,
     weblayer: renderHtmlFragment,
@@ -311,6 +320,197 @@
     target.replaceChildren(fragment);
     wireHtmlFragmentBehavior(target);
     return true;
+  }
+
+  async function renderDomModifications(element, decision, config) {
+    installFragmentStyle(element, decision, config);
+    const modifications = domModificationsFromDecision(decision);
+    const diagnostics = [];
+    let applied = 0;
+    if (!modifications.length) {
+      logWithConfig(config, "DOM modification renderer received no modifications");
+      return { rendered: false, diagnostics: [{ status: "skipped", reason: "empty_modifications" }] };
+    }
+    modifications.forEach((modification, index) => {
+      const result = applyDomModification(element, modification, index, config);
+      diagnostics.push(result);
+      if (result.status === "applied") applied += result.count || 1;
+    });
+    element.dispatchEvent(new CustomEvent("dee:modifications", {
+      detail: { decision, applied, diagnostics }
+    }));
+    return { rendered: applied > 0, diagnostics };
+  }
+
+  function domModificationsFromDecision(decision) {
+    const outputs = decision?.outputs || {};
+    return [
+      outputs.modifications,
+      outputs.dom_modifications,
+      outputs.domModifications,
+      outputs.web_modifications,
+      outputs.webModifications
+    ].find(Array.isArray) || [];
+  }
+
+  function applyDomModification(element, modification, index, config) {
+    const id = modification?.id || `mod_${index + 1}`;
+    const type = modification?.type || "";
+    if (!targetScopeMatches(modification?.scope)) {
+      return { id, type, status: "skipped", reason: "scope" };
+    }
+    try {
+      if (type === "move") return moveDomNode(element, modification, id);
+      const targets = selectModificationTargets(element, modification);
+      if (!targets.length) return { id, type, status: "skipped", reason: "selector_no_match", selector: modification?.selector || "" };
+      const limit = Math.max(1, Math.min(Number(modification?.max_matches || modification?.maxMatches || 20), 100));
+      const selectedTargets = targets.slice(0, limit);
+      selectedTargets.forEach((target) => applyDomModificationToTarget(target, modification, config));
+      return {
+        id,
+        type,
+        status: "applied",
+        selector: modification?.selector || "",
+        count: selectedTargets.length,
+        truncated: targets.length > selectedTargets.length
+      };
+    } catch (error) {
+      logWithConfig(config, "DOM modification failed", { modification, error });
+      return { id, type, status: "skipped", reason: "exception", message: error?.message || String(error) };
+    }
+  }
+
+  function applyDomModificationToTarget(target, modification, config) {
+    const type = modification.type || "";
+    if (type === "change_text") {
+      target.textContent = stringValue(modification.value ?? modification.text ?? modification.content);
+      return;
+    }
+    if (type === "change_attribute") {
+      const name = String(modification.attribute || modification.name || "").trim();
+      if (!isSafeAttributeName(name)) throw new Error(`Unsafe attribute ${name || "(empty)"}`);
+      const value = modification.value == null ? "" : String(modification.value);
+      if (value === "" && modification.remove === true) {
+        target.removeAttribute(name);
+      } else {
+        target.setAttribute(name, attributeValue(name, value));
+      }
+      return;
+    }
+    if (type === "change_style") {
+      const styles = modification.styles && typeof modification.styles === "object"
+        ? modification.styles
+        : { [modification.property || ""]: modification.value };
+      Object.entries(styles).forEach(([property, value]) => {
+        if (!isAllowedStyleProperty(property)) throw new Error(`Unsupported style property ${property}`);
+        if (!isSafeStyleValue(value)) throw new Error(`Unsafe style value for ${property}`);
+        target.style[property] = String(value ?? "");
+      });
+      return;
+    }
+    if (type === "insert_html") {
+      const html = modification.html || modification.fragment || modification.markup || "";
+      const fragment = sanitizedHtmlFragment(String(html), config);
+      if (!fragment.childNodes.length) throw new Error("HTML sanitized to empty output");
+      insertFragment(target, fragment, modification.position || "replace");
+      wireHtmlFragmentBehavior(target);
+      return;
+    }
+    if (type === "remove") {
+      const mode = modification.mode || modification.behavior || "collapse";
+      if (mode === "preserve_space") {
+        target.style.visibility = "hidden";
+      } else if (mode === "hide") {
+        target.hidden = true;
+      } else {
+        target.remove();
+      }
+      return;
+    }
+    throw new Error(`Unsupported modification type ${type || "(empty)"}`);
+  }
+
+  function moveDomNode(element, modification, id) {
+    const source = selectModificationTargets(element, { selector: modification.selector || modification.source_selector || modification.sourceSelector })[0];
+    const target = selectModificationTargets(element, { selector: modification.target_selector || modification.targetSelector || modification.target })[0];
+    if (!source) return { id, type: "move", status: "skipped", reason: "source_no_match", selector: modification.selector || modification.source_selector || "" };
+    if (!target) return { id, type: "move", status: "skipped", reason: "target_no_match", selector: modification.target_selector || modification.targetSelector || "" };
+    insertNode(target, source, modification.position || "after");
+    return { id, type: "move", status: "applied", count: 1 };
+  }
+
+  function selectModificationTargets(element, modification) {
+    const selector = modification?.selector;
+    if (!selector || selector === "self" || selector === ":self") return [element];
+    const rootSelector = modification?.root_selector || modification?.rootSelector || "";
+    const root = rootSelector ? document.querySelector(rootSelector) : document;
+    if (!root) return [];
+    return Array.from(root.querySelectorAll(selector));
+  }
+
+  function targetScopeMatches(scope) {
+    if (!scope) return true;
+    if (Array.isArray(scope.url_rules) && !urlRulesMatch(scope.url_rules, location.href)) return false;
+    if (Array.isArray(scope.devices) && scope.devices.length && !scope.devices.includes("any") && !scope.devices.includes(deviceType())) return false;
+    return true;
+  }
+
+  function insertFragment(target, fragment, position) {
+    if (position === "before") {
+      target.parentNode?.insertBefore(fragment, target);
+    } else if (position === "after") {
+      target.parentNode?.insertBefore(fragment, target.nextSibling);
+    } else if (position === "first_child" || position === "prepend") {
+      target.insertBefore(fragment, target.firstChild);
+    } else if (position === "last_child" || position === "append") {
+      target.appendChild(fragment);
+    } else {
+      target.replaceChildren(fragment);
+    }
+  }
+
+  function insertNode(target, node, position) {
+    if (position === "before") {
+      target.parentNode?.insertBefore(node, target);
+    } else if (position === "first_child" || position === "prepend") {
+      target.insertBefore(node, target.firstChild);
+    } else if (position === "last_child" || position === "append") {
+      target.appendChild(node);
+    } else {
+      target.parentNode?.insertBefore(node, target.nextSibling);
+    }
+  }
+
+  function stringValue(value) {
+    return value == null ? "" : String(value);
+  }
+
+  function attributeValue(name, value) {
+    return ["href", "src", "action", "xlink:href", "formaction"].includes(String(name).toLowerCase())
+      ? safeUrl(value)
+      : value;
+  }
+
+  function isSafeAttributeName(name) {
+    const normalized = String(name || "").toLowerCase();
+    if (!/^[a-z_:][a-z0-9_:.-]*$/i.test(normalized)) return false;
+    if (normalized.startsWith("on")) return false;
+    return !["srcdoc", "style"].includes(normalized);
+  }
+
+  function isAllowedStyleProperty(property) {
+    return new Set([
+      "background", "backgroundColor", "border", "borderColor", "borderRadius", "boxShadow",
+      "color", "display", "fontSize", "fontWeight", "gap", "gridTemplateColumns", "height",
+      "justifyContent", "lineHeight", "margin", "marginBottom", "marginLeft", "marginRight",
+      "marginTop", "maxHeight", "maxWidth", "minHeight", "minWidth", "opacity", "padding",
+      "paddingBottom", "paddingLeft", "paddingRight", "paddingTop", "textAlign", "textDecoration",
+      "transform", "width"
+    ]).has(property);
+  }
+
+  function isSafeStyleValue(value) {
+    return !/\bjavascript\s*:|expression\s*\(|url\s*\(\s*['"]?\s*javascript:/i.test(String(value ?? ""));
   }
 
   function installFragmentStyle(element, decision, config) {

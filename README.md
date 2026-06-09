@@ -164,7 +164,7 @@ DEE_CORS_ORIGINS="https://www.example.com,http://localhost:8091" npm start
 
 Client tokens can also be scoped to allowed browser origins, an environment label, an app id, and allowed decision keys from the Settings > API Tokens screen. When environment or app id is configured, send it in `context.environment` / `context.app_id` or the `x-dee-environment` / `x-dee-app-id` headers.
 
-A reusable browser helper for declared website placements is available in [docs/dee-web-sdk](docs/dee-web-sdk). It supports `data-dee-placement`, client evaluation, safe fallback rendering, exposure/conversion feedback, and forced-variant QA via URL parameters.
+A reusable browser helper for declared website placements is available in [docs/dee-web-sdk](docs/dee-web-sdk). It supports `data-dee-placement`, client evaluation, safe fallback rendering, structured DOM modifications for visual-editor-style experiments, exposure/conversion feedback, and forced-variant QA via URL parameters.
 
 ## Management UI
 

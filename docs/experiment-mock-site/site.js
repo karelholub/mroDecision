@@ -13,6 +13,7 @@ const elements = {
   baseUrl: document.querySelector("#dee-base-url"),
   token: document.querySelector("#dee-token"),
   configDecisionKey: document.querySelector("#config-decision-key"),
+  domDecisionKey: document.querySelector("#dom-decision-key"),
   heroDecisionKey: document.querySelector("#hero-decision-key"),
   offerDecisionKey: document.querySelector("#offer-decision-key"),
   messageDecisionKey: document.querySelector("#message-decision-key"),
@@ -90,7 +91,7 @@ function bindEvents() {
 
   document.addEventListener("dee:decision", (event) => {
     const placement = event.target?.dataset?.deePlacement || "unknown";
-    rememberDecision(event.target, event.detail?.decision, { rendered: event.detail?.rendered });
+    rememberDecision(event.target, event.detail?.decision, { rendered: event.detail?.rendered, diagnostics: event.detail?.diagnostics || [] });
     logEvent("decision", `${placement} rendered=${event.detail?.rendered !== false}`);
   }, true);
 
@@ -371,6 +372,7 @@ function renderDiagnostics() {
           <div><dt>Variant</dt><dd>${escapeHtml(decision.experiment?.variant_key || "-")}</dd></div>
           <div><dt>Message</dt><dd>${escapeHtml(decision.outputs?.message_id || decision.outputs?.message?.id || "-")}</dd></div>
           <div><dt>Profile cache</dt><dd>${escapeHtml(decision.profile_cache?.status || "-")}</dd></div>
+          <div><dt>Diagnostics</dt><dd>${escapeHtml(renderDiagnosticSummary(record.meta?.diagnostics))}</dd></div>
           <div><dt>TTL</dt><dd>${Number.isFinite(decision.ttl_seconds) ? `${decision.ttl_seconds}s` : "-"}</dd></div>
         </dl>
       </article>
@@ -378,6 +380,13 @@ function renderDiagnostics() {
   }).join("");
   elements.decisionList.innerHTML = rows || `<p class="empty">No decisions yet. Apply runtime setup or evaluate a placement.</p>`;
   renderMetrics();
+}
+
+function renderDiagnosticSummary(diagnostics = []) {
+  if (!Array.isArray(diagnostics) || !diagnostics.length) return "-";
+  const applied = diagnostics.filter((item) => item.status === "applied").length;
+  const skipped = diagnostics.length - applied;
+  return `${applied} applied, ${skipped} skipped`;
 }
 
 function renderMetrics() {
@@ -406,6 +415,7 @@ function saveSettings() {
     baseUrl: elements.baseUrl.value,
     token: elements.token.value,
     configDecisionKey: elements.configDecisionKey.value,
+    domDecisionKey: elements.domDecisionKey.value,
     heroDecisionKey: elements.heroDecisionKey.value,
     offerDecisionKey: elements.offerDecisionKey.value,
     messageDecisionKey: elements.messageDecisionKey.value,
@@ -454,16 +464,19 @@ function placementsList() {
 
 function applyPlacementSettings() {
   const config = document.querySelector("#website-configuration");
+  const dom = document.querySelector("#dom-modification-placement");
   const hero = document.querySelector("#hero-placement");
   const offers = document.querySelector("#offer-carousel");
   const message = document.querySelector("#message-placement");
   if (config) config.dataset.deeDecisionKey = elements.configDecisionKey.value.trim();
+  if (dom) dom.dataset.deeDecisionKey = elements.domDecisionKey.value.trim();
   if (hero) hero.dataset.deeDecisionKey = elements.heroDecisionKey.value.trim();
   if (offers) offers.dataset.deeDecisionKey = elements.offerDecisionKey.value.trim();
   if (message) message.dataset.deeDecisionKey = elements.messageDecisionKey.value.trim();
   const surface = elements.requestSurface.value.trim();
   if (surface) {
     if (config) config.dataset.deeSurface = `${surface}_configuration`;
+    if (dom) dom.dataset.deeSurface = `${surface}_visual_editor`;
     if (hero) hero.dataset.deeSurface = `${surface}_hero`;
     if (offers) offers.dataset.deeSurface = `${surface}_offers`;
     if (message) message.dataset.deeSurface = `${surface}_message`;

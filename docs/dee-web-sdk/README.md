@@ -142,6 +142,74 @@ For interactive fragments, prefer data attributes instead of remote JavaScript:
 - `data-dee-conversion="event_name"` sends a conversion event when clicked.
 - `data-dee-value` supplies the conversion value.
 
+## Structured DOM Modifications
+
+For visual-editor-style web experiments, DEE can return selector-based modifications instead of a full HTML fragment. Use this when the website owns the base markup and DEE should adjust specific text, attributes, styles, inserted blocks, movement, or visibility.
+
+```html
+<section
+  data-dee-placement="homepage_dom_modifications"
+  data-dee-decision-key="homepage_dom_experiment"
+  data-dee-template="dom_modifications"
+>
+  <h2 data-demo-selector="headline">Fallback headline</h2>
+  <p data-demo-selector="body">Fallback body.</p>
+  <div data-demo-selector="insert-target"></div>
+</section>
+```
+
+Decision output:
+
+```json
+{
+  "outputs": {
+    "template": "dom_modifications",
+    "modifications": [
+      {
+        "id": "headline",
+        "type": "change_text",
+        "selector": "[data-demo-selector='headline']",
+        "value": "Member-only travel deals are live"
+      },
+      {
+        "id": "cta_link",
+        "type": "change_attribute",
+        "selector": "[data-demo-selector='cta'] a",
+        "attribute": "href",
+        "value": "/offers/member-prices"
+      },
+      {
+        "id": "highlight_trust",
+        "type": "change_style",
+        "selector": "[data-demo-selector='trust']",
+        "styles": {
+          "backgroundColor": "#effbf8",
+          "borderColor": "#0f8f81"
+        }
+      },
+      {
+        "id": "proof_block",
+        "type": "insert_html",
+        "selector": "[data-demo-selector='insert-target']",
+        "position": "replace",
+        "html": "<strong>4.8/5 customer rating</strong><p>Updated by DEE with sanitized HTML.</p>"
+      }
+    ]
+  }
+}
+```
+
+Supported modification types:
+
+- `change_text`: sets `textContent`.
+- `change_attribute`: updates safe attributes such as `href`, `src`, `alt`, `aria-*`, and `data-*`.
+- `change_style`: updates an allowlisted set of visual CSS properties.
+- `insert_html`: inserts sanitized HTML at `replace`, `before`, `after`, `first_child`, or `last_child`.
+- `remove`: removes, hides, or preserves the space of a selected element.
+- `move`: moves a source selector relative to a target selector.
+
+The SDK dispatches `dee:decision` with `detail.diagnostics` and also emits `dee:modifications` after applying this renderer. Exposure is sent only when at least one modification applies.
+
 ## Experiment Targeting
 
 The SDK sends browser context with every evaluation:
