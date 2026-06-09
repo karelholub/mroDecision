@@ -272,7 +272,11 @@ document.querySelectorAll("[data-lookup-drawer-tab]").forEach((button) => {
 document.querySelector("#refresh-metrics").addEventListener("click", loadMetrics);
 document.querySelector("#overview-window")?.addEventListener("change", loadMetrics);
 document.querySelector("#refresh-experiments")?.addEventListener("click", loadExperiments);
-document.querySelector("#experiment-filter-campaign")?.addEventListener("input", () => renderExperiments());
+document.querySelector("#experiment-filter-campaign")?.addEventListener("input", () => {
+  selectedCampaignName = "";
+  selectedExperimentKey = null;
+  renderExperiments();
+});
 experimentFilterSearch?.addEventListener("input", () => renderExperiments());
 experimentFilterStatus?.addEventListener("change", () => renderExperiments());
 experimentSort?.addEventListener("change", () => renderExperiments());
@@ -1863,8 +1867,8 @@ function renderCampaignMasterPanel() {
   if (!campaignMasterList || !campaignMasterDetail) return;
   const campaigns = cachedCampaigns || [];
   if (!campaigns.length) {
-    campaignMasterList.innerHTML = `<div class="status-line">No campaigns configured yet.</div>`;
-    campaignMasterDetail.innerHTML = `<div class="status-line">Assign experiments, rules, or messages to a campaign to see grouped assets here.</div>`;
+    campaignMasterList.innerHTML = "";
+    campaignMasterDetail.innerHTML = `<div class="campaign-empty-state">Assign experiments, rules, or messages to a campaign to see grouped assets here.</div>`;
     return;
   }
   const selected = campaigns.find((item) => (item.campaign || "Unassigned") === selectedCampaignName) || (selectedCampaignName ? null : campaigns[0]);

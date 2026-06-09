@@ -1177,8 +1177,13 @@ aside input {
 
 .experiment-ops-workbench {
   display: grid;
-  gap: 16px;
+  gap: 0;
   min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f4f7fa;
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
 #assistant-plan-output {
@@ -1537,10 +1542,33 @@ aside input {
   overflow-wrap: anywhere;
 }
 
-.experiment-kpi-strip {
+.experiment-filter-bar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: end;
+  min-width: 0;
+  padding: 12px 14px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--line);
+}
+
+.experiment-filter-bar .compact-filter {
+  min-width: 0;
+}
+
+.experiment-kpi-strip {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 1px;
+  scrollbar-width: none;
+}
+
+.experiment-kpi-strip::-webkit-scrollbar {
+  display: none;
 }
 
 .campaign-master-panel {
@@ -1565,23 +1593,28 @@ aside input {
 }
 
 .campaign-master-list {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(240px, 0.28fr);
-  gap: 10px;
+  display: flex;
+  gap: 8px;
   min-width: 0;
   overflow-x: auto;
-  padding-bottom: 2px;
+  padding: 0 0 2px;
+  scrollbar-width: none;
+}
+
+.campaign-master-list::-webkit-scrollbar {
+  display: none;
 }
 
 .campaign-master-card {
-  display: grid;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
   gap: 10px;
   min-width: 0;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 12px;
-  background: var(--panel-soft);
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: #ffffff;
   color: var(--ink);
   text-align: left;
 }
@@ -1603,12 +1636,11 @@ aside input {
 .campaign-master-card span {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .campaign-master-card dl {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
   gap: 6px;
   margin: 0;
 }
@@ -1617,14 +1649,14 @@ aside input {
   display: grid;
   gap: 2px;
   border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 7px;
-  background: #ffffff;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: var(--panel-soft);
 }
 
 .campaign-master-card dt {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
 }
 
@@ -1635,14 +1667,18 @@ aside input {
 
 .campaign-master-detail {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
 }
 
 .campaign-workbench-detail-head {
   display: grid;
-  grid-template-columns: minmax(220px, 0.34fr) minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: minmax(180px, 0.28fr) minmax(0, 1fr);
+  gap: 10px;
   align-items: stretch;
   min-width: 0;
 }
@@ -1654,8 +1690,8 @@ aside input {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 12px;
-  background: #ffffff;
+  padding: 10px;
+  background: var(--panel-soft);
 }
 
 .campaign-workbench-detail-head strong,
@@ -1672,51 +1708,96 @@ aside input {
 .campaign-workbench-kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 7px;
+}
+
+.campaign-workbench-kpis > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px;
+  background: #ffffff;
+}
+
+.campaign-workbench-kpis span,
+.campaign-workbench-kpis small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.campaign-workbench-kpis strong {
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.campaign-empty-state {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--muted);
+  background: var(--panel-soft);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .campaign-workbench-assets {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
   min-width: 0;
 }
 
 .campaign-compact-section {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 12px;
-  background: #ffffff;
+  padding: 10px;
+  background: var(--panel-soft);
 }
 
 .campaign-compact-section > div:first-child {
   display: flex;
   justify-content: space-between;
   gap: 10px;
+  align-items: flex-start;
   min-width: 0;
+}
+
+.campaign-compact-section > div:first-child strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .campaign-compact-section > div:first-child span {
   color: var(--muted);
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .campaign-compact-list {
   display: grid;
   gap: 8px;
   min-width: 0;
+  max-height: 150px;
+  overflow: auto;
 }
 
 .experiment-status-chip {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px 12px;
+  border-radius: 999px;
+  padding: 7px 10px;
   background: #ffffff;
   color: var(--ink);
   text-align: left;
@@ -1736,20 +1817,43 @@ aside input {
 }
 
 .experiment-status-chip span {
-  font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  min-height: 22px;
+  border-radius: 999px;
+  padding: 0 7px;
+  background: var(--panel-soft);
+  font-size: 13px;
   font-weight: 900;
 }
 
 .experiment-status-chip small {
   color: var(--muted);
+  font-size: 11px;
+}
+
+.experiment-pane-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.experiment-pane-head p {
+  margin: 3px 0 0;
+  color: var(--muted);
   font-size: 12px;
+  line-height: 1.35;
 }
 
 .experiment-list-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(110px, 0.45fr) minmax(130px, 0.55fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
-  margin: 10px 0;
+  margin: 12px 0;
   min-width: 0;
 }
 
@@ -1780,10 +1884,30 @@ aside input {
 
 .experiment-ops-grid {
   display: grid;
-  grid-template-columns: minmax(360px, 0.58fr) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+  gap: 0;
+  align-items: stretch;
   min-width: 0;
+  min-height: calc(100vh - 230px);
+}
+
+.experiment-list-pane,
+.experiment-detail-pane {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.experiment-list-pane {
+  border-right: 1px solid var(--line);
+  background: #f4f7fa;
+}
+
+.experiment-detail-pane {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  background: #ffffff;
 }
 
 .experiment-list,
@@ -1794,18 +1918,19 @@ aside input {
 }
 
 .experiment-list {
-  max-height: calc(100vh - 330px);
+  max-height: calc(100vh - 405px);
   overflow: auto;
+  padding-right: 2px;
 }
 
 .experiment-ops-card {
   display: grid;
-  gap: 10px;
+  gap: 9px;
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 12px;
-  background: var(--panel-soft);
+  padding: 11px;
+  background: #ffffff;
   color: var(--ink);
   text-align: left;
 }
@@ -1818,7 +1943,7 @@ aside input {
 .experiment-ops-card.selected {
   border-color: rgba(14, 154, 142, 0.45);
   background: #ffffff;
-  box-shadow: 0 10px 24px rgba(15, 118, 110, 0.1);
+  box-shadow: inset 3px 0 0 var(--teal), 0 10px 24px rgba(15, 118, 110, 0.08);
 }
 
 .experiment-ops-head,
@@ -1910,10 +2035,9 @@ aside input {
   gap: 16px;
   align-items: flex-start;
   min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 14px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border-bottom: 1px solid var(--line);
+  padding: 2px 0 12px;
+  background: #ffffff;
 }
 
 .experiment-workbench-actions {
@@ -1980,11 +2104,11 @@ aside input {
 
 .experiment-readiness-panel {
   display: grid;
-  gap: 10px;
+  gap: 9px;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px 12px;
   background: #ffffff;
 }
 
@@ -2007,7 +2131,7 @@ aside input {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  align-items: flex-start;
+  align-items: center;
   min-width: 0;
 }
 
@@ -2019,22 +2143,24 @@ aside input {
 .experiment-readiness-head span {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .experiment-readiness-list {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
 }
 
 .experiment-readiness-list div {
-  display: grid;
-  gap: 3px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 9px 10px;
+  border-radius: 999px;
+  padding: 6px 9px;
   background: rgba(255, 255, 255, 0.78);
 }
 
@@ -2052,12 +2178,13 @@ aside input {
 
 .experiment-readiness-list strong {
   font-size: 12px;
+  white-space: nowrap;
   overflow-wrap: anywhere;
 }
 
 .experiment-readiness-list span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -8224,6 +8351,15 @@ pre {
     grid-template-columns: 1fr;
   }
 
+  .experiment-filter-bar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .experiment-list {
+    max-height: none;
+  }
+
   .campaign-detail-kpis,
   .campaign-mini-metrics,
   .campaign-review-list,
@@ -8312,7 +8448,7 @@ pre {
   }
 
   .campaign-master-list {
-    grid-auto-columns: minmax(220px, 86vw);
+    flex-wrap: nowrap;
   }
 
   .experiment-readiness-head {
