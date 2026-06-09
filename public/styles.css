@@ -773,6 +773,93 @@ aside input {
   grid-column: 1 / -1;
 }
 
+.variant-dom-panel {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid rgba(14, 154, 142, 0.18);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(14, 154, 142, 0.04);
+}
+
+.variant-dom-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+}
+
+.variant-dom-head > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.variant-dom-head span,
+.variant-dom-guidance span,
+.variant-dom-row-actions span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.variant-dom-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.variant-dom-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(170px, 1fr) minmax(220px, 1.3fr);
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px;
+  background: #ffffff;
+}
+
+.variant-dom-row textarea {
+  min-height: 76px;
+  max-height: 160px;
+  resize: vertical;
+}
+
+.variant-dom-target-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(110px, 0.55fr);
+  gap: 6px;
+  min-width: 0;
+}
+
+.variant-dom-row-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.variant-dom-guidance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.variant-dom-guidance span {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: #ffffff;
+}
+
 .variant-weight-control {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 76px;
@@ -7153,11 +7240,15 @@ pre {
   }
 
   .variant-builder-head,
-  .variant-builder-row {
+  .variant-builder-row,
+  .variant-dom-head,
+  .variant-dom-row,
+  .variant-dom-target-grid {
     grid-template-columns: 1fr;
   }
 
-  .variant-builder-actions {
+  .variant-builder-actions,
+  .variant-dom-row-actions {
     justify-content: flex-start;
   }
 }

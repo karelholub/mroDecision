@@ -3039,11 +3039,26 @@ function renderExperimentVariantBuilder(variants = []) {
         </div>
       </label>
       <label>
-        Output fields
+        Response fields
         <div data-role="variant-output-fields" class="variant-output-fields">
           ${variantOutputFields(variant.outputs || {}).map((field, fieldIndex) => variantOutputFieldRow(field, fieldIndex)).join("")}
         </div>
       </label>
+      <div class="variant-dom-panel">
+        <div class="variant-dom-head">
+          <div>
+            <strong>DOM modifications</strong>
+            <span>Structured visual-editor output for the website SDK.</span>
+          </div>
+          <button type="button" data-variant-action="add-dom-modification">Add Modification</button>
+        </div>
+        <div data-role="variant-dom-modifications" class="variant-dom-list">
+          ${domModificationFields(variant.outputs || {}).map((modification, modificationIndex) => domModificationRow(modification, modificationIndex)).join("")}
+        </div>
+        <div class="variant-dom-guidance">
+          ${domModificationWarnings(variant.outputs || {}).map((warning) => `<span>${escapeHtml(warning)}</span>`).join("") || "<span>No DOM modification warnings.</span>"}
+        </div>
+      </div>
       <div class="variant-builder-actions">
         <button type="button" data-variant-action="add-output">Add Output</button>
         <button type="button" data-variant-action="remove-variant" ${variants.length <= 1 ? "disabled" : ""}>Remove</button>
@@ -3076,7 +3091,7 @@ function renderExperimentWeightTotal(variants = readExperimentVariantsFromBuilde
 }
 
 function variantOutputFields(outputs = {}) {
-  const entries = Object.entries(outputs);
+  const entries = Object.entries(outputs).filter(([key]) => !["template", "modifications", "dom_modifications", "domModifications", "web_modifications", "webModifications"].includes(key));
   return entries.length ? entries.map(([key, value]) => ({ key, value })) : [{ key: "variant", value: "" }];
 }
 
@@ -3096,6 +3111,129 @@ function stringifyOutputValue(value) {
   return String(value);
 }
 
+function domModificationFields(outputs = {}) {
+  const modifications = [
+    outputs.modifications,
+    outputs.dom_modifications,
+    outputs.domModifications,
+    outputs.web_modifications,
+    outputs.webModifications
+  ].find(Array.isArray);
+  return Array.isArray(modifications) ? modifications : [];
+}
+
+function domModificationRow(modification = {}, index = 0) {
+  const scope = modification.scope || {};
+  return `
+    <div class="variant-dom-row" data-dom-index="${index}">
+      <label>
+        Type
+        <select data-dom-field="type">
+          ${["change_text", "change_attribute", "change_style", "insert_html", "remove", "move"].map((type) => `<option value="${type}" ${type === (modification.type || "change_text") ? "selected" : ""}>${escapeHtml(domModificationTypeLabel(type))}</option>`).join("")}
+        </select>
+      </label>
+      <label>
+        Selector
+        <input data-dom-field="selector" placeholder="[data-hero-title]" value="${escapeHtml(modification.selector || modification.source_selector || modification.sourceSelector || "")}" />
+      </label>
+      <label>
+        Value / HTML
+        <textarea data-dom-field="value" placeholder="Text, JSON styles, or sanitized HTML">${escapeHtml(domModificationValue(modification))}</textarea>
+      </label>
+      <label>
+        Attribute / CSS property
+        <input data-dom-field="attribute" placeholder="href, src, backgroundColor" value="${escapeHtml(modification.attribute || modification.name || modification.property || "")}" />
+      </label>
+      <label>
+        Target / position
+        <div class="variant-dom-target-grid">
+          <input data-dom-field="target_selector" placeholder="Target selector for move" value="${escapeHtml(modification.target_selector || modification.targetSelector || modification.target || "")}" />
+          <select data-dom-field="position">
+            ${["replace", "before", "after", "first_child", "last_child", "hide", "preserve_space"].map((position) => `<option value="${position}" ${position === (modification.position || modification.mode || "replace") ? "selected" : ""}>${escapeHtml(position)}</option>`).join("")}
+          </select>
+        </div>
+      </label>
+      <label>
+        Scope
+        <div class="variant-dom-target-grid">
+          <input data-dom-field="scope_urls" placeholder="URL contains, comma separated" value="${escapeHtml(urlRulesToText(scope.url_rules, "include"))}" />
+          <input data-dom-field="scope_devices" placeholder="any, desktop, mobile" value="${escapeHtml(Array.isArray(scope.devices) ? scope.devices.join(", ") : "")}" />
+        </div>
+      </label>
+      <label>
+        Max matches
+        <input data-dom-field="max_matches" type="number" min="1" max="100" step="1" value="${escapeHtml(Number(modification.max_matches || modification.maxMatches || 20))}" />
+      </label>
+      <div class="variant-dom-row-actions">
+        <span>${escapeHtml(domModificationRowWarning(modification) || "Ready")}</span>
+        <button type="button" data-variant-action="remove-dom-modification">Remove</button>
+      </div>
+    </div>
+  `;
+}
+
+function domModificationTypeLabel(type) {
+  return {
+    change_text: "Change text",
+    change_attribute: "Change attribute",
+    change_style: "Change style",
+    insert_html: "Insert HTML",
+    remove: "Remove / hide",
+    move: "Move element"
+  }[type] || type;
+}
+
+function domModificationValue(modification = {}) {
+  if (modification.type === "change_style" && modification.styles && typeof modification.styles === "object") return JSON.stringify(modification.styles);
+  return stringifyOutputValue(modification.value ?? modification.text ?? modification.content ?? modification.html ?? modification.fragment ?? modification.markup ?? "");
+}
+
+function domModificationWarnings(outputs = {}) {
+  const modifications = domModificationFields(outputs);
+  return modifications.flatMap((modification, index) => {
+    const warning = domModificationRowWarning(modification);
+    const prefix = modification.id || `mod_${index + 1}`;
+    return warning ? [`${prefix}: ${warning}`] : [];
+  });
+}
+
+function domModificationRowWarning(modification = {}) {
+  const type = modification.type || "";
+  const selector = modification.selector || modification.source_selector || modification.sourceSelector || "";
+  if (!type) return "Missing action type.";
+  if (!selector) return "Missing selector.";
+  if (!isLikelyValidSelector(selector)) return "Selector syntax looks invalid.";
+  if (isBroadSelector(selector)) return "Broad selector; use a stable data attribute when possible.";
+  if (!modification.scope?.url_rules?.length) return "No URL scope; consider limiting this change to target pages.";
+  if (type === "change_attribute" && !(modification.attribute || modification.name)) return "Attribute name is required.";
+  if (type === "change_attribute" && !isSafeDomAttributeName(modification.attribute || modification.name)) return "Attribute name may be unsafe.";
+  if (type === "change_style" && !(modification.property || modification.styles)) return "CSS property or styles JSON is required.";
+  if (type === "change_style" && modification.styles && typeof modification.styles !== "object") return "Styles must be valid JSON when CSS property is empty.";
+  if (type === "insert_html" && !(modification.html || modification.fragment || modification.markup)) return "HTML is required.";
+  if (type === "move" && !(modification.target_selector || modification.targetSelector || modification.target)) return "Move target selector is required.";
+  return "";
+}
+
+function isSafeDomAttributeName(name) {
+  const normalized = String(name || "").toLowerCase();
+  if (!/^[a-z_:][a-z0-9_:.-]*$/i.test(normalized)) return false;
+  return !normalized.startsWith("on") && !["srcdoc", "style"].includes(normalized);
+}
+
+function isLikelyValidSelector(selector) {
+  try {
+    document.createDocumentFragment().querySelector(selector);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isBroadSelector(selector) {
+  const value = String(selector || "").trim();
+  return ["div", "section", "article", "a", "img", "p", "span", "*"].includes(value) || /^[a-z]+$/i.test(value);
+}
+
 function readExperimentVariantsFromBuilder() {
   return [...document.querySelectorAll(".variant-builder-row")].map((row, index) => {
     const key = row.querySelector('[data-variant-field="key"]').value.trim() || `variant_${index + 1}`;
@@ -3106,12 +3244,64 @@ function readExperimentVariantsFromBuilder() {
       if (!outputKey) return;
       outputs[outputKey] = parseOutputFieldValue(fieldRow.querySelector('[data-output-field="value"]').value);
     });
+    const modifications = readDomModificationsFromVariantRow(row);
+    if (modifications.length) {
+      outputs.template = "dom_modifications";
+      outputs.modifications = modifications;
+    }
     return {
       key: slugForUi(key),
       weight: Number(weightInput.value || 0),
       outputs
     };
   });
+}
+
+function readDomModificationsFromVariantRow(row) {
+  return [...row.querySelectorAll(".variant-dom-row")].map((domRow, index) => {
+    const type = domRow.querySelector('[data-dom-field="type"]').value || "change_text";
+    const selector = domRow.querySelector('[data-dom-field="selector"]').value.trim();
+    const value = domRow.querySelector('[data-dom-field="value"]').value;
+    const attribute = domRow.querySelector('[data-dom-field="attribute"]').value.trim();
+    const targetSelector = domRow.querySelector('[data-dom-field="target_selector"]').value.trim();
+    const position = domRow.querySelector('[data-dom-field="position"]').value;
+    const scopeUrls = textList(domRow.querySelector('[data-dom-field="scope_urls"]').value);
+    const scopeDevices = uniqueList(domRow.querySelector('[data-dom-field="scope_devices"]').value).map((item) => item.toLowerCase());
+    const maxMatches = Math.max(1, Math.min(100, Number(domRow.querySelector('[data-dom-field="max_matches"]').value || 20)));
+    const modification = {
+      id: `mod_${index + 1}`,
+      type,
+      selector,
+      max_matches: maxMatches
+    };
+    if (type === "change_text") modification.value = value;
+    if (type === "change_attribute") {
+      modification.attribute = attribute;
+      modification.value = value;
+    }
+    if (type === "change_style") {
+      if (attribute) {
+        modification.property = attribute;
+        modification.value = value;
+      } else {
+        modification.styles = parseOutputFieldValue(value);
+      }
+    }
+    if (type === "insert_html") {
+      modification.html = value;
+      modification.position = ["before", "after", "first_child", "last_child"].includes(position) ? position : "replace";
+    }
+    if (type === "remove") modification.mode = ["hide", "preserve_space"].includes(position) ? position : "collapse";
+    if (type === "move") {
+      modification.target_selector = targetSelector;
+      modification.position = ["before", "after", "first_child", "last_child"].includes(position) ? position : "after";
+    }
+    const scope = {};
+    if (scopeUrls.length) scope.url_rules = scopeUrls.map((url) => ({ mode: "include", operator: "contains", value: url }));
+    if (scopeDevices.length && !scopeDevices.includes("any")) scope.devices = scopeDevices;
+    if (Object.keys(scope).length) modification.scope = scope;
+    return modification;
+  }).filter((modification) => modification.selector || modification.type === "move");
 }
 
 function parseOutputFieldValue(value) {
@@ -3174,9 +3364,18 @@ function handleExperimentVariantBuilderClick(event) {
     row.querySelector('[data-role="variant-output-fields"]').insertAdjacentHTML("beforeend", variantOutputFieldRow({}, row.querySelectorAll(".variant-output-field").length));
     writeExperimentVariantsFromBuilder();
   }
+  if (action === "add-dom-modification") {
+    row.querySelector('[data-role="variant-dom-modifications"]').insertAdjacentHTML("beforeend", domModificationRow({ type: "change_text" }, row.querySelectorAll(".variant-dom-row").length));
+    writeExperimentVariantsFromBuilder();
+  }
   if (action === "remove-output") {
     button.closest(".variant-output-field")?.remove();
     writeExperimentVariantsFromBuilder();
+  }
+  if (action === "remove-dom-modification") {
+    button.closest(".variant-dom-row")?.remove();
+    writeExperimentVariantsFromBuilder();
+    syncExperimentVariantBuilderFromJson();
   }
   if (action === "remove-variant") {
     row?.remove();
@@ -3340,6 +3539,7 @@ function experimentMetadataWarnings(experiment = {}) {
     keys.add(variant.key);
     const weight = Number(variant.weight || 0);
     if (!Number.isFinite(weight) || weight < 0) warnings.push(`${variant.key || "variant"} has an invalid weight.`);
+    domModificationWarnings(variant.outputs || {}).forEach((warning) => warnings.push(`${variant.key || "variant"} DOM modification: ${warning}`));
     total += Number.isFinite(weight) ? weight : 0;
   }
   if (variants.length && Math.round(total * 1000) !== 100000) warnings.push("Variant weights must sum to 100%.");
