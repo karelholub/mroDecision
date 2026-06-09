@@ -3900,6 +3900,7 @@ header {
 
 .overview-performance-grid {
   grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
+  gap: 12px;
 }
 
 .overview-support-grid {
@@ -3907,7 +3908,7 @@ header {
 }
 
 .overview-rule-card {
-  min-height: 430px;
+  min-height: 0;
 }
 
 .overview-trend-card {
@@ -3916,7 +3917,7 @@ header {
 
 .overview-schema-card,
 .overview-result-card {
-  min-height: 330px;
+  min-height: 0;
 }
 
 .overview-event-card {
@@ -3931,8 +3932,8 @@ header {
 .overview-card {
   min-width: 0;
   overflow: hidden;
-  border-radius: 8px;
-  box-shadow: 0 10px 24px rgba(16, 24, 40, 0.07);
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.12);
 }
 
 .overview-card-head {
@@ -3940,13 +3941,13 @@ header {
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .overview-card-head p {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.45;
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .overview-usage-list {
@@ -4340,7 +4341,7 @@ header {
 
 .overview-rule-card .rule-usage-header,
 .overview-rule-card .rule-usage-card {
-  grid-template-columns: minmax(132px, 1.2fr) minmax(104px, 1fr) 64px 74px minmax(66px, 0.8fr) 32px;
+  grid-template-columns: minmax(142px, 1.25fr) minmax(110px, 0.95fr) 62px 72px minmax(78px, 0.9fr) 34px;
   gap: 8px;
 }
 
@@ -4350,20 +4351,20 @@ header {
 }
 
 .rule-usage-header {
-  padding: 9px 8px;
+  padding: 7px 8px;
   border-bottom: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 11px;
+  color: #475467;
+  font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
 }
 
 .rule-usage-card {
-  min-height: 66px;
+  min-height: 48px;
   border: 0;
   border-bottom: 1px solid var(--line);
   border-radius: 0;
-  padding: 13px 8px;
+  padding: 8px;
   background: transparent;
   text-align: left;
 }
@@ -4387,19 +4388,46 @@ header {
   color: var(--ink);
 }
 
+.overview-rule-card .rule-usage-card span {
+  font-size: 13px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.overview-rule-card .rule-usage-card strong {
+  font-size: 13px;
+}
+
+.overview-rule-card .rule-usage-card em {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
 .rule-usage-card small,
 .rule-usage-card em,
 .rule-usage-card mark {
-  color: var(--muted);
+  color: #475467;
   font-size: 12px;
   background: transparent;
 }
 
+.overview-rule-card .rule-usage-card small,
+.overview-rule-card .rule-usage-card em,
+.overview-rule-card .rule-usage-card mark {
+  font-size: 11px;
+}
+
 .rule-usage-card i {
-  height: 6px;
+  height: 5px;
   overflow: hidden;
   border-radius: 999px;
-  background: #edf2f7;
+  background: #dfe6ee;
 }
 
 .rule-usage-card i b {
@@ -4599,7 +4627,7 @@ header {
 
 .portfolio-mix-grid {
   display: grid;
-  gap: 22px;
+  gap: 18px;
   min-width: 0;
 }
 
@@ -4629,26 +4657,26 @@ header {
 
 .portfolio-composition {
   display: grid;
-  gap: 12px;
+  gap: 9px;
   min-width: 0;
 }
 
 .portfolio-composition > strong {
-  color: var(--muted);
-  font-size: 12px;
+  color: #667085;
+  font-size: 11px;
   font-weight: 900;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   overflow-wrap: anywhere;
 }
 
 .portfolio-stack {
   display: flex;
-  height: 16px;
+  height: 12px;
   min-width: 0;
   overflow: hidden;
-  border-radius: 5px;
-  background: #e5e7eb;
+  border-radius: 4px;
+  background: #e7ebf0;
 }
 
 .portfolio-stack span {
@@ -4665,11 +4693,11 @@ header {
 .portfolio-composition-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 14px;
+  gap: 10px;
   align-items: center;
   min-width: 0;
   border-bottom: 1px solid var(--line);
-  padding: 10px 0;
+  padding: 7px 0;
 }
 
 .portfolio-composition-row:last-child {
@@ -4679,43 +4707,43 @@ header {
 .portfolio-composition-row span {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   min-width: 0;
-  color: var(--muted);
-  font-size: 14px;
+  color: #344054;
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
 
 .portfolio-composition-row i {
   flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
 }
 
 .portfolio-composition-row strong {
   color: var(--ink);
-  font-size: 17px;
+  font-size: 14px;
   line-height: 1;
 }
 
 .portfolio-composition-row small {
-  min-width: 36px;
-  color: var(--muted);
-  font-size: 14px;
+  min-width: 32px;
+  color: #667085;
+  font-size: 12px;
   text-align: right;
 }
 
 .portfolio-stack .deferred,
 .portfolio-composition-row i.deferred {
-  background: #1f2329;
+  background: #111827;
 }
 
 .portfolio-stack .eligible,
 .portfolio-composition-row i.eligible,
 .portfolio-stack .published,
 .portfolio-composition-row i.published {
-  background: var(--teal);
+  background: #0f766e;
 }
 
 .portfolio-stack .suppressed,
@@ -4724,17 +4752,17 @@ header {
 .portfolio-composition-row i.archived,
 .portfolio-stack .neutral,
 .portfolio-composition-row i.neutral {
-  background: #d1d5db;
+  background: #aeb7c2;
 }
 
 .portfolio-stack .ineligible,
 .portfolio-composition-row i.ineligible {
-  background: #e5e7eb;
+  background: #d9dee6;
 }
 
 .portfolio-stack .draft,
 .portfolio-composition-row i.draft {
-  background: #fde68a;
+  background: #f2c94c;
 }
 
 .overview-service-footer {
