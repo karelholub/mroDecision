@@ -226,7 +226,7 @@ Status: in progress. DEE now exposes a draft-safe editor-session endpoint that r
 - Add comments on modifications.
 - Add variant-diff summary: selector, type, before/after.
 
-Status: started. Experiment Design now loads a draft visual change summary comparing published variant DOM modifications with the current draft, grouped by variant with added, changed, and removed selector counts. Full reviewer preview links, comments, and selector snapshot drift detection remain next.
+Status: started. Experiment Design now loads a draft visual change summary comparing published variant DOM modifications with the current draft, grouped by variant with added, changed, and removed selector counts. It also flags selector readiness risks such as missing selectors, broad selectors without URL targeting, brittle `nth-child` paths, and missing move targets. Full reviewer preview links, comments, and live-page selector snapshot drift detection remain next.
 
 ### Phase 5: Asset And Template Integration
 

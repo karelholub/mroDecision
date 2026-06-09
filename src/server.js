@@ -2334,7 +2334,12 @@ function isSafeVisualStyleProperty(property) {
 }
 
 function isBroadVisualSelector(selector) {
-  return ["body", "html", "*", "main", "section", "div"].includes(selector.trim().toLowerCase());
+  const normalized = String(selector || "").trim().toLowerCase();
+  if (!normalized) return false;
+  if (["body", "html", "*", "main", "section", "article", "header", "footer", "div", "a", "img", "button"].includes(normalized)) return true;
+  if (/^[a-z][a-z0-9-]*$/i.test(normalized)) return true;
+  if (/^(\.[\w-]+|#[\w-]+)\s+\*$/.test(normalized)) return true;
+  return false;
 }
 
 function cloneJson(value) {
@@ -2370,6 +2375,7 @@ function visualExperimentDiff(ruleSet) {
     const beforeModifications = visualVariantModifications(before);
     const afterModifications = visualVariantModifications(after);
     const changes = visualModificationChanges(beforeModifications, afterModifications);
+    const warnings = changes.items.reduce((sum, item) => sum + (Array.isArray(item.warnings) ? item.warnings.length : 0), 0);
     return {
       variant_key: variantKey,
       baseline: Boolean(after.baseline || before.baseline || variantKey === draftExperiment.baseline_variant),
@@ -2378,6 +2384,7 @@ function visualExperimentDiff(ruleSet) {
       added: changes.added.length,
       changed: changes.changed.length,
       removed: changes.removed.length,
+      warnings,
       changes: changes.items.slice(0, 20)
     };
   });
@@ -2391,7 +2398,8 @@ function visualExperimentDiff(ruleSet) {
       changed_variants: variants.filter((variant) => variant.added || variant.changed || variant.removed).length,
       added: variants.reduce((sum, variant) => sum + variant.added, 0),
       changed: variants.reduce((sum, variant) => sum + variant.changed, 0),
-      removed: variants.reduce((sum, variant) => sum + variant.removed, 0)
+      removed: variants.reduce((sum, variant) => sum + variant.removed, 0),
+      warnings: variants.reduce((sum, variant) => sum + variant.warnings, 0)
     },
     variants
   };
@@ -2439,6 +2447,7 @@ function visualModificationKey(modification = {}, index = 0) {
 
 function visualModificationDiffItem(change, key, before, after) {
   const modification = after || before || {};
+  const warnings = visualModificationWarnings(modification);
   return {
     change,
     key,
@@ -2446,9 +2455,36 @@ function visualModificationDiffItem(change, key, before, after) {
     selector: modification.selector || "",
     target_selector: modification.target_selector || "",
     field: modification.attribute || modification.property || modification.name || "",
+    warnings,
     before: visualModificationPreview(before),
     after: visualModificationPreview(after)
   };
+}
+
+function visualModificationWarnings(modification = {}) {
+  const warnings = [];
+  const selector = String(modification.selector || "").trim();
+  const targetSelector = String(modification.target_selector || "").trim();
+  const type = String(modification.type || "").trim();
+  if (!selector) {
+    warnings.push("Missing selector");
+  } else {
+    if (isBroadVisualSelector(selector)) warnings.push("Broad selector");
+    if (isBrittleVisualSelector(selector)) warnings.push("Brittle selector path");
+    if (isBroadVisualSelector(selector) && !hasVisualUrlScope(modification)) warnings.push("Add URL targeting");
+  }
+  if (type === "move" && !targetSelector) warnings.push("Missing move target");
+  if (targetSelector && isBroadVisualSelector(targetSelector)) warnings.push("Broad move target");
+  return warnings;
+}
+
+function isBrittleVisualSelector(selector = "") {
+  return /:nth-(child|of-type)\(/i.test(String(selector));
+}
+
+function hasVisualUrlScope(modification = {}) {
+  const rules = modification.scope?.url_rules || modification.url_rules || [];
+  return Array.isArray(rules) && rules.some((rule) => String(rule?.value || "").trim());
 }
 
 function visualModificationPreview(modification) {

@@ -2309,7 +2309,8 @@ function experimentVariantDesignSummary(variant = {}, experiment = {}) {
 }
 
 async function loadExperimentVisualDiff(decisionKey) {
-  const target = experimentDetail.querySelector(`[data-experiment-visual-diff="${cssEscape(decisionKey)}"]`);
+  const target = [...experimentDetail.querySelectorAll("[data-experiment-visual-diff]")]
+    .find((node) => node.dataset.experimentVisualDiff === decisionKey);
   if (!target) return;
   try {
     const body = await api(`/v1/rule-sets/${encodeURIComponent(decisionKey)}/visual-diff`);
@@ -2334,6 +2335,7 @@ function renderExperimentVisualDiff(diff = {}) {
         ${statusItem("Added", formatNumber(diff.summary?.added || 0))}
         ${statusItem("Changed", formatNumber(diff.summary?.changed || 0))}
         ${statusItem("Removed", formatNumber(diff.summary?.removed || 0))}
+        ${statusItem("Warnings", formatNumber(diff.summary?.warnings || 0))}
       </div>
     </div>
     <div class="experiment-visual-diff-list">
@@ -2345,11 +2347,13 @@ function renderExperimentVisualDiff(diff = {}) {
 function visualDiffVariantRow(variant = {}) {
   const total = Number(variant.added || 0) + Number(variant.changed || 0) + Number(variant.removed || 0);
   const changes = Array.isArray(variant.changes) ? variant.changes : [];
+  const warningCount = Number(variant.warnings || 0);
   return `
-    <article class="experiment-visual-diff-row ${total ? "changed" : ""}">
+    <article class="experiment-visual-diff-row ${total ? "changed" : ""} ${warningCount ? "has-warnings" : ""}">
       <div>
         <strong>${escapeHtml(variant.variant_key || "(empty)")}</strong>
         <span>${escapeHtml(variant.baseline ? "Control/baseline" : `${formatNumber(variant.before_count || 0)} published -> ${formatNumber(variant.after_count || 0)} draft mods`)}</span>
+        ${warningCount ? `<small>${formatNumber(warningCount)} selector warning${warningCount === 1 ? "" : "s"}</small>` : ""}
       </div>
       <div class="experiment-visual-diff-counts">
         <mark>+${formatNumber(variant.added || 0)}</mark>
@@ -2359,7 +2363,10 @@ function visualDiffVariantRow(variant = {}) {
       ${changes.length ? `<ul>${changes.slice(0, 4).map((item) => `
         <li>
           <code>${escapeHtml(item.change)}</code>
-          <span>${escapeHtml([item.type, item.selector || item.target_selector, item.field].filter(Boolean).join(" · ") || item.key || "-")}</span>
+          <span>
+            ${escapeHtml([item.type, item.selector || item.target_selector, item.field].filter(Boolean).join(" · ") || item.key || "-")}
+            ${Array.isArray(item.warnings) && item.warnings.length ? `<em>${item.warnings.map(escapeHtml).join(" · ")}</em>` : ""}
+          </span>
         </li>
       `).join("")}</ul>` : `<small>No draft visual changes for this variant.</small>`}
     </article>
