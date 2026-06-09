@@ -3148,58 +3148,95 @@ async function loadClientEventMetrics() {
 }
 
 function renderClientEventMetrics(metrics) {
+  const tabs = [
+    { id: "rules", label: "Rules", count: metrics.by_rule?.length || 0, rows: clientEventMetricRows(metrics.by_rule) },
+    { id: "variants", label: "Variants", count: metrics.by_variant?.length || 0, rows: clientEventMetricRows(metrics.by_variant) },
+    { id: "messages", label: "Messages", count: metrics.by_message?.length || 0, rows: clientEventMetricRows(metrics.by_message) },
+    { id: "surfaces", label: "Surfaces", count: metrics.by_surface?.length || 0, rows: clientEventMetricRows(metrics.by_surface) },
+    { id: "recent", label: "Recent", count: metrics.recent_events?.length || 0, rows: clientEventRecentRows(metrics.recent_events) }
+  ];
   clientEventsPanel.innerHTML = `
-    <div class="client-event-subsections">
-      ${clientEventGroup("Rules", metrics.by_rule)}
-      ${clientEventGroup("Variants", metrics.by_variant)}
-      ${clientEventGroup("Messages", metrics.by_message)}
-      ${clientEventGroup("Surfaces", metrics.by_surface)}
-      <div class="client-event-section recent-events-section">
-        <div class="editor-title">Recent Events</div>
-        <div class="client-event-list recent-client-events">${clientEventRows(metrics.recent_events)}</div>
-      </div>
+    <div class="client-event-tabs" role="tablist" aria-label="Client event categories">
+      ${tabs.map((tab, index) => `
+        <button type="button" class="${index === 0 ? "active" : ""}" role="tab" aria-selected="${index === 0 ? "true" : "false"}" data-client-event-tab="${escapeHtml(tab.id)}">
+          ${escapeHtml(tab.label)}
+          <span>${escapeHtml(formatNumber(tab.count))}</span>
+        </button>
+      `).join("")}
+    </div>
+    <div class="client-event-tab-panels">
+      ${tabs.map((tab, index) => `
+        <div class="client-event-tab-panel ${index === 0 ? "active" : ""}" role="tabpanel" data-client-event-panel="${escapeHtml(tab.id)}">
+          ${tab.rows}
+        </div>
+      `).join("")}
     </div>
   `;
+  clientEventsPanel.querySelectorAll("[data-client-event-tab]").forEach((button) => {
+    button.addEventListener("click", () => activateClientEventTab(button.dataset.clientEventTab));
+  });
 }
 
-function clientEventGroup(title, items = []) {
-  return `
-    <div class="client-event-section">
-      <div class="editor-title">${escapeHtml(title)}</div>
-      <div class="client-event-list">${
-        items.length
-          ? items.map((item) => clientEventCard(item.key, [
-              ["Type", item.event_type],
-              ["Count", formatNumber(item.count)],
-              ["Profiles", formatNumber(item.unique_profiles)],
-              ["Last seen", item.last_seen_at ? formatTime(item.last_seen_at) : "-"]
-            ])).join("")
-          : `<div class="status-line">No data yet</div>`
-      }</div>
-    </div>
-  `;
+function activateClientEventTab(tabId) {
+  clientEventsPanel.querySelectorAll("[data-client-event-tab]").forEach((button) => {
+    const active = button.dataset.clientEventTab === tabId;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  clientEventsPanel.querySelectorAll("[data-client-event-panel]").forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.clientEventPanel === tabId);
+  });
 }
 
-function clientEventRows(items = []) {
+function clientEventMetricRows(items = []) {
   return items.length
-    ? items.map((item) => clientEventCard(item.occurred_at ? formatTime(item.occurred_at) : "-", [
-        ["Type", item.event_type],
-        ["Rule", item.decision_key],
-        ["Profile", item.profile_key],
-        ["Variant", item.variant_key || item.message_id || "-"]
-      ])).join("")
-    : `<div class="status-line">No events yet</div>`;
+    ? items.map((item) => clientEventMetricRow({
+        type: item.event_type,
+        title: item.key || "(empty)",
+        count: item.count,
+        profiles: item.unique_profiles,
+        time: item.last_seen_at
+      })).join("")
+    : `<div class="client-event-empty">No data yet</div>`;
 }
 
-function clientEventCard(title, fields) {
+function clientEventRecentRows(items = []) {
+  return items.length
+    ? items.map((item) => clientEventMetricRow({
+        type: item.event_type,
+        title: item.decision_key || item.message_id || item.variant_key || "(empty)",
+        meta: item.variant_key || item.message_id || item.surface || "-",
+        profiles: item.profile_key,
+        time: item.occurred_at,
+        recent: true
+      })).join("")
+    : `<div class="client-event-empty">No events yet</div>`;
+}
+
+function clientEventMetricRow({ type, title, count, profiles, meta, time, recent = false }) {
+  const profileText = recent ? profiles || "-" : `· ${formatNumber(profiles || 0)} profiles`;
   return `
-    <div class="client-event-card">
+    <div class="client-event-row ${recent ? "recent" : ""}">
+      <span class="client-event-type ${clientEventTypeClass(type)}">${escapeHtml(type || "event")}</span>
       <strong>${escapeHtml(title || "(empty)")}</strong>
-      <div>
-        ${fields.map(([label, value]) => `<span>${escapeHtml(label)}</span><em>${escapeHtml(value || "-")}</em>`).join("")}
-      </div>
+      <em>${escapeHtml(recent ? (meta || "-") : formatNumber(count || 0))}</em>
+      <small>${escapeHtml(profileText)}</small>
+      <time>${escapeHtml(clientEventClock(time))}</time>
     </div>
   `;
+}
+
+function clientEventTypeClass(type = "") {
+  if (type === "conversion") return "conversion";
+  if (type === "impression") return "impression";
+  return "exposure";
+}
+
+function clientEventClock(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function clientEventStatusItems(items) {
