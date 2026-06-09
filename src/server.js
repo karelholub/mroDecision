@@ -2303,6 +2303,18 @@ async function hydrateClientProfile(request) {
       }
     };
   } catch (error) {
+    if (isProfileNotFoundError(error)) {
+      meiroProfileCache.recordNotFound();
+      return {
+        request,
+        cache: {
+          status: "not_found",
+          hit: false,
+          identifier_type: identifier.type,
+          reason: profileApiDiagnosticMessage(error)
+        }
+      };
+    }
     meiroProfileCache.recordError();
     return {
       request,
@@ -2376,6 +2388,11 @@ async function fetchMeiroProfile(endpoint, token, identifier) {
   return profile;
 }
 
+function isProfileNotFoundError(error = {}) {
+  const status = Number(error.statusCode || error.status || 0);
+  return status === 404;
+}
+
 function meiroProfileUrl(endpoint, identifier) {
   const url = new URL(endpoint);
   url.searchParams.set("identifier_type", identifier.type);
@@ -2391,6 +2408,7 @@ function profileEndpointBase(endpoint) {
 function profileApiDiagnosticMessage(error = {}) {
   const status = Number(error.statusCode || error.status || 0);
   if (status === 401 || status === 403) return "Profile API rejected the Profile API token. Paste the mppak token in Meiro endpoints; the CLI/shared API token is separate.";
+  if (status === 404) return "No Meiro profile found for this identifier";
   return error.message || "Profile API returned an error";
 }
 

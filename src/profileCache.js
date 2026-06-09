@@ -8,6 +8,7 @@ export function createProfileCache({ now = () => Date.now() } = {}) {
     skipped: 0,
     writes: 0,
     evictions: 0,
+    not_found: 0,
     errors: 0
   };
 
@@ -53,6 +54,10 @@ export function createProfileCache({ now = () => Date.now() } = {}) {
     stats.errors += 1;
   }
 
+  function recordNotFound() {
+    stats.not_found += 1;
+  }
+
   function metrics() {
     sweep();
     const total = stats.hits + stats.misses;
@@ -63,6 +68,7 @@ export function createProfileCache({ now = () => Date.now() } = {}) {
       skipped: stats.skipped,
       writes: stats.writes,
       evictions: stats.evictions,
+      not_found: stats.not_found,
       errors: stats.errors,
       hit_rate: total ? stats.hits / total : 0
     };
@@ -75,6 +81,7 @@ export function createProfileCache({ now = () => Date.now() } = {}) {
     stats.skipped = 0;
     stats.writes = 0;
     stats.evictions = 0;
+    stats.not_found = 0;
     stats.errors = 0;
   }
 
@@ -88,7 +95,7 @@ export function createProfileCache({ now = () => Date.now() } = {}) {
     }
   }
 
-  return { get, set, recordError, metrics, clear };
+  return { get, set, recordError, recordNotFound, metrics, clear };
 }
 
 export function profileCacheKey(input = {}) {

@@ -69,3 +69,31 @@ test("profile diagnostics expose fetched fields, cache freshness, and schema dri
     hit: false
   });
 });
+
+test("profile diagnostics describe profile API not-found as non-enriched", () => {
+  const result = profileCacheWithDiagnostics(
+    {
+      status: "not_found",
+      hit: false,
+      identifier_type: "email",
+      reason: "No Meiro profile found for this identifier"
+    },
+    {
+      attributes: {},
+      segments: {},
+      context: { channel: "web" }
+    },
+    {
+      attributes: {},
+      segments: {},
+      context: { channel: "web" }
+    },
+    [{ kind: "attribute", name: "lead_score" }],
+    []
+  );
+
+  assert.equal(result.diagnostics.source, "No Meiro profile found for this identifier");
+  assert.equal(result.diagnostics.enriched, false);
+  assert.equal(result.diagnostics.identifier_type, "email");
+  assert.deepEqual(result.diagnostics.schema_drift.schema_attributes_missing_from_profile, ["lead_score"]);
+});

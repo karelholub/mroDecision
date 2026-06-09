@@ -794,7 +794,7 @@ function overviewAlertItems(metrics) {
     items.push({ level: "warn", label: "Schema", title: "Schema sync needs attention", detail: `Last status: ${schema.last_sync_status}.` });
   }
   if (Number(profileCache.errors || 0) > 0) {
-    items.push({ level: "warn", label: "Profile API", title: "Profile enrichment errors", detail: `${formatNumber(profileCache.errors)} cache/profile lookup errors recorded.` });
+    items.push({ level: "warn", label: "Profile API", title: "Profile enrichment errors", detail: `${formatNumber(profileCache.errors)} failed lookups recorded. ${formatNumber(profileCache.not_found || 0)} identifiers had no matching profile.` });
   }
   if (Number(requests.window ?? requests.last_24h ?? 0) > 0 && Number(events.window ?? events.last_24h ?? 0) === 0) {
     items.push({ level: "info", label: "Feedback", title: "No client events in window", detail: "Evaluations are running, but exposure/impression/conversion feedback is absent." });
@@ -2483,10 +2483,11 @@ function readinessChecklist(metrics = {}) {
   const feedbackOk = Number(counts.impression || 0) > 0 || Number(counts.exposure || 0) > 0 || Number(counts.conversion || 0) > 0;
   const runtimeOk = Number(runtime.error_rate || 0) < 0.01 && Number(rateLimit.blocked || 0) === 0;
   const profileErrors = Number(profileCache.errors || 0);
+  const profileNotFound = Number(profileCache.not_found || 0);
   const profileLookups = Number(profileCache.hits || 0) + Number(profileCache.misses || 0);
   const profileOk = profileErrors === 0;
-  const profileDetail = profileLookups > 0 || Number(profileCache.skipped || 0) > 0 || profileErrors > 0
-    ? `${formatNumber(profileLookups)} Meiro lookups · ${formatNumber(profileCache.skipped || 0)} local/skipped · ${formatNumber(profileErrors)} errors`
+  const profileDetail = profileLookups > 0 || Number(profileCache.skipped || 0) > 0 || profileErrors > 0 || profileNotFound > 0
+    ? `${formatNumber(profileLookups)} Meiro lookups · ${formatNumber(profileCache.skipped || 0)} local/skipped · ${formatNumber(profileNotFound)} not found · ${formatNumber(profileErrors)} errors`
     : "No sparse client requests have needed Profile API enrichment yet";
   const items = [
     readinessItem("Profile fields", schemaOk ? "Ready" : "Needs sync", `${formatNumber(schema.total || 0)} fields · ${schema.last_synced_at ? formatTime(schema.last_synced_at) : "never synced"}`, schemaOk),
@@ -9928,7 +9929,7 @@ function renderSettingsSummary(settings, runtime, error = null) {
     {
       label: "Profile Cache",
       value: `${Math.round((profileCache.hit_rate || 0) * 100)}% hit rate`,
-      detail: `${formatNumber(profileCache.entries || 0)} entries · ${formatNumber(profileCache.errors || 0)} lookup errors`,
+      detail: `${formatNumber(profileCache.entries || 0)} entries · ${formatNumber(profileCache.not_found || 0)} not found · ${formatNumber(profileCache.errors || 0)} lookup errors`,
       ok: Number(profileCache.errors || 0) === 0
     },
     {

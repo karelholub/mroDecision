@@ -35,3 +35,16 @@ test("profile cache key normalizes identifier formats", () => {
     profileCacheKey({ profile_key: "p1", identifiers: [{ identifierTypeId: "email", identifierValue: "a@example.test" }] })
   );
 });
+
+test("profile cache tracks not-found lookups separately from errors", () => {
+  const cache = createProfileCache();
+  cache.recordNotFound();
+  cache.recordError();
+
+  assert.equal(cache.metrics().not_found, 1);
+  assert.equal(cache.metrics().errors, 1);
+
+  cache.clear();
+  assert.equal(cache.metrics().not_found, 0);
+  assert.equal(cache.metrics().errors, 0);
+});

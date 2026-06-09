@@ -82,6 +82,7 @@ function enrichmentSourceLabel(status = "") {
     not_configured: "Profile API not configured or no identifier available",
     hit: "Meiro profile cache hit",
     miss: "Fetched from Meiro Profile API",
+    not_found: "No Meiro profile found for this identifier",
     error: "Profile API lookup failed"
   };
   return labels[status] || "Profile enrichment not used";

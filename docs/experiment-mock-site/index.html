@@ -92,8 +92,8 @@
               <label>
                 Enrichment
                 <select id="profile-enrichment">
+                  <option value="off" selected>Use local payload only</option>
                   <option value="always">Fetch from Meiro when possible</option>
-                  <option value="off">Use local payload only</option>
                   <option value="missing_only">Fetch only missing fields</option>
                 </select>
               </label>
@@ -122,7 +122,7 @@
               </label>
             </div>
             <label class="check-row">
-              <input id="send-local-payload" type="checkbox" />
+              <input id="send-local-payload" type="checkbox" checked />
               Include local attributes in evaluation requests
             </label>
             <label class="check-row">
