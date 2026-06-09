@@ -1538,7 +1538,77 @@ aside input {
 }
 
 .experiment-kpi-strip {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.experiment-status-chip {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: var(--ink);
+  text-align: left;
+}
+
+.experiment-status-chip:hover,
+.experiment-status-chip.active {
+  border-color: rgba(14, 154, 142, 0.45);
+  background: rgba(14, 154, 142, 0.06);
+}
+
+.experiment-status-chip strong,
+.experiment-status-chip span,
+.experiment-status-chip small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.experiment-status-chip span {
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.experiment-status-chip small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.experiment-list-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(110px, 0.45fr) minmax(130px, 0.55fr);
+  gap: 8px;
+  margin: 10px 0;
+  min-width: 0;
+}
+
+.experiment-list-toolbar label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.primary-action {
+  background: var(--teal);
+  color: #ffffff;
+}
+
+.secondary-action {
+  background: #ffffff;
+  color: var(--teal);
+  border-color: rgba(14, 154, 142, 0.4);
+}
+
+.utility-action {
+  background: #ffffff;
+  color: var(--muted);
 }
 
 .experiment-ops-grid {
@@ -1636,6 +1706,11 @@ aside input {
   color: var(--muted);
 }
 
+.experiment-status.archived {
+  background: #eef2f7;
+  color: #475569;
+}
+
 .experiment-ops-meta {
   display: flex;
   flex-wrap: wrap;
@@ -1672,6 +1747,14 @@ aside input {
   border-radius: 8px;
   padding: 14px;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.experiment-workbench-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
 }
 
 .experiment-workbench-head h3 {
@@ -1895,6 +1978,14 @@ aside input {
   overflow-wrap: anywhere;
 }
 
+.experiment-variant-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .experiment-design-card mark {
   border-radius: 999px;
   padding: 4px 8px;
@@ -1951,6 +2042,91 @@ aside input {
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.experiment-payload-drawer {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.experiment-payload-drawer summary {
+  cursor: pointer;
+  padding: 9px 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.experiment-payload-drawer pre {
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0;
+}
+
+.experiment-draft-card-state {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid rgba(14, 154, 142, 0.2);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(14, 154, 142, 0.05);
+}
+
+.experiment-draft-card-state strong,
+.experiment-draft-card-state span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.experiment-draft-card-state div > span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.configure-cue {
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: var(--teal);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.experiment-draft-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.experiment-draft-checks span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 7px;
+  background: #ffffff;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.experiment-draft-checks span.ok {
+  border-color: rgba(14, 154, 142, 0.3);
+  background: rgba(14, 154, 142, 0.08);
+  color: var(--teal);
+}
+
+.experiment-draft-checks span.warn {
+  border-color: rgba(180, 83, 9, 0.28);
+  background: var(--warning-soft);
+  color: #92400e;
 }
 
 .experiment-settings-list {
@@ -7947,12 +8123,18 @@ pre {
   .variant-dom-target-grid,
   .experiment-workbench-head,
   .experiment-visual-import-grid,
+  .experiment-list-toolbar,
+  .experiment-draft-card-state,
   .experiment-design-card dl {
     grid-template-columns: 1fr;
   }
 
   .experiment-workbench-head {
     display: grid;
+  }
+
+  .experiment-workbench-actions {
+    justify-content: flex-start;
   }
 
   .experiment-readiness-head {

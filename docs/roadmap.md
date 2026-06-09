@@ -216,6 +216,8 @@ Accepted from UX review because it fits DEE's campaign-oriented decisioning mode
 - Collapse raw variant output JSON by default behind developer payload disclosures; show marketer-readable variant summaries first.
 - Apply clearer action hierarchy: New Experiment as primary, export as secondary, refresh as a utility action.
 
+Status: quick wins implemented for the current Campaigns page: status rollups now act as filters, list search/status/sort controls are available above the experiment list, draft cards use setup-focused summaries, running cards prioritize winner/significance/feedback, the duplicate in-panel Evaluate tab is removed in favor of "Open in Evaluate", breadcrumbs/status placement are cleaner, raw design payloads are collapsed behind developer drawers, and top action hierarchy is clearer. Remaining deeper work: campaign master/detail entry point and fuller campaign-level asset navigation.
+
 Deferred or not adopted:
 
 - Removing the global Evaluate page is not adopted. DEE needs a shared QA workspace for rules, messages, and experiments; Campaigns should deep-link into it instead.

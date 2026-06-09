@@ -106,6 +106,9 @@ const overviewRuleDetailPanel = document.querySelector("#overview-rule-detail-pa
 const experimentKpis = document.querySelector("#experiment-kpis");
 const experimentList = document.querySelector("#experiment-list");
 const experimentDetail = document.querySelector("#experiment-detail");
+const experimentFilterSearch = document.querySelector("#experiment-filter-search");
+const experimentFilterStatus = document.querySelector("#experiment-filter-status");
+const experimentSort = document.querySelector("#experiment-sort");
 const ruleInspectorSummary = document.querySelector("#rule-inspector-summary");
 const inspectorKey = document.querySelector("#inspector-key");
 const inspectorSurface = document.querySelector("#inspector-surface");
@@ -266,6 +269,9 @@ document.querySelector("#refresh-metrics").addEventListener("click", loadMetrics
 document.querySelector("#overview-window")?.addEventListener("change", loadMetrics);
 document.querySelector("#refresh-experiments")?.addEventListener("click", loadExperiments);
 document.querySelector("#experiment-filter-campaign")?.addEventListener("input", () => renderExperiments());
+experimentFilterSearch?.addEventListener("input", () => renderExperiments());
+experimentFilterStatus?.addEventListener("change", () => renderExperiments());
+experimentSort?.addEventListener("change", () => renderExperiments());
 document.querySelector("#quick-create-experiment")?.addEventListener("click", quickCreateExperiment);
 document.querySelector("#export-experiments-csv")?.addEventListener("click", exportExperimentsCsv);
 document.querySelector("#assistant-fab")?.addEventListener("click", openAssistantPanel);
@@ -1774,17 +1780,18 @@ async function handleAssistantHandoffAction(event) {
 }
 
 function renderExperiments() {
-  const summary = cachedExperimentSummary || {};
+  const summary = summarizeExperimentList(experimentFilterBaseExperiments());
   const experiments = campaignFilteredExperiments();
   if (experimentKpis) {
-    experimentKpis.innerHTML = [
-      metricCard("Experiments", formatNumber(summary.total || 0), "Total configured", "EX", "teal"),
-      metricCard("Paused", formatNumber(summary.paused || 0), `${formatNumber(summary.draft || 0)} draft · ${formatNumber(summary.archived || 0)} archived`, "PA", "blue"),
-      metricCard("In Progress", formatNumber(summary.running || 0), "Currently running", "IP", "purple"),
-      metricCard("Completed", formatNumber(summary.archived || 0), "Archived or closed", "CO", "teal"),
-      metricCard("Not Started", formatNumber(summary.draft || 0), "Draft experiments", "NS", "blue"),
-      metricCard("Feedback", formatNumber(summary.exposures || 0), `${formatNumber(summary.conversions || 0)} conversions · ${formatPercent(rate(summary.conversions || 0, summary.exposures || 0))}`, "FB", "purple")
-    ].join("");
+    const activeStatus = experimentFilterStatus?.value || "";
+    experimentKpis.innerHTML = experimentStatusFilterChips(summary, activeStatus);
+    experimentKpis.querySelectorAll("[data-experiment-status-filter]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (!experimentFilterStatus) return;
+        experimentFilterStatus.value = button.dataset.experimentStatusFilter || "";
+        renderExperiments();
+      });
+    });
   }
   if (!cachedExperiments.length) {
     experimentList.innerHTML = `<div class="status-line">No experiment rule sets yet. Create a rule set with type Experiment to begin.</div>`;
@@ -1811,8 +1818,93 @@ function renderExperiments() {
 }
 
 function campaignFilteredExperiments() {
+  const status = experimentFilterStatus?.value || "";
+  const sort = experimentSort?.value || "recent";
+  return experimentFilterBaseExperiments()
+    .filter((experiment) => !status || experimentStatusKey(experiment) === status)
+    .sort((left, right) => experimentSortCompare(left, right, sort));
+}
+
+function experimentFilterBaseExperiments() {
   const campaign = document.querySelector("#experiment-filter-campaign")?.value.trim().toLowerCase() || "";
-  return cachedExperiments.filter((experiment) => matchesDecisionCampaign(experiment.decision_key, campaign));
+  const search = experimentFilterSearch?.value.trim().toLowerCase() || "";
+  return cachedExperiments
+    .filter((experiment) => matchesDecisionCampaign(experiment.decision_key, campaign))
+    .filter((experiment) => {
+      if (!search) return true;
+      return [
+        experiment.name,
+        experiment.decision_key,
+        experiment.surface,
+        campaignForDecisionKey(experiment.decision_key)
+      ].filter(Boolean).join(" ").toLowerCase().includes(search);
+    });
+}
+
+function summarizeExperimentList(experiments = []) {
+  return experiments.reduce((summary, experiment) => {
+    const status = experimentStatusKey(experiment);
+    summary.total += 1;
+    summary[status] = (summary[status] || 0) + 1;
+    summary.exposures += Number(experiment.events?.exposure?.count || 0);
+    summary.conversions += Number(experiment.events?.conversion?.count || 0);
+    return summary;
+  }, { total: 0, running: 0, draft: 0, paused: 0, archived: 0, exposures: 0, conversions: 0 });
+}
+
+function experimentStatusFilterChips(summary = {}, activeStatus = "") {
+  const chips = [
+    { key: "", label: "All", value: summary.total || 0, detail: "experiments" },
+    { key: "running", label: "Running", value: summary.running || 0, detail: "receiving traffic" },
+    { key: "draft", label: "Draft", value: summary.draft || 0, detail: "setup needed" },
+    { key: "paused", label: "Paused", value: summary.paused || 0, detail: "not assigning" },
+    { key: "archived", label: "Archived", value: summary.archived || 0, detail: "completed" },
+    { key: "feedback", label: "Feedback", value: summary.exposures || 0, detail: `${formatNumber(summary.conversions || 0)} conversions` }
+  ];
+  return chips.map((chip) => {
+    const statusFilter = chip.key === "feedback" ? "" : chip.key;
+    return `
+      <button type="button" class="experiment-status-chip ${activeStatus === statusFilter ? "active" : ""}" data-experiment-status-filter="${escapeHtml(statusFilter)}">
+        <strong>${escapeHtml(chip.label)}</strong>
+        <span>${formatNumber(chip.value)}</span>
+        <small>${escapeHtml(chip.detail)}</small>
+      </button>
+    `;
+  }).join("");
+}
+
+function experimentStatusKey(experiment = {}) {
+  const status = experiment.experiment_status || experiment.status || "draft";
+  if (status === "completed") return "archived";
+  return status;
+}
+
+function experimentStatusLabel(status = "draft") {
+  const normalized = status === "completed" ? "archived" : status;
+  return normalized === "archived" ? "Archived" : titleCase(normalized || "draft");
+}
+
+function titleCase(value) {
+  return String(value || "").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function experimentSortCompare(left, right, sort) {
+  if (sort === "name") return String(left.name || left.decision_key || "").localeCompare(String(right.name || right.decision_key || ""));
+  if (sort === "status") return experimentStatusKey(left).localeCompare(experimentStatusKey(right));
+  if (sort === "feedback") return experimentFeedbackVolume(right) - experimentFeedbackVolume(left);
+  if (sort === "performance") return Number(right.winner_lift_vs_baseline || 0) - Number(left.winner_lift_vs_baseline || 0);
+  return experimentSortTime(right) - experimentSortTime(left);
+}
+
+function experimentFeedbackVolume(experiment = {}) {
+  return Number(experiment.events?.exposure?.count || 0)
+    + Number(experiment.events?.impression?.count || 0)
+    + Number(experiment.events?.conversion?.count || 0);
+}
+
+function experimentSortTime(experiment = {}) {
+  const time = Date.parse(experiment.updated_at || latestExperimentEventAt(experiment) || "");
+  return Number.isFinite(time) ? time : 0;
 }
 
 function experimentOpsCard(experiment, index, selected = false) {
@@ -1822,9 +1914,11 @@ function experimentOpsCard(experiment, index, selected = false) {
   const allocationState = Math.round(Number(experiment.allocation_total || 0) * 1000) === 100000 ? "ok" : "warn";
   const campaign = campaignForDecisionKey(experiment.decision_key);
   const mode = experimentMode(experiment);
+  const status = experimentStatusKey(experiment);
   const confidence = experimentBestConfidence(experiment);
   const significance = experiment.significant_winner_confidence || confidence;
   const winner = experiment.significant_winner_variant || experiment.winner_variant || "-";
+  const isDraft = status === "draft";
   return `
     <button type="button" class="experiment-ops-card ${selected ? "selected" : ""}" data-experiment-index="${index}">
       <div class="experiment-ops-head">
@@ -1832,7 +1926,7 @@ function experimentOpsCard(experiment, index, selected = false) {
           <strong>${escapeHtml(experiment.name)}</strong>
           <span>${escapeHtml([experiment.decision_key, campaign, mode === "bandit" ? "Adaptive" : "Fixed split"].filter(Boolean).join(" · "))}</span>
         </div>
-        <mark class="experiment-status ${escapeHtml(experiment.experiment_status)}">${escapeHtml(experiment.experiment_status)}</mark>
+        <mark class="experiment-status ${escapeHtml(status)}">${escapeHtml(experimentStatusLabel(status))}</mark>
       </div>
       <div class="experiment-ops-meta">
         <span>v${escapeHtml(experiment.version || "-")}</span>
@@ -1844,15 +1938,39 @@ function experimentOpsCard(experiment, index, selected = false) {
       <div class="experiment-ops-bars">
         ${experiment.variants.map((variant) => variantAllocationBar(variant)).join("")}
       </div>
-      <div class="experiment-card-metrics">
-        ${statusItem("Confidence", confidence ? formatPercent(confidence) : "-")}
-        ${statusItem("Significance", significance ? formatPercent(significance) : "-")}
-        ${statusItem("Executions", formatNumber(exposureCount))}
-        ${statusItem("Lift", formatLift(experiment.winner_lift_vs_baseline))}
-        ${statusItem("Winner", winner)}
-        ${statusItem("Impressions", formatNumber(impressionCount))}
-      </div>
+      ${isDraft ? experimentDraftCardState(experiment, allocationState) : `
+        <div class="experiment-card-metrics">
+          ${statusItem("Winner", winner)}
+          ${statusItem("Significance", significance ? formatPercent(significance) : "-")}
+          ${statusItem("Lift", formatLift(experiment.winner_lift_vs_baseline))}
+          ${statusItem("Exposures", formatNumber(exposureCount))}
+          ${statusItem("Conversions", formatNumber(conversionCount))}
+          ${statusItem("Impressions", formatNumber(impressionCount))}
+        </div>
+      `}
     </button>
+  `;
+}
+
+function experimentDraftCardState(experiment, allocationState) {
+  const setup = [
+    { label: "Variants", ok: (experiment.variants || []).length >= 2 },
+    { label: "Allocation", ok: allocationState === "ok" },
+    { label: "Goal", ok: Boolean(experiment.goal?.event || ruleMetadataForDecision(experiment.decision_key)?.experiment?.goal?.event) },
+    { label: "Surface", ok: Boolean(experiment.surface) }
+  ];
+  const done = setup.filter((item) => item.ok).length;
+  return `
+    <div class="experiment-draft-card-state">
+      <div>
+        <strong>Setup ${done}/${setup.length}</strong>
+        <span>Configure design, targeting, and goal before launch.</span>
+      </div>
+      <span class="configure-cue">Configure</span>
+    </div>
+    <div class="experiment-draft-checks">
+      ${setup.map((item) => `<span class="${item.ok ? "ok" : "warn"}">${escapeHtml(item.label)}</span>`).join("")}
+    </div>
   `;
 }
 
@@ -1881,18 +1999,20 @@ function renderExperimentDetail(experiment) {
   const tabs = [
     { key: "design", label: "Design" },
     { key: "settings", label: "Settings" },
-    { key: "evaluate", label: "Evaluate" },
     { key: "results", label: "Results" }
   ];
   if (!tabs.some((tab) => tab.key === activeExperimentTab)) activeExperimentTab = "design";
   experimentDetail.innerHTML = `
     <div class="experiment-workbench-head">
       <div>
-        <div class="experiment-breadcrumb">Campaigns &rsaquo; ${escapeHtml(campaign)} &rsaquo; Experiments</div>
+        <div class="experiment-breadcrumb">Campaigns &rsaquo; ${escapeHtml(cleanCampaignBreadcrumb(campaign))}</div>
         <h3>${escapeHtml(experiment.name || experiment.decision_key)}</h3>
-        <p>${escapeHtml([experiment.decision_key, experiment.surface || "No surface", experiment.experiment_status || "draft"].filter(Boolean).join(" · "))}</p>
+        <p>${escapeHtml([experiment.decision_key, experiment.surface || "No surface"].filter(Boolean).join(" · "))}</p>
       </div>
-      <mark class="experiment-status ${escapeHtml(experiment.experiment_status || "draft")}">${escapeHtml(experiment.experiment_status || "draft")}</mark>
+      <div class="experiment-workbench-actions">
+        <mark class="experiment-status ${escapeHtml(experimentStatusKey(experiment))}">${escapeHtml(experimentStatusLabel(experimentStatusKey(experiment)))}</mark>
+        <button type="button" data-experiment-action="open-evaluate" data-rule-key="${escapeHtml(experiment.decision_key)}">Open in Evaluate</button>
+      </div>
     </div>
     ${experimentReadinessPanel(experiment)}
     <div class="experiment-workbench-tabs" role="tablist">
@@ -1914,8 +2034,11 @@ function renderExperimentDetail(experiment) {
 function experimentTabContent(experiment, tab) {
   if (tab === "design") return experimentDesignTab(experiment);
   if (tab === "settings") return experimentSettingsTab(experiment);
-  if (tab === "evaluate") return experimentEvaluateTab(experiment);
   return experimentResultsTab(experiment);
+}
+
+function cleanCampaignBreadcrumb(campaign) {
+  return String(campaign || "Unassigned").split("/").map((part) => part.trim()).filter(Boolean).join(" \u203a ");
 }
 
 function experimentDesignTab(experiment) {
@@ -1941,13 +2064,17 @@ function experimentDesignTab(experiment) {
               <strong>${escapeHtml(variant.key || "(empty)")}</strong>
               <mark>${formatNumber(variant.weight || 0)}%</mark>
             </div>
+            <p class="experiment-variant-summary">${escapeHtml(experimentVariantDesignSummary(variant, experiment))}</p>
             <dl>
               <div><dt>Baseline</dt><dd>${escapeHtml(variant.baseline ? "Yes" : "No")}</dd></div>
               <div><dt>Template</dt><dd>${escapeHtml(variant.outputs?.template || experiment.outputs?.template || "-")}</dd></div>
               <div><dt>Outputs</dt><dd>${formatNumber(Object.keys(variant.outputs || {}).length)}</dd></div>
               <div><dt>DOM mods</dt><dd>${formatNumber((variant.outputs?.modifications || variant.outputs?.dom_modifications || []).length)}</dd></div>
             </dl>
-            <pre>${escapeHtml(compactJson(variant.outputs || {}, 1200))}</pre>
+            <details class="experiment-payload-drawer">
+              <summary>Show payload</summary>
+              <pre>${escapeHtml(compactJson(variant.outputs || {}, 1200))}</pre>
+            </details>
           </article>
         `).join("") : `<div class="status-line">No variants configured.</div>`}
       </div>
@@ -1982,6 +2109,22 @@ function experimentDesignTab(experiment) {
       </details>
     </section>
   `;
+}
+
+function experimentVariantDesignSummary(variant = {}, experiment = {}) {
+  const outputs = variant.outputs || {};
+  const template = outputs.template || experiment.outputs?.template || "default";
+  const modifications = outputs.modifications || outputs.dom_modifications || [];
+  if (variant.baseline || variant.key === "control") return "Control keeps the website fallback unless explicit output overrides are configured.";
+  if (template === "dom_modifications") {
+    return modifications.length
+      ? `${modifications.length} selector-based page change${modifications.length === 1 ? "" : "s"} configured.`
+      : "No visual page changes configured yet.";
+  }
+  if (template === "web_layer" || template === "html_fragment" || template === "inpage") return "Renders a guarded in-page web layer or HTML fragment.";
+  if (Array.isArray(outputs.cards)) return `${outputs.cards.length} card${outputs.cards.length === 1 ? "" : "s"} returned for this variant.`;
+  if (outputs.message_id) return `References message ${outputs.message_id}.`;
+  return Object.keys(outputs).length ? `${Object.keys(outputs).length} output field${Object.keys(outputs).length === 1 ? "" : "s"} configured.` : "No output payload configured yet.";
 }
 
 function experimentSettingsTab(experiment) {
@@ -2182,6 +2325,10 @@ function bindExperimentDetailActions(experiment) {
   });
   experimentDetail.querySelector('[data-experiment-action="open-evaluate"]')?.addEventListener("click", () => openExperimentInEvaluate(experiment));
   experimentDetail.querySelector('[data-experiment-action="open-visual-editor"]')?.addEventListener("click", () => openExperimentVisualEditor(experiment));
+  experimentDetail.querySelector('[data-experiment-action="focus-readiness"]')?.addEventListener("click", (event) => {
+    activeExperimentTab = event.currentTarget.dataset.targetTab || "settings";
+    renderExperimentDetail(experiment);
+  });
   experimentDetail.querySelector('[data-experiment-action="focus-visual-import"]')?.addEventListener("click", () => focusVisualPayloadImport());
   experimentDetail.querySelector('[data-experiment-action="apply-visual-payload"]')?.addEventListener("click", () => applyVisualEditorPayload(experiment));
   experimentDetail.querySelectorAll('[data-experiment-action="open-editor"]').forEach((button) => {
@@ -2335,7 +2482,7 @@ function experimentReadinessPanel(experiment = {}) {
           <strong>${ready ? "Ready to monitor" : blocking ? "Launch blockers" : "Review before launch"}</strong>
           <span>${escapeHtml(blocking ? `${blocking} blocking issue${blocking === 1 ? "" : "s"}` : warnings ? `${warnings} warning${warnings === 1 ? "" : "s"}` : "No obvious readiness issues detected.")}</span>
         </div>
-        <button type="button" data-experiment-action="open-editor" data-editor-section="${blocking || warnings ? "settings" : "operations"}" data-rule-key="${escapeHtml(experiment.decision_key || "")}">Review Setup</button>
+        <button type="button" data-experiment-action="focus-readiness" data-target-tab="${blocking || warnings ? "settings" : "results"}">View Checklist</button>
       </div>
       <div class="experiment-readiness-list">
         ${checks.map((item) => `
@@ -2361,10 +2508,11 @@ function experimentReadinessChecks(experiment = {}) {
   const exposureCount = Number(experiment.events?.exposure?.count || 0);
   const impressionCount = Number(experiment.events?.impression?.count || 0);
   const conversionCount = Number(experiment.events?.conversion?.count || 0);
+  const lastEventAt = latestExperimentEventAt(experiment);
   const live = experiment.status === "published" && experiment.experiment_status === "running";
   const checks = [
     readinessCheck(experiment.status === "published", "Published version", experiment.status === "published" ? "Client traffic can use the published experiment." : "Publish the experiment before sending live web traffic.", "error"),
-    readinessCheck(experiment.experiment_status === "running", "Experiment status", experiment.experiment_status === "running" ? "Assignments are active." : `Current status is ${experiment.experiment_status || "draft"}. Launch when ready.`, "warn"),
+    readinessCheck(Boolean(lastEventAt || exposureCount), "Last feedback", lastEventAt ? `Last event ${formatTime(lastEventAt)}.` : exposureCount ? `${formatNumber(exposureCount)} exposures received.` : "No client feedback received yet.", "warn"),
     readinessCheck(variants.length >= 2, "Variants", variants.length >= 2 ? `${variants.length} variants configured.` : "Configure at least control and one treatment variant.", "error"),
     readinessCheck(Math.round(allocationTotal * 1000) === 100000, "Allocation", `Allocation total is ${formatNumber(allocationTotal)}%.`, "error"),
     readinessCheck(outputVariants > 0, "Design payload", outputVariants ? `${outputVariants} variant${outputVariants === 1 ? "" : "s"} define outputs.` : "Add outputs or DOM modifications for at least one treatment.", "warn"),
@@ -2376,6 +2524,14 @@ function experimentReadinessChecks(experiment = {}) {
     readinessCheck(!live || exposureCount > 0, "Feedback flow", exposureCount ? `${formatNumber(exposureCount)} exposures, ${formatNumber(impressionCount)} impressions, ${formatNumber(conversionCount)} conversions.` : "No feedback yet; verify SDK exposure/impression events after launch.", "warn")
   ];
   return checks.slice(0, 12);
+}
+
+function latestExperimentEventAt(experiment = {}) {
+  return Object.values(experiment.events || {})
+    .map((event) => event?.last_seen_at)
+    .filter(Boolean)
+    .sort()
+    .at(-1) || "";
 }
 
 function readinessCheck(passed, title, detail, failLevel = "warn") {

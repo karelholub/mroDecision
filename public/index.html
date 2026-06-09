@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Meiro DEE</title>
-    <link rel="stylesheet" href="/styles.css?v=20260609-visual-payload-import" />
+    <link rel="stylesheet" href="/styles.css?v=20260609-campaigns-ux" />
   </head>
   <body>
     <aside>
@@ -869,16 +869,42 @@
               Campaign
               <input id="experiment-filter-campaign" placeholder="Any campaign" />
             </label>
-            <button type="button" id="quick-create-experiment">New Experiment</button>
-            <button id="refresh-experiments">Refresh</button>
-            <button id="export-experiments-csv">Export CSV</button>
+            <button type="button" id="quick-create-experiment" class="primary-action">New Experiment</button>
+            <button id="export-experiments-csv" class="secondary-action">Export CSV</button>
+            <button id="refresh-experiments" class="utility-action" title="Refresh experiments" aria-label="Refresh experiments">Refresh</button>
           </div>
         </header>
         <div class="experiment-ops-workbench">
           <div id="experiment-kpis" class="metric-grid experiment-kpi-strip"></div>
           <div class="experiment-ops-grid">
             <div class="editor experiment-list-pane">
-              <div class="editor-title">Campaign Experiments</div>
+              <div class="editor-title">Experiments</div>
+              <div class="experiment-list-toolbar">
+                <label>
+                  Search
+                  <input id="experiment-filter-search" placeholder="Name or key" />
+                </label>
+                <label>
+                  Status
+                  <select id="experiment-filter-status">
+                    <option value="">All</option>
+                    <option value="running">Running</option>
+                    <option value="draft">Draft</option>
+                    <option value="paused">Paused</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </label>
+                <label>
+                  Sort
+                  <select id="experiment-sort">
+                    <option value="recent">Recently updated</option>
+                    <option value="status">Status</option>
+                    <option value="feedback">Feedback volume</option>
+                    <option value="performance">Performance</option>
+                    <option value="name">Name</option>
+                  </select>
+                </label>
+              </div>
               <div id="experiment-list" class="experiment-list"></div>
             </div>
             <div class="editor experiment-detail-pane">
@@ -2120,6 +2146,6 @@
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
   <script src="/app-utils.js?v=20260609-visual-editor-overlay"></script>
-  <script src="/app.js?v=20260609-visual-payload-import"></script>
+  <script src="/app.js?v=20260609-campaigns-ux"></script>
 </body>
 </html>
