@@ -5913,10 +5913,10 @@ header {
 
 .lookup-detail-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .lookup-detail-panel[hidden] {
@@ -5948,11 +5948,11 @@ header {
 
 .lookup-editor-pane {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) minmax(230px, 0.38fr);
+  grid-template-rows: auto auto;
   gap: 12px;
   min-height: 0;
-  max-height: 980px;
-  overflow: hidden;
+  max-height: none;
+  overflow: visible;
   padding: 14px 0;
   border: 0;
   background: transparent;
@@ -5964,7 +5964,7 @@ header {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto;
   gap: 12px;
-  overflow: auto;
+  overflow: visible;
 }
 
 .lookup-table-pane,
@@ -5979,7 +5979,7 @@ header {
 .lookup-inspector-pane {
   width: 100%;
   max-width: 100%;
-  overflow: auto;
+  overflow: visible;
   padding: 16px;
 }
 
@@ -5995,7 +5995,7 @@ header {
   height: auto;
   max-height: none;
   min-height: 240px;
-  overflow: auto;
+  overflow: visible;
 }
 
 .lookup-inspector-pane .compact-status-panel {
