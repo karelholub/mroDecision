@@ -510,6 +510,20 @@ aside input {
   line-height: 1.35;
 }
 
+.experiment-delivery-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.experiment-delivery-panel .experiment-planning-grid {
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+}
+
 .bandit-settings-panel,
 .experiment-bandit-detail {
   display: grid;

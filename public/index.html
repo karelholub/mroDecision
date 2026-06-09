@@ -396,6 +396,88 @@
                     </label>
                   </div>
                   <div id="experiment-planning-summary" class="experiment-planning-summary"></div>
+                  <div class="experiment-delivery-panel">
+                    <div class="settings-section-head compact-section-head">
+                      <div>
+                        <div class="editor-title compact-title">Delivery & Targeting</div>
+                        <p>Control where, when, and how the website SDK renders this experiment.</p>
+                      </div>
+                    </div>
+                    <div class="experiment-planning-grid">
+                      <label>
+                        Display frequency
+                        <select id="experiment-display-mode">
+                          <option value="always">Always</option>
+                          <option value="once_per_session">Once per session</option>
+                          <option value="once">Once until version changes</option>
+                        </select>
+                      </label>
+                      <label>
+                        Reset on version change
+                        <select id="experiment-display-reset">
+                          <option value="true">Yes</option>
+                          <option value="false">No</option>
+                        </select>
+                      </label>
+                      <label>
+                        Target devices
+                        <input id="experiment-target-devices" placeholder="any, desktop, mobile" />
+                      </label>
+                      <label>
+                        URL includes
+                        <input id="experiment-url-includes" placeholder="/offers, /products" />
+                      </label>
+                      <label>
+                        URL excludes
+                        <input id="experiment-url-excludes" placeholder="preview=true, /admin" />
+                      </label>
+                      <label>
+                        SDK conditions
+                        <input id="experiment-sdk-conditions" placeholder="cart_is_not_empty, has_search_results" />
+                      </label>
+                      <label>
+                        Trigger type
+                        <select id="experiment-trigger-type">
+                          <option value="page_load">Page load</option>
+                          <option value="dom_ready">DOM ready</option>
+                          <option value="data_layer_event">Data layer event</option>
+                          <option value="custom_event">Custom event</option>
+                          <option value="manual">Manual</option>
+                        </select>
+                      </label>
+                      <label>
+                        Trigger event
+                        <input id="experiment-trigger-event" placeholder="product_viewed" />
+                      </label>
+                      <label>
+                        Consent category
+                        <input id="experiment-consent-category" placeholder="personalization" />
+                      </label>
+                      <label>
+                        Consent required
+                        <select id="experiment-consent-required">
+                          <option value="false">No</option>
+                          <option value="true">Yes</option>
+                        </select>
+                      </label>
+                      <label>
+                        Goal type
+                        <select id="experiment-goal-type">
+                          <option value="conversion">Conversion</option>
+                          <option value="revenue">Revenue</option>
+                          <option value="engagement">Engagement</option>
+                        </select>
+                      </label>
+                      <label>
+                        Attribution window hours
+                        <input id="experiment-goal-attribution" type="number" min="0" step="1" placeholder="168" />
+                      </label>
+                      <label>
+                        Revenue/value field
+                        <input id="experiment-goal-value-field" placeholder="event.revenue" />
+                      </label>
+                    </div>
+                  </div>
                   <div class="variant-builder-panel">
                     <div class="variant-builder-head">
                       <div>

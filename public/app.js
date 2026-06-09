@@ -407,11 +407,24 @@ document.querySelector("#rule-type").addEventListener("change", () => {
   "#experiment-bandit-window-days",
   "#experiment-bandit-freeze-variant",
   "#experiment-goal-event",
+  "#experiment-goal-type",
+  "#experiment-goal-attribution",
+  "#experiment-goal-value-field",
   "#experiment-goal-lift",
   "#experiment-baseline-rate",
   "#experiment-daily-traffic",
   "#experiment-starts-at",
-  "#experiment-ends-at"
+  "#experiment-ends-at",
+  "#experiment-display-mode",
+  "#experiment-display-reset",
+  "#experiment-target-devices",
+  "#experiment-url-includes",
+  "#experiment-url-excludes",
+  "#experiment-sdk-conditions",
+  "#experiment-trigger-type",
+  "#experiment-trigger-event",
+  "#experiment-consent-category",
+  "#experiment-consent-required"
 ].forEach((selector) => {
   document.querySelector(selector).addEventListener("input", renderRuleInspector);
   document.querySelector(selector).addEventListener("change", renderRuleInspector);
@@ -2887,6 +2900,10 @@ function renderExperimentPanel() {
     statusItem("Assignment", experiment.unit || "profile"),
     statusItem("Mode", mode === "bandit" ? "Adaptive bandit" : "Fixed split"),
     statusItem("Goal", experiment.goal?.event || "conversion"),
+    statusItem("Display", displayPolicyLabel(experiment.display)),
+    statusItem("Targeting", experimentTargetingLabel(experiment.targeting)),
+    statusItem("Trigger", experimentTriggerLabel(experiment.trigger)),
+    statusItem("Consent", experimentConsentLabel(experiment.consent)),
     statusItem("Variants", variants.length),
     statusItem("Allocation", `${Number.isFinite(total) ? total : 0}%`),
     ...(mode === "bandit" ? [
@@ -2910,11 +2927,24 @@ function setExperimentMetadata(experiment = {}) {
   document.querySelector("#experiment-bandit-window-days").value = Number(experiment.bandit?.window_days ?? experiment.bandit?.windowDays ?? 0) || "";
   document.querySelector("#experiment-bandit-freeze-variant").value = experiment.bandit?.freeze_variant || experiment.freeze_variant || "";
   document.querySelector("#experiment-goal-event").value = experiment.goal?.event || "conversion";
+  document.querySelector("#experiment-goal-type").value = experiment.goal?.type || "conversion";
+  document.querySelector("#experiment-goal-attribution").value = Number(experiment.goal?.attribution_window_hours || 0) || "";
+  document.querySelector("#experiment-goal-value-field").value = experiment.goal?.value_field || "";
   document.querySelector("#experiment-goal-lift").value = Number(experiment.goal?.minimum_detectable_lift_pct || 10);
   document.querySelector("#experiment-baseline-rate").value = Number(experiment.goal?.baseline_conversion_rate_pct || 5);
   document.querySelector("#experiment-daily-traffic").value = Number(experiment.schedule?.daily_eligible_profiles || 0) || "";
   document.querySelector("#experiment-starts-at").value = dateTimeLocalValue(experiment.schedule?.starts_at || "");
   document.querySelector("#experiment-ends-at").value = dateTimeLocalValue(experiment.schedule?.ends_at || "");
+  document.querySelector("#experiment-display-mode").value = experiment.display?.mode || "always";
+  document.querySelector("#experiment-display-reset").value = experiment.display?.reset_on_version_change === false ? "false" : "true";
+  document.querySelector("#experiment-target-devices").value = Array.isArray(experiment.targeting?.devices) ? experiment.targeting.devices.join(", ") : "any";
+  document.querySelector("#experiment-url-includes").value = urlRulesToText(experiment.targeting?.url_rules, "include");
+  document.querySelector("#experiment-url-excludes").value = urlRulesToText(experiment.targeting?.url_rules, "exclude");
+  document.querySelector("#experiment-sdk-conditions").value = Array.isArray(experiment.targeting?.sdk_conditions) ? experiment.targeting.sdk_conditions.join(", ") : "";
+  document.querySelector("#experiment-trigger-type").value = experiment.trigger?.type || "page_load";
+  document.querySelector("#experiment-trigger-event").value = experiment.trigger?.event || "";
+  document.querySelector("#experiment-consent-category").value = experiment.consent?.category || "";
+  document.querySelector("#experiment-consent-required").value = experiment.consent?.required ? "true" : "false";
   document.querySelector("#experiment-variants").value = JSON.stringify(
     Array.isArray(experiment.variants) && experiment.variants.length
       ? experiment.variants
@@ -2931,6 +2961,31 @@ function defaultExperimentVariants() {
     { key: "control", weight: 50, outputs: {} },
     { key: "treatment", weight: 50, outputs: {} }
   ];
+}
+
+function displayPolicyLabel(display = {}) {
+  if (display.mode === "once") return "Once";
+  if (display.mode === "once_per_session") return "Once / session";
+  return "Always";
+}
+
+function experimentTargetingLabel(targeting = {}) {
+  const devices = Array.isArray(targeting.devices) && targeting.devices.length ? targeting.devices.join(", ") : "any device";
+  const urls = Array.isArray(targeting.url_rules) ? targeting.url_rules.length : 0;
+  const conditions = Array.isArray(targeting.sdk_conditions) ? targeting.sdk_conditions.length : 0;
+  return [devices, urls ? `${urls} URL rule${urls === 1 ? "" : "s"}` : "", conditions ? `${conditions} condition${conditions === 1 ? "" : "s"}` : ""]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function experimentTriggerLabel(trigger = {}) {
+  if (!trigger?.type || trigger.type === "page_load") return "Page load";
+  return trigger.event ? `${trigger.type}: ${trigger.event}` : trigger.type;
+}
+
+function experimentConsentLabel(consent = {}) {
+  if (!consent?.required) return "Not required";
+  return consent.category ? `Requires ${consent.category}` : "Required";
 }
 
 function setExperimentStatus(status) {
@@ -3131,6 +3186,7 @@ function readExperimentMetadata({ tolerateInvalid = false } = {}) {
       ...readExperimentBandit(),
       goal: readExperimentGoal(),
       schedule: readExperimentSchedule(),
+      ...readExperimentDeliverySettings(),
       variants
     };
   } catch (error) {
@@ -3142,6 +3198,7 @@ function readExperimentMetadata({ tolerateInvalid = false } = {}) {
       ...readExperimentBandit(),
       goal: readExperimentGoal(),
       schedule: readExperimentSchedule(),
+      ...readExperimentDeliverySettings(),
       variants: []
     };
   }
@@ -3171,19 +3228,82 @@ function readExperimentBandit() {
 }
 
 function readExperimentGoal() {
-  return {
+  const attributionWindow = Number(document.querySelector("#experiment-goal-attribution").value || 0);
+  const valueField = document.querySelector("#experiment-goal-value-field").value.trim();
+  const goal = {
     event: document.querySelector("#experiment-goal-event").value.trim() || "conversion",
+    type: document.querySelector("#experiment-goal-type").value || "conversion",
     minimum_detectable_lift_pct: Number(document.querySelector("#experiment-goal-lift").value || 0),
     baseline_conversion_rate_pct: Number(document.querySelector("#experiment-baseline-rate").value || 0)
   };
+  if (Number.isFinite(attributionWindow) && attributionWindow > 0) goal.attribution_window_hours = attributionWindow;
+  if (valueField) goal.value_field = valueField;
+  return goal;
 }
 
 function readExperimentSchedule() {
-  return {
+  const schedule = {
     starts_at: isoFromDateTimeLocal(document.querySelector("#experiment-starts-at").value),
     ends_at: isoFromDateTimeLocal(document.querySelector("#experiment-ends-at").value),
     daily_eligible_profiles: Number(document.querySelector("#experiment-daily-traffic").value || 0)
   };
+  if (!schedule.starts_at) delete schedule.starts_at;
+  if (!schedule.ends_at) delete schedule.ends_at;
+  if (!schedule.daily_eligible_profiles) delete schedule.daily_eligible_profiles;
+  return schedule;
+}
+
+function readExperimentDeliverySettings() {
+  const displayMode = document.querySelector("#experiment-display-mode").value || "always";
+  const display = {
+    mode: displayMode,
+    reset_on_version_change: document.querySelector("#experiment-display-reset").value !== "false"
+  };
+  const devices = uniqueList(document.querySelector("#experiment-target-devices").value || "any")
+    .map((item) => item.toLowerCase());
+  const urlRules = [
+    ...textList(document.querySelector("#experiment-url-includes").value).map((value) => ({ mode: "include", operator: "contains", value })),
+    ...textList(document.querySelector("#experiment-url-excludes").value).map((value) => ({ mode: "exclude", operator: "contains", value }))
+  ];
+  const sdkConditions = uniqueList(document.querySelector("#experiment-sdk-conditions").value);
+  const targeting = {};
+  if (devices.length && !devices.includes("any")) targeting.devices = devices;
+  if (urlRules.length) targeting.url_rules = urlRules;
+  if (sdkConditions.length) targeting.sdk_conditions = sdkConditions;
+  const triggerType = document.querySelector("#experiment-trigger-type").value || "page_load";
+  const triggerEvent = document.querySelector("#experiment-trigger-event").value.trim();
+  const trigger = { type: triggerType };
+  if (triggerEvent) trigger.event = triggerEvent;
+  const consentRequired = document.querySelector("#experiment-consent-required").value === "true";
+  const consentCategory = document.querySelector("#experiment-consent-category").value.trim();
+  const consent = consentRequired || consentCategory
+    ? { required: consentRequired, category: consentCategory, missing_result: "suppressed" }
+    : null;
+  return {
+    display,
+    ...(Object.keys(targeting).length ? { targeting } : {}),
+    ...(trigger.type !== "page_load" || trigger.event ? { trigger } : {}),
+    ...(consent ? { consent } : {})
+  };
+}
+
+function textList(value) {
+  return String(value || "")
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function uniqueList(value) {
+  return [...new Set(textList(value))];
+}
+
+function urlRulesToText(rules = [], mode) {
+  return (Array.isArray(rules) ? rules : [])
+    .filter((rule) => (rule.mode || "include") === mode)
+    .map((rule) => rule.value || "")
+    .filter(Boolean)
+    .join(", ");
 }
 
 function experimentMetadataWarnings(experiment = {}) {
@@ -3208,6 +3328,26 @@ function experimentMetadataWarnings(experiment = {}) {
   if (!Number.isFinite(Number(goal.baseline_conversion_rate_pct)) || Number(goal.baseline_conversion_rate_pct) <= 0) warnings.push("Baseline conversion rate is required for sample guidance.");
   if (!Number.isFinite(Number(goal.minimum_detectable_lift_pct)) || Number(goal.minimum_detectable_lift_pct) <= 0) warnings.push("Minimum detectable lift must be greater than 0.");
   if (schedule.starts_at && schedule.ends_at && new Date(schedule.ends_at) <= new Date(schedule.starts_at)) warnings.push("Experiment end date must be after start date.");
+  const display = experiment.display || {};
+  if (display.mode && !["always", "once", "once_per_session"].includes(display.mode)) warnings.push("Display frequency must be always, once, or once per session.");
+  const targeting = experiment.targeting || {};
+  if (Array.isArray(targeting.devices) && targeting.devices.some((device) => !["any", "desktop", "tablet", "mobile"].includes(device))) {
+    warnings.push("Target devices must use any, desktop, tablet, or mobile.");
+  }
+  for (const rule of targeting.url_rules || []) {
+    if (!rule.value) warnings.push("URL targeting rule is missing a value.");
+    if (rule.operator === "regex") {
+      try {
+        new RegExp(rule.value);
+      } catch {
+        warnings.push(`URL targeting regex is invalid: ${rule.value}`);
+      }
+    }
+  }
+  const trigger = experiment.trigger || {};
+  if (["data_layer_event", "custom_event"].includes(trigger.type) && !trigger.event) warnings.push("Event-triggered experiments need a trigger event name.");
+  const consent = experiment.consent || {};
+  if (consent.required && !consent.category) warnings.push("Consent-required experiments need a consent category.");
   if (experimentMode(experiment) === "bandit") {
     const explorationRate = Number(experiment.bandit?.exploration_rate ?? 10);
     const minExposures = Number(experiment.bandit?.min_exposures_per_variant ?? 100);
@@ -3939,6 +4079,18 @@ function experimentFreezeWarnings(payload = {}) {
   }
   if (stableStringify(current.schedule || {}) !== stableStringify(next.schedule || {})) {
     warnings.push("Active experiment freeze: schedule settings changed while the experiment is running.");
+  }
+  if (stableStringify(current.display || {}) !== stableStringify(next.display || {})) {
+    warnings.push("Active experiment freeze: display policy changed while the experiment is running.");
+  }
+  if (stableStringify(current.targeting || {}) !== stableStringify(next.targeting || {})) {
+    warnings.push("Active experiment freeze: delivery targeting changed while the experiment is running.");
+  }
+  if (stableStringify(current.trigger || {}) !== stableStringify(next.trigger || {})) {
+    warnings.push("Active experiment freeze: trigger settings changed while the experiment is running.");
+  }
+  if (stableStringify(current.consent || {}) !== stableStringify(next.consent || {})) {
+    warnings.push("Active experiment freeze: consent requirements changed while the experiment is running.");
   }
   if (payload.draft && ruleEligibilitySignature(selectedPublishedDefinition) !== ruleEligibilitySignature(payload.draft)) {
     warnings.push("Active experiment freeze: eligibility logic changed. The experiment audience may no longer match the launched population.");
