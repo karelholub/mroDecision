@@ -152,6 +152,7 @@ let cachedAssistantPlan = null;
 let cachedAssistantRollback = [];
 let assistantChatHistory = [];
 let selectedExperimentKey = null;
+let activeExperimentTab = "design";
 let selectedLookupMetadata = {};
 let conditionBlocksLoaded = false;
 let selectedConditionBlockId = null;
@@ -1791,7 +1792,9 @@ function renderExperiments() {
   experimentList.innerHTML = experiments.map((experiment, index) => experimentOpsCard(experiment, index, experiment.decision_key === selectedExperimentKey)).join("");
   experimentList.querySelectorAll("[data-experiment-index]").forEach((button) => {
     button.addEventListener("click", () => {
-      selectedExperimentKey = experiments[Number(button.dataset.experimentIndex)]?.decision_key || null;
+      const nextKey = experiments[Number(button.dataset.experimentIndex)]?.decision_key || null;
+      if (nextKey !== selectedExperimentKey) activeExperimentTab = "design";
+      selectedExperimentKey = nextKey;
       renderExperiments();
     });
   });
@@ -1865,11 +1868,151 @@ function renderExperimentDetail(experiment) {
     experimentDetail.innerHTML = `<div class="status-line">Select an experiment to inspect variants and feedback.</div>`;
     return;
   }
+  const campaign = campaignForDecisionKey(experiment.decision_key) || "Unassigned";
+  const tabs = [
+    { key: "design", label: "Design" },
+    { key: "settings", label: "Settings" },
+    { key: "evaluate", label: "Evaluate" },
+    { key: "results", label: "Results" }
+  ];
+  if (!tabs.some((tab) => tab.key === activeExperimentTab)) activeExperimentTab = "design";
+  experimentDetail.innerHTML = `
+    <div class="experiment-workbench-head">
+      <div>
+        <div class="experiment-breadcrumb">Campaigns &rsaquo; ${escapeHtml(campaign)} &rsaquo; Experiments</div>
+        <h3>${escapeHtml(experiment.name || experiment.decision_key)}</h3>
+        <p>${escapeHtml([experiment.decision_key, experiment.surface || "No surface", experiment.experiment_status || "draft"].filter(Boolean).join(" · "))}</p>
+      </div>
+      <mark class="experiment-status ${escapeHtml(experiment.experiment_status || "draft")}">${escapeHtml(experiment.experiment_status || "draft")}</mark>
+    </div>
+    <div class="experiment-workbench-tabs" role="tablist">
+      ${tabs.map((tab) => `<button type="button" role="tab" class="${activeExperimentTab === tab.key ? "active" : ""}" data-experiment-tab="${tab.key}">${escapeHtml(tab.label)}</button>`).join("")}
+    </div>
+    <div class="experiment-workbench-body">
+      ${experimentTabContent(experiment, activeExperimentTab)}
+    </div>
+  `;
+  experimentDetail.querySelectorAll("[data-experiment-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeExperimentTab = button.dataset.experimentTab || "results";
+      renderExperimentDetail(experiment);
+    });
+  });
+  bindExperimentDetailActions(experiment);
+}
+
+function experimentTabContent(experiment, tab) {
+  if (tab === "design") return experimentDesignTab(experiment);
+  if (tab === "settings") return experimentSettingsTab(experiment);
+  if (tab === "evaluate") return experimentEvaluateTab(experiment);
+  return experimentResultsTab(experiment);
+}
+
+function experimentDesignTab(experiment) {
+  const variants = Array.isArray(experiment.variants) ? experiment.variants : [];
+  return `
+    <section class="experiment-tab-panel">
+      <div class="experiment-tab-intro">
+        <strong>Design</strong>
+        <span>Variants, content payloads, and SDK rendering contracts for this experiment.</span>
+      </div>
+      <div class="experiment-design-grid">
+        ${variants.length ? variants.map((variant) => `
+          <article class="experiment-design-card">
+            <div>
+              <strong>${escapeHtml(variant.key || "(empty)")}</strong>
+              <mark>${formatNumber(variant.weight || 0)}%</mark>
+            </div>
+            <dl>
+              <div><dt>Baseline</dt><dd>${escapeHtml(variant.baseline ? "Yes" : "No")}</dd></div>
+              <div><dt>Template</dt><dd>${escapeHtml(variant.outputs?.template || experiment.outputs?.template || "-")}</dd></div>
+              <div><dt>Outputs</dt><dd>${formatNumber(Object.keys(variant.outputs || {}).length)}</dd></div>
+              <div><dt>DOM mods</dt><dd>${formatNumber((variant.outputs?.modifications || variant.outputs?.dom_modifications || []).length)}</dd></div>
+            </dl>
+            <pre>${escapeHtml(compactJson(variant.outputs || {}, 1200))}</pre>
+          </article>
+        `).join("") : `<div class="status-line">No variants configured.</div>`}
+      </div>
+      <details class="experiment-snippet-panel">
+        <summary>Website rendering contract</summary>
+        <div class="experiment-snippet-guidance">
+          <span>The SDK reads the decision payload and applies variant outputs, DOM modifications, or message templates at the configured placement.</span>
+          <button type="button" data-experiment-action="copy-snippet" data-rule-key="${escapeHtml(experiment.decision_key)}">Copy Snippet</button>
+        </div>
+        <pre class="experiment-snippet-code">${escapeHtml(experimentWebsiteSnippet(experiment))}</pre>
+      </details>
+    </section>
+  `;
+}
+
+function experimentSettingsTab(experiment) {
+  const metadata = ruleMetadataForDecision(experiment.decision_key) || {};
+  const metadataExperiment = metadata.experiment || {};
+  const delivery = experiment.delivery || metadataExperiment.delivery || {};
+  const targeting = delivery.targeting || experiment.targeting || metadataExperiment.targeting || {};
+  const display = delivery.display || experiment.display || metadataExperiment.display || {};
+  const trigger = delivery.trigger || experiment.trigger || metadataExperiment.trigger || {};
+  const goal = delivery.goal || experiment.goal || metadataExperiment.goal || {};
+  const consent = delivery.consent || experiment.consent || metadataExperiment.consent || {};
+  return `
+    <section class="experiment-tab-panel">
+      <div class="experiment-tab-intro">
+        <strong>Settings</strong>
+        <span>Audience, trigger, placement, schedule, consent, display frequency, and conversion goal.</span>
+      </div>
+      <div class="experiment-settings-list">
+        ${experimentSettingRow("Trigger", trigger.type || "page_load", trigger.event ? `Event: ${trigger.event}` : "Default website SDK trigger")}
+        ${experimentSettingRow("Conversion goal", goal.event || "conversion", goal.type ? `Type: ${goal.type}` : "Used for reporting and winner guidance")}
+        ${experimentSettingRow("Schedule", experiment.starts_at || experiment.ends_at ? `${experiment.starts_at || "Now"} - ${experiment.ends_at || "manual stop"}` : "Display immediately, stop manually", `${formatNumber(experiment.daily_eligible_profiles || 0)} daily eligible estimate`)}
+        ${experimentSettingRow("Show on", urlRulesLabel(targeting.url_rules), "URL targeting")}
+        ${experimentSettingRow("Page variables", arrayLabel(targeting.page_variables), "Enhanced web targeting")}
+        ${experimentSettingRow("JavaScript conditions", arrayLabel(targeting.sdk_conditions), "Named SDK conditions")}
+        ${experimentSettingRow("Target devices", arrayLabel(targeting.devices) || "Any device", "Device targeting")}
+        ${experimentSettingRow("Display", display.mode || "always", display.reset_on_version_change ? "Resets on version change" : "Persistent assignment")}
+        ${experimentSettingRow("Consent category", consent.category || "-", consent.required ? "Required" : "Not required")}
+        ${experimentSettingRow("Audience", experiment.assignment_unit || "profile", `${experimentMode(experiment) === "bandit" ? "Adaptive bandit" : "Fixed split"} assignment`)}
+      </div>
+    </section>
+  `;
+}
+
+function experimentEvaluateTab(experiment) {
+  const sampleRequest = experimentSampleEvaluateRequest(experiment);
+  return `
+    <section class="experiment-tab-panel">
+      <div class="experiment-tab-intro">
+        <strong>Evaluate</strong>
+        <span>Use the Evaluate workspace to force variants, test payloads, and inspect eligibility reasons.</span>
+      </div>
+      <div class="experiment-evaluate-grid">
+        ${statusItem("Decision key", experiment.decision_key || "-")}
+        ${statusItem("Surface", experiment.surface || "-")}
+        ${statusItem("Assignment", experiment.assignment_unit || "profile")}
+        ${statusItem("Variants", formatNumber(experiment.variants?.length || 0))}
+      </div>
+      <div class="experiment-detail-actions">
+        <button type="button" data-experiment-action="open-evaluate" data-rule-key="${escapeHtml(experiment.decision_key)}">Open in Evaluate</button>
+        <button type="button" data-experiment-action="copy-snippet" data-rule-key="${escapeHtml(experiment.decision_key)}">Copy Website Snippet</button>
+        <span>Evaluate with published or draft mode, then compare the response payload with SDK rendering behavior.</span>
+      </div>
+      <details class="experiment-snippet-panel" open>
+        <summary>Sample request payload</summary>
+        <pre class="experiment-snippet-code">${escapeHtml(JSON.stringify(sampleRequest, null, 2))}</pre>
+      </details>
+      <details class="experiment-snippet-panel" open>
+        <summary>Website install snippet</summary>
+        <pre class="experiment-snippet-code">${escapeHtml(experimentWebsiteSnippet(experiment))}</pre>
+      </details>
+    </section>
+  `;
+}
+
+function experimentResultsTab(experiment) {
   const warnings = experimentOpsWarnings(experiment);
   const recommendation = experiment.winner_recommendation || {};
   const winnerKey = recommendation.eligible ? recommendation.variant_key : "";
   const mode = experimentMode(experiment);
-  experimentDetail.innerHTML = `
+  return `
     <div class="experiment-detail-table">
       <div class="experiment-detail-table-header">
         <span>Variant Name</span>
@@ -1929,10 +2072,66 @@ function renderExperimentDetail(experiment) {
       </div>
     </section>
   `;
+}
+
+function bindExperimentDetailActions(experiment) {
   experimentDetail.querySelector('[data-experiment-action="declare-winner"]')?.addEventListener("click", declareExperimentWinner);
   experimentDetail.querySelectorAll('[data-experiment-action="copy-snippet"]').forEach((button) => {
     button.addEventListener("click", () => copyExperimentSnippet(experiment));
   });
+  experimentDetail.querySelector('[data-experiment-action="open-evaluate"]')?.addEventListener("click", () => openExperimentInEvaluate(experiment));
+}
+
+function openExperimentInEvaluate(experiment) {
+  switchView("test");
+  const ruleSelect = document.querySelector("#eval-rule-key");
+  if (ruleSelect) ruleSelect.value = experiment.decision_key;
+  const preset = document.querySelector("#eval-preset");
+  if (preset) preset.value = "experiment_holdout";
+  loadEvaluatePreset();
+}
+
+function experimentSettingRow(label, value, detail = "") {
+  return `
+    <div class="experiment-setting-row">
+      <strong>${escapeHtml(label)}</strong>
+      <span>${escapeHtml(value || "-")}</span>
+      <small>${escapeHtml(detail || "")}</small>
+    </div>
+  `;
+}
+
+function arrayLabel(value) {
+  return Array.isArray(value) && value.length ? value.join(", ") : "";
+}
+
+function urlRulesLabel(rules = []) {
+  if (!Array.isArray(rules) || !rules.length) return "Any page";
+  return rules.map((rule) => typeof rule === "string" ? rule : `${rule.mode || "include"} ${rule.operator || "contains"} ${rule.value || ""}`.trim()).join(", ");
+}
+
+function compactJson(value, limit = 900) {
+  const text = JSON.stringify(value || {}, null, 2);
+  return text.length > limit ? `${text.slice(0, limit)}\n...` : text;
+}
+
+function experimentSampleEvaluateRequest(experiment) {
+  const metadata = ruleMetadataForDecision(experiment.decision_key) || {};
+  const schema = metadata.input_schema || {};
+  return {
+    decision_key: experiment.decision_key,
+    profile_key: "demo-profile@example.com",
+    identifiers: [{ typeId: "email", value: "demo-profile@example.com" }],
+    attributes: sampleAttributesFromSchema(schema),
+    segments: {},
+    context: {
+      channel: "web",
+      request_source: "dee_ui",
+      surface: experiment.surface || "homepage",
+      page_url: "https://example.com/",
+      force_variant: experiment.variants?.[0]?.key || undefined
+    }
+  };
 }
 
 function experimentTopVariantRow(experiment, variant, index, mode) {

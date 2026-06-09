@@ -1529,6 +1529,199 @@ aside input {
   font-weight: 800;
 }
 
+.experiment-workbench-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.experiment-workbench-head h3 {
+  margin: 4px 0;
+  font-size: 20px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.experiment-workbench-head p,
+.experiment-breadcrumb {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.experiment-breadcrumb {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.experiment-workbench-tabs {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 4px 2px 0;
+  overflow-x: auto;
+}
+
+.experiment-workbench-tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 10px 12px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.experiment-workbench-tabs button.active {
+  border-bottom-color: var(--teal);
+  color: var(--ink);
+}
+
+.experiment-workbench-body,
+.experiment-tab-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.experiment-tab-intro {
+  display: grid;
+  gap: 3px;
+}
+
+.experiment-tab-intro strong {
+  font-size: 16px;
+}
+
+.experiment-tab-intro span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.experiment-design-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.experiment-design-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.experiment-design-card > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.experiment-design-card strong {
+  overflow-wrap: anywhere;
+}
+
+.experiment-design-card mark {
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(14, 154, 142, 0.08);
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.experiment-design-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.experiment-design-card dl div,
+.experiment-setting-row {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: var(--panel-soft);
+}
+
+.experiment-design-card dt,
+.experiment-setting-row strong {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.experiment-design-card dd {
+  margin: 0;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.experiment-design-card pre,
+.experiment-snippet-code {
+  max-height: 280px;
+  min-width: 0;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  padding: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.experiment-settings-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.experiment-setting-row span {
+  font-weight: 800;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.experiment-setting-row small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.experiment-evaluate-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .experiment-ops-bars {
   display: grid;
   gap: 6px;
@@ -7320,6 +7513,9 @@ pre {
   .campaign-detail-hero,
   .campaign-detail-grid,
   .experiment-ops-grid,
+  .experiment-design-grid,
+  .experiment-settings-list,
+  .experiment-evaluate-grid,
   .client-traffic-summary,
   .client-traffic-groups,
   .overview-service-footer {
@@ -7389,8 +7585,14 @@ pre {
   .variant-dom-preview,
   .variant-dom-quality-kpis,
   .variant-dom-row,
-  .variant-dom-target-grid {
+  .variant-dom-target-grid,
+  .experiment-workbench-head,
+  .experiment-design-card dl {
     grid-template-columns: 1fr;
+  }
+
+  .experiment-workbench-head {
+    display: grid;
   }
 
   .variant-builder-actions,
@@ -7426,6 +7628,9 @@ pre {
     .overview-support-grid,
     .assistant-preview-grid,
     .experiment-ops-grid,
+    .experiment-design-grid,
+    .experiment-settings-list,
+    .experiment-evaluate-grid,
     .overview-service-footer,
     .client-event-subsections,
     .distribution-panel,

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Meiro DEE</title>
-    <link rel="stylesheet" href="/styles.css?v=20260609-lookup-inspector" />
+    <link rel="stylesheet" href="/styles.css?v=20260609-campaign-workbench" />
   </head>
   <body>
     <aside>
@@ -18,7 +18,7 @@
         <button data-view="audit">Audit</button>
         <span class="nav-section">Decisioning</span>
         <button data-view="rules">Rule Sets</button>
-        <button data-view="experiments">Experiments</button>
+        <button data-view="experiments">Campaigns</button>
         <button data-view="test">Evaluate</button>
         <span class="nav-section">Content & Data</span>
         <button data-view="messages">Messages</button>
@@ -850,8 +850,8 @@
       <section id="experiments" class="view">
         <header>
           <div>
-            <h2>Experiments</h2>
-            <p class="page-subtitle">Monitor experiment status, allocation, and client feedback by variant.</p>
+            <h2>Campaigns</h2>
+            <p class="page-subtitle">Plan campaigns, manage experiments, and inspect design, settings, evaluation, and results.</p>
           </div>
           <div class="actions">
             <label class="compact-filter">
@@ -867,11 +867,11 @@
           <div id="experiment-kpis" class="metric-grid experiment-kpi-strip"></div>
           <div class="experiment-ops-grid">
             <div class="editor experiment-list-pane">
-              <div class="editor-title">Experiment Inventory</div>
+              <div class="editor-title">Campaign Experiments</div>
               <div id="experiment-list" class="experiment-list"></div>
             </div>
             <div class="editor experiment-detail-pane">
-              <div class="editor-title">Variant Performance</div>
+              <div class="editor-title">Experiment Workbench</div>
               <div id="experiment-detail" class="experiment-detail"></div>
             </div>
           </div>
@@ -2084,7 +2084,7 @@
       </div>
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
-  <script src="/app-utils.js?v=20260609-refactor-utils"></script>
-  <script src="/app.js?v=20260609-refactor-utils"></script>
+  <script src="/app-utils.js?v=20260609-campaign-workbench"></script>
+  <script src="/app.js?v=20260609-campaign-workbench"></script>
 </body>
 </html>
