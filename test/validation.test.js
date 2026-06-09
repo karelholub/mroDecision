@@ -189,6 +189,22 @@ test("validates experiment variant allocation", () => {
             min_exposures_per_variant: 50,
             window_days: 14
           },
+          goal: {
+            event: "purchase",
+            type: "revenue",
+            attribution_window_hours: 168,
+            value_field: "event.revenue",
+            secondary_events: ["add_to_cart"]
+          },
+          display: { mode: "once_per_session", reset_on_version_change: true },
+          consent: { required: true, category: "marketing", missing_result: "suppressed" },
+          schedule: { starts_at: "2026-06-01T00:00:00.000Z", ends_at: "2026-06-30T23:59:59.000Z" },
+          targeting: {
+            devices: ["desktop", "mobile"],
+            url_rules: [{ mode: "include", operator: "contains", value: "/offers" }],
+            sdk_conditions: ["cart_ready"]
+          },
+          trigger: { type: "data_layer_event", event: "cart_view", filters: [{ key: "cart.total", operator: "greater_than", value: 0 }] },
           variants: [
             { key: "control", weight: 50, outputs: { banner: "A" } },
             { key: "treatment", weight: 50, outputs: { banner: "B" } }
@@ -241,6 +257,39 @@ test("validates experiment variant allocation", () => {
         draft: { fallback: { result: "eligible", outputs: {} }, branches: [] }
       }),
     /exploration_rate/
+  );
+  assert.throws(
+    () =>
+      validateRuleSetPayload({
+        name: "Bad Display",
+        decision_key: "bad_display",
+        type: "experiment",
+        metadata: { experiment: { display: { mode: "hourly" }, variants: [{ key: "a", weight: 100 }] } },
+        draft: { fallback: { result: "eligible", outputs: {} }, branches: [] }
+      }),
+    /display.mode/
+  );
+  assert.throws(
+    () =>
+      validateRuleSetPayload({
+        name: "Bad Url Rule",
+        decision_key: "bad_url_rule",
+        type: "experiment",
+        metadata: { experiment: { targeting: { url_rules: [{ mode: "include", operator: "regex", value: "[" }] }, variants: [{ key: "a", weight: 100 }] } },
+        draft: { fallback: { result: "eligible", outputs: {} }, branches: [] }
+      }),
+    /regex/
+  );
+  assert.throws(
+    () =>
+      validateRuleSetPayload({
+        name: "Bad Trigger",
+        decision_key: "bad_trigger",
+        type: "experiment",
+        metadata: { experiment: { trigger: { type: "hover" }, variants: [{ key: "a", weight: 100 }] } },
+        draft: { fallback: { result: "eligible", outputs: {} }, branches: [] }
+      }),
+    /trigger.type/
   );
 });
 

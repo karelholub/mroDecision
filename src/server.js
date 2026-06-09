@@ -2232,6 +2232,7 @@ async function evaluateClientRequest(body) {
     },
     profile_cache: profileCache,
     experiment: assigned ? clientExperimentAssignment(assigned) : null,
+    delivery: clientDeliverySettings(ruleSet, evaluated),
     matched_rules: evaluated.matched_rules,
     errors: finalErrors
   };
@@ -2435,6 +2436,17 @@ function mergeIdentifiers(...sets) {
     seen.add(key);
     return true;
   });
+}
+
+function clientDeliverySettings(ruleSet = {}, evaluated = {}) {
+  const experiment = evaluated.version_metadata?.experiment || ruleSet.metadata?.experiment || {};
+  return {
+    display: experiment.display || null,
+    targeting: experiment.targeting || null,
+    trigger: experiment.trigger || null,
+    consent: experiment.consent || null,
+    goal: experiment.goal || null
+  };
 }
 
 async function resolveMessageOutputs(outputs, ruleSet, request, evaluatedAt) {

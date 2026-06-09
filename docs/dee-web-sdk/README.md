@@ -99,20 +99,93 @@ Or force it on a single placement:
 
 Return `false` from a renderer to keep the original fallback content and skip exposure tracking.
 
-## Planned Experiment Targeting Settings
+## Experiment Targeting
 
-The next SDK-targeting roadmap is documented in [`../experiment-targeting-roadmap.md`](../experiment-targeting-roadmap.md). The useful browser-side additions are:
+The SDK sends browser context with every evaluation:
 
-- display frequency policies: `always`, `once`, and `once_per_session`
-- consent/category context via a `consentProvider`
-- page variables collected into `context.page_vars`
-- device context: `device_type`, `viewport_width`, and `viewport_height`
-- URL include/exclude targeting helpers
-- trigger listeners for page load, DOM ready, data-layer events, custom DOM events, and manual evaluation
-- named `conditions` registry instead of remotely stored arbitrary JavaScript
-- named conversion tracking with optional value fields
+- `context.page_url`, `path`, `query`, and `referrer`
+- `context.device_type`, `viewport_width`, and `viewport_height`
+- `context.page_vars` from configured page variables
+- `context.consent` from a synchronous consent provider
+- `context.sdk_conditions` from website-owned predicates
 
-These should be added backward-compatibly. Existing placements should continue evaluating on page load unless a trigger or display policy says otherwise.
+```html
+<script>
+  const dee = DEEWebSDK.createClient({
+    baseUrl: "https://your-dee.example.com",
+    token: "client-token",
+    consentProvider: () => ({ personalization: true, marketing: false }),
+    pageVariables: {
+      product_category: "app.product.category",
+      cart_value: () => window.app?.cart?.total || 0
+    },
+    conditions: {
+      cart_is_not_empty: () => (window.app?.cart?.items || []).length > 0
+    }
+  });
+</script>
+```
+
+Placements can also define local prechecks before calling DEE:
+
+```html
+<div
+  data-dee-placement="homepage_offer_carousel"
+  data-dee-decision-key="flyin_homepage_offers"
+  data-dee-devices="desktop,mobile"
+  data-dee-conditions="cart_is_not_empty"
+  data-dee-url-rules='[
+    { "mode": "include", "operator": "contains", "value": "/offers" },
+    { "mode": "exclude", "operator": "contains", "value": "preview=true" }
+  ]'
+></div>
+```
+
+Server responses can include `delivery.display`, `delivery.targeting`, `delivery.trigger`, `delivery.consent`, and `delivery.goal`. The SDK applies those hints after the decision returns, keeps fallback content when a postcheck fails, and dispatches `dee:skipped` with the reason.
+
+## Triggers
+
+Placements evaluate on page load by default. Use trigger attributes for delayed or manual activation:
+
+```html
+<div
+  data-dee-placement="product_detail"
+  data-dee-decision-key="product_detail_experiment"
+  data-dee-trigger-type="data_layer_event"
+  data-dee-trigger-event="product_viewed"
+></div>
+```
+
+Supported trigger types are `page_load`, `dom_ready`, `data_layer_event`, `custom_event`, and `manual`. For data-layer triggers, set `data-dee-data-layer` or the client-level `dataLayerName` option when the site does not use `window.dataLayer`.
+
+Manual evaluation stays available:
+
+```js
+dee.evaluatePlacement(document.querySelector("[data-dee-placement='product_detail']"), {
+  context: { trigger_event: "manual_preview" }
+});
+```
+
+## Display Policy
+
+DEE can return display policies in experiment metadata:
+
+- `always`: render whenever the placement evaluates
+- `once_per_session`: render once per browser session
+- `once`: render once per profile, decision key, placement, variant, and version
+
+The SDK uses browser storage when available. If storage is blocked, rendering still works and only the frequency ledger is skipped.
+
+## Conversion Tracking
+
+Clicks on links inside rendered placements automatically send a `conversion` event named `click`. Send named conversions explicitly when the site has a stronger event:
+
+```js
+dee.trackConversion("purchase", document.querySelector("[data-dee-placement='homepage_offer_carousel']"), {
+  revenue: 129.9,
+  currency: "USD"
+});
+```
 
 ## Notes
 

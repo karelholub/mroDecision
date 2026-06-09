@@ -2312,6 +2312,30 @@ components:
               type: boolean
             reason:
               type: string
+        delivery:
+          type: object
+          description: Browser delivery hints derived from experiment metadata for SDK-side targeting, display frequency, triggers, consent, and conversion goals.
+          properties:
+            display:
+              type: object
+              nullable: true
+              additionalProperties: true
+            targeting:
+              type: object
+              nullable: true
+              additionalProperties: true
+            trigger:
+              type: object
+              nullable: true
+              additionalProperties: true
+            consent:
+              type: object
+              nullable: true
+              additionalProperties: true
+            goal:
+              type: object
+              nullable: true
+              additionalProperties: true
         matched_rules:
           type: array
           items:

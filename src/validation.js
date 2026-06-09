@@ -126,6 +126,12 @@ function validateExperimentMetadata(experiment) {
   if (experiment.mode != null && !["fixed", "bandit"].includes(experiment.mode)) {
     badRequest("metadata.experiment.mode must be fixed or bandit");
   }
+  if (experiment.goal != null) validateExperimentGoal(experiment.goal);
+  if (experiment.schedule != null) validateExperimentSchedule(experiment.schedule);
+  if (experiment.display != null) validateExperimentDisplay(experiment.display);
+  if (experiment.consent != null) validateExperimentConsent(experiment.consent);
+  if (experiment.targeting != null) validateExperimentTargeting(experiment.targeting);
+  if (experiment.trigger != null) validateExperimentTrigger(experiment.trigger);
   if (experiment.bandit != null) validateBanditMetadata(experiment.bandit);
   if (experiment.variants == null) return;
   if (!Array.isArray(experiment.variants) || experiment.variants.length === 0) {
@@ -143,6 +149,92 @@ function validateExperimentMetadata(experiment) {
     return sum + weight;
   }, 0);
   if (Math.round(total * 1000) !== 100000) badRequest("Experiment variant weights must sum to 100");
+}
+
+function validateExperimentGoal(goal) {
+  if (!isPlainObject(goal)) badRequest("metadata.experiment.goal must be an object");
+  if (goal.event != null && typeof goal.event !== "string") badRequest("metadata.experiment.goal.event must be a string");
+  if (goal.type != null && !["conversion", "revenue", "engagement"].includes(goal.type)) {
+    badRequest("metadata.experiment.goal.type must be conversion, revenue, or engagement");
+  }
+  if (goal.attribution_window_hours != null) {
+    const value = Number(goal.attribution_window_hours);
+    if (!Number.isFinite(value) || value < 0) badRequest("metadata.experiment.goal.attribution_window_hours must be non-negative");
+  }
+  if (goal.value_field != null && typeof goal.value_field !== "string") badRequest("metadata.experiment.goal.value_field must be a string");
+  if (goal.secondary_events != null && (!Array.isArray(goal.secondary_events) || goal.secondary_events.some((item) => typeof item !== "string"))) {
+    badRequest("metadata.experiment.goal.secondary_events must be an array of strings");
+  }
+}
+
+function validateExperimentSchedule(schedule) {
+  if (!isPlainObject(schedule)) badRequest("metadata.experiment.schedule must be an object");
+  for (const key of ["starts_at", "ends_at"]) {
+    if (schedule[key] != null && Number.isNaN(Date.parse(schedule[key]))) {
+      badRequest(`metadata.experiment.schedule.${key} must be an ISO date-time`);
+    }
+  }
+}
+
+function validateExperimentDisplay(display) {
+  if (!isPlainObject(display)) badRequest("metadata.experiment.display must be an object");
+  if (display.mode != null && !["always", "once", "once_per_session"].includes(display.mode)) {
+    badRequest("metadata.experiment.display.mode must be always, once, or once_per_session");
+  }
+  if (display.reset_on_version_change != null && typeof display.reset_on_version_change !== "boolean") {
+    badRequest("metadata.experiment.display.reset_on_version_change must be boolean");
+  }
+}
+
+function validateExperimentConsent(consent) {
+  if (!isPlainObject(consent)) badRequest("metadata.experiment.consent must be an object");
+  if (consent.required != null && typeof consent.required !== "boolean") badRequest("metadata.experiment.consent.required must be boolean");
+  if (consent.category != null && typeof consent.category !== "string") badRequest("metadata.experiment.consent.category must be a string");
+  if (consent.missing_result != null && !["suppressed", "ineligible"].includes(consent.missing_result)) {
+    badRequest("metadata.experiment.consent.missing_result must be suppressed or ineligible");
+  }
+}
+
+function validateExperimentTargeting(targeting) {
+  if (!isPlainObject(targeting)) badRequest("metadata.experiment.targeting must be an object");
+  if (targeting.devices != null) {
+    const allowed = new Set(["any", "desktop", "tablet", "mobile"]);
+    if (!Array.isArray(targeting.devices) || targeting.devices.some((item) => !allowed.has(item))) {
+      badRequest("metadata.experiment.targeting.devices must use any, desktop, tablet, or mobile");
+    }
+  }
+  if (targeting.url_rules != null) {
+    if (!Array.isArray(targeting.url_rules)) badRequest("metadata.experiment.targeting.url_rules must be an array");
+    targeting.url_rules.forEach(validateExperimentUrlRule);
+  }
+  if (targeting.sdk_conditions != null && (!Array.isArray(targeting.sdk_conditions) || targeting.sdk_conditions.some((item) => typeof item !== "string"))) {
+    badRequest("metadata.experiment.targeting.sdk_conditions must be an array of strings");
+  }
+}
+
+function validateExperimentUrlRule(rule) {
+  if (!isPlainObject(rule)) badRequest("Experiment URL rule must be an object");
+  if (!["include", "exclude"].includes(rule.mode)) badRequest("Experiment URL rule mode must be include or exclude");
+  if (!["exact", "contains", "starts_with", "regex"].includes(rule.operator)) {
+    badRequest("Experiment URL rule operator must be exact, contains, starts_with, or regex");
+  }
+  if (typeof rule.value !== "string" || !rule.value.trim()) badRequest("Experiment URL rule value must be a non-empty string");
+  if (rule.operator === "regex") {
+    try {
+      new RegExp(rule.value);
+    } catch {
+      badRequest("Experiment URL rule regex is invalid");
+    }
+  }
+}
+
+function validateExperimentTrigger(trigger) {
+  if (!isPlainObject(trigger)) badRequest("metadata.experiment.trigger must be an object");
+  if (trigger.type != null && !["page_load", "dom_ready", "data_layer_event", "custom_event", "manual"].includes(trigger.type)) {
+    badRequest("metadata.experiment.trigger.type must be page_load, dom_ready, data_layer_event, custom_event, or manual");
+  }
+  if (trigger.event != null && typeof trigger.event !== "string") badRequest("metadata.experiment.trigger.event must be a string");
+  if (trigger.filters != null && !Array.isArray(trigger.filters)) badRequest("metadata.experiment.trigger.filters must be an array");
 }
 
 function validateBanditMetadata(bandit) {

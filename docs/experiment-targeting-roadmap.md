@@ -324,14 +324,22 @@ DEEWebSDK.createClient({
 
 ## SDK Roadmap Summary
 
-The DEE Web SDK should add:
-- `displayPolicy` handling from decision metadata/outputs.
-- `consentProvider`.
-- `pageVariables` collection.
-- `device` context detection.
-- URL targeting helpers.
-- trigger listeners for page load, DOM ready, data-layer events, custom DOM events, and manual evaluation.
-- named `conditions` registry instead of arbitrary JavaScript.
-- `trackConversion(name, placementOrDecision, event)` helper.
+Implemented first pass:
+- Server-side rule-set validation accepts experiment `goal`, `schedule`, `display`, `consent`, `targeting`, and `trigger` metadata.
+- Client evaluate responses include `delivery` hints with display, targeting, trigger, consent, and goal settings.
+- The Web SDK sends page URL/path/query/referrer, device context, page variables, consent values, named condition results, placement, surface, and trigger payload context.
+- The Web SDK supports local placement prechecks for URL rules, devices, and named SDK conditions.
+- The Web SDK supports page-load, DOM-ready, data-layer event, custom-event, and manual triggers.
+- The Web SDK applies response-level URL/device/condition/consent/display policies before rendering.
+- The Web SDK records `once` and `once_per_session` display ledgers when browser storage is available and dispatches `dee:skipped` when rendering is suppressed.
+- The Web SDK exposes `trackConversion(name, placementOrDecision, event)` and keeps automatic link-click conversion tracking.
+
+Remaining product/UI work:
+- Add marketer-facing editors for these settings in the experiment workbench.
+- Add URL-rule preview and validation against sample URLs.
+- Add a Settings catalog for page variables and named SDK conditions.
+- Add conversion-goal reporting by attribution window and value field.
+- Add richer schedule enforcement and calendar visibility.
+- Add audience-count estimation where Meiro APIs can support it.
 
 These SDK additions should remain backward compatible. Existing placements that only use `data-dee-placement` and `data-dee-decision-key` should continue evaluating on page load and rendering with fallback behavior unchanged.

@@ -14,6 +14,10 @@
     debug: false,
     maxItems: 10,
     fallback: "keep",
+    consentProvider: null,
+    pageVariables: {},
+    conditions: {},
+    dataLayerName: "dataLayer",
     renderers: {}
   };
 
@@ -28,7 +32,7 @@
       const placements = Array.from(scope.querySelectorAll(config.placementSelector));
       placements.forEach((element) => wirePlacement(element));
       if (config.autoEvaluate) {
-        placements.forEach((element) => evaluatePlacement(element).catch((error) => log("Placement evaluation failed", error)));
+        placements.forEach((element) => schedulePlacement(element));
       }
       return placements;
     }
@@ -40,19 +44,53 @@
         const link = event.target.closest("a");
         if (!link || !element.contains(link)) return;
         const decision = state.decisions.get(element);
-        if (decision) sendEvent(element, "conversion", decision).catch(() => {});
+        if (decision) trackConversion("click", element, { link_url: link.href }).catch(() => {});
       });
     }
 
+    function schedulePlacement(element) {
+      const trigger = triggerSettings(element);
+      if (trigger.type === "manual") return;
+      if (trigger.type === "dom_ready") {
+        onDomReady(() => evaluatePlacement(element).catch((error) => log("Placement evaluation failed", error)));
+        return;
+      }
+      if (trigger.type === "custom_event" && trigger.event) {
+        global.addEventListener(trigger.event, (event) => {
+          if (triggerMatches(trigger, event.detail || {})) {
+            evaluatePlacement(element, { context: { trigger_event: trigger.event, trigger_payload: event.detail || {} } }).catch((error) => log("Placement evaluation failed", error));
+          }
+        });
+        return;
+      }
+      if (trigger.type === "data_layer_event" && trigger.event) {
+        wireDataLayerTrigger(element, trigger, evaluatePlacement, config);
+        return;
+      }
+      evaluatePlacement(element).catch((error) => log("Placement evaluation failed", error));
+    }
+
     async function evaluatePlacement(element, overrides) {
+      const precheck = placementPrecheck(element, config, overrides);
+      if (!precheck.ok) {
+        dispatchSkipped(element, precheck.reason, precheck.detail);
+        return null;
+      }
       const request = buildEvaluateRequest(element, overrides);
       const decision = await post("/v1/client/evaluate", request);
+      const postcheck = decisionPrecheck(element, decision, config);
+      if (!postcheck.ok) {
+        state.decisions.set(element, decision);
+        dispatchSkipped(element, postcheck.reason, { decision, ...(postcheck.detail || {}) });
+        return decision;
+      }
       const rendered = await renderDecision(element, decision);
       state.decisions.set(element, decision);
       element.dispatchEvent(new CustomEvent("dee:decision", { detail: { decision, rendered } }));
       if (rendered && config.autoExposure && decision.experiment?.variant_key) {
         await sendEvent(element, "exposure", decision).catch((error) => log("Exposure failed", error));
       }
+      if (rendered) recordDisplay(element, decision);
       return decision;
     }
 
@@ -72,6 +110,9 @@
         context: {
           page_url: location.href,
           placement,
+          device_type: deviceType(),
+          viewport_width: global.innerWidth || 0,
+          viewport_height: global.innerHeight || 0,
           request_source: config.requestSource,
           ...(extra?.context || {})
         },
@@ -82,10 +123,29 @@
       return response;
     }
 
+    async function trackConversion(name, placementOrDecision, event) {
+      const element = placementOrDecision?.nodeType === 1
+        ? placementOrDecision
+        : findElementForDecision(placementOrDecision);
+      const decision = placementOrDecision?.nodeType === 1 ? state.decisions.get(element) : placementOrDecision;
+      if (!element || !decision) return null;
+      return sendEvent(element, "conversion", decision, {
+        event: {
+          name: name || "conversion",
+          ...(event || {})
+        },
+        context: {
+          conversion_name: name || "conversion"
+        }
+      });
+    }
+
     function buildEvaluateRequest(element, overrides) {
       const placement = placementName(element);
       const forced = forcedVariant(element);
       const identifier = config.identifier;
+      const contextOverrides = overrides?.context || {};
+      const { context: _context, ...requestOverrides } = overrides || {};
       return {
         decision_key: element.dataset.deeDecisionKey || "",
         profile_key: profileKey(),
@@ -95,14 +155,23 @@
         context: {
           channel: element.dataset.deeChannel || "web",
           page_url: location.href,
+          path: location.pathname,
+          query: location.search,
+          referrer: document.referrer || "",
           placement,
           surface: element.dataset.deeSurface || placement,
+          device_type: deviceType(),
+          viewport_width: global.innerWidth || 0,
+          viewport_height: global.innerHeight || 0,
+          page_vars: collectPageVariables(config),
+          consent: collectConsent(config),
+          sdk_conditions: evaluateSdkConditions(config),
           request_source: config.requestSource,
           profile_enrichment: element.dataset.deeProfileEnrichment || config.profileEnrichment,
           ...(forced ? { force_variant: forced } : {}),
-          ...(overrides?.context || {})
+          ...contextOverrides
         },
-        ...(overrides || {})
+        ...requestOverrides
       };
     }
 
@@ -133,7 +202,8 @@
 
     function profileKey() {
       if (typeof config.profileKey === "function") return config.profileKey();
-      return config.profileKey || getCookie("meiro_user_id") || localStorage.getItem("dee_profile_key") || anonymousId();
+      const storage = safeStorage("local");
+      return config.profileKey || getCookie("meiro_user_id") || storage?.getItem("dee_profile_key") || anonymousId();
     }
 
     function eventId(type, decision, placement) {
@@ -157,6 +227,7 @@
       init,
       evaluatePlacement,
       sendEvent,
+      trackConversion,
       buildEvaluateRequest
     };
   }
@@ -215,6 +286,60 @@
     return params.get("dee_force_variant") || element.dataset.deeForceVariant || "";
   }
 
+  function triggerSettings(element) {
+    return normalizeTrigger(parseJsonAttribute(element.dataset.deeTrigger) || {
+      type: element.dataset.deeTriggerType || "page_load",
+      event: element.dataset.deeTriggerEvent || ""
+    });
+  }
+
+  function normalizeTrigger(trigger) {
+    const type = trigger?.type || "page_load";
+    return {
+      type: ["page_load", "dom_ready", "data_layer_event", "custom_event", "manual"].includes(type) ? type : "page_load",
+      event: trigger?.event || "",
+      filters: Array.isArray(trigger?.filters) ? trigger.filters : []
+    };
+  }
+
+  function onDomReady(callback) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", callback, { once: true });
+    } else {
+      callback();
+    }
+  }
+
+  function wireDataLayerTrigger(element, trigger, evaluatePlacement, config) {
+    const name = element.dataset.deeDataLayer || config.dataLayerName || "dataLayer";
+    const layer = global[name] = Array.isArray(global[name]) ? global[name] : [];
+    const handler = (item) => {
+      if (item?.event === trigger.event && triggerMatches(trigger, item)) {
+        element.dispatchEvent(new CustomEvent("dee:trigger", { detail: item }));
+        evaluatePlacement(element, { context: { trigger_event: trigger.event, trigger_payload: item } }).catch((error) => log("Placement evaluation failed", error));
+      }
+    };
+    layer.__deeHandlers = Array.isArray(layer.__deeHandlers) ? layer.__deeHandlers : [];
+    layer.__deeHandlers.push(handler);
+    if (layer.__deeWrapped !== true) {
+      const originalPush = layer.push.bind(layer);
+      layer.push = function(...items) {
+        const result = originalPush(...items);
+        (layer.__deeHandlers || []).forEach((registered) => items.forEach(registered));
+        return result;
+      };
+      layer.__deeWrapped = true;
+    }
+    layer.slice().forEach(handler);
+  }
+
+  function triggerMatches(trigger, payload) {
+    return (trigger.filters || []).every((filter) => {
+      const actual = getPath(payload, filter.key);
+      return compareValue(actual, filter.operator || "equals", filter.value);
+    });
+  }
+
   function imageUrl(card) {
     return card.image_url || card.imageUrl || card.image || card.src || "";
   }
@@ -248,12 +373,204 @@
 
   function anonymousId() {
     const key = "dee_anonymous_id";
-    let id = localStorage.getItem(key);
+    const storage = safeStorage("local");
+    let id = storage?.getItem(key);
     if (!id) {
       id = global.crypto?.randomUUID ? global.crypto.randomUUID() : `${Date.now()}${String(Math.random()).slice(2)}`;
-      localStorage.setItem(key, id);
+      storage?.setItem(key, id);
     }
     return `anonymous-${id}`;
+  }
+
+  function safeStorage(kind) {
+    try {
+      const storage = kind === "session" ? global.sessionStorage : global.localStorage;
+      if (!storage) return null;
+      const key = "__dee_storage_probe__";
+      storage.setItem(key, "1");
+      storage.removeItem(key);
+      return storage;
+    } catch {
+      return null;
+    }
+  }
+
+  function placementPrecheck(element, config, overrides) {
+    const localTargeting = {
+      url_rules: parseJsonAttribute(element.dataset.deeUrlRules),
+      devices: csvAttribute(element.dataset.deeDevices),
+      sdk_conditions: csvAttribute(element.dataset.deeConditions)
+    };
+    return targetingPrecheck(localTargeting, config, { context: overrides?.context || {} });
+  }
+
+  function decisionPrecheck(element, decision, config) {
+    const targeting = decision?.delivery?.targeting || {};
+    const targetingResult = targetingPrecheck(targeting, config, { decision });
+    if (!targetingResult.ok) return targetingResult;
+    const consentResult = consentPrecheck(decision?.delivery?.consent, config);
+    if (!consentResult.ok) return consentResult;
+    const displayResult = displayPrecheck(element, decision);
+    if (!displayResult.ok) return displayResult;
+    return { ok: true };
+  }
+
+  function targetingPrecheck(targeting, config) {
+    if (!targeting) return { ok: true };
+    if (Array.isArray(targeting.devices) && targeting.devices.length && !targeting.devices.includes("any") && !targeting.devices.includes(deviceType())) {
+      return { ok: false, reason: "device_targeting", detail: { device_type: deviceType(), allowed: targeting.devices } };
+    }
+    if (Array.isArray(targeting.url_rules) && !urlRulesMatch(targeting.url_rules, location.href)) {
+      return { ok: false, reason: "url_targeting", detail: { page_url: location.href } };
+    }
+    if (Array.isArray(targeting.sdk_conditions)) {
+      const conditions = evaluateSdkConditions(config);
+      const failed = targeting.sdk_conditions.filter((key) => conditions[key] !== true);
+      if (failed.length) return { ok: false, reason: "sdk_condition", detail: { failed } };
+    }
+    return { ok: true };
+  }
+
+  function consentPrecheck(consent, config) {
+    if (!consent?.required) return { ok: true };
+    const values = collectConsent(config);
+    return values?.[consent.category] === true
+      ? { ok: true }
+      : { ok: false, reason: "consent", detail: { category: consent.category || "" } };
+  }
+
+  function displayPrecheck(element, decision) {
+    const mode = decision?.delivery?.display?.mode || decision?.outputs?.display_mode || "always";
+    if (mode === "always") return { ok: true };
+    const storage = safeStorage(mode === "once_per_session" ? "session" : "local");
+    if (!storage) return { ok: true };
+    const key = displayKey(element, decision, decision?.delivery?.display || {});
+    return storage.getItem(key)
+      ? { ok: false, reason: "display_policy", detail: { mode } }
+      : { ok: true };
+  }
+
+  function recordDisplay(element, decision) {
+    const mode = decision?.delivery?.display?.mode || decision?.outputs?.display_mode || "always";
+    if (mode === "always") return;
+    const storage = safeStorage(mode === "once_per_session" ? "session" : "local");
+    if (!storage) return;
+    storage.setItem(displayKey(element, decision, decision?.delivery?.display || {}), String(Date.now()));
+  }
+
+  function displayKey(element, decision, display) {
+    const version = display.reset_on_version_change === false ? "all_versions" : decision?.rule_version || "v0";
+    return [
+      "dee_display",
+      modeSafe(display.mode || "always"),
+      decision?.profile_key || "",
+      decision?.decision_key || element.dataset.deeDecisionKey || "",
+      placementName(element),
+      decision?.experiment?.variant_key || "none",
+      version
+    ].join(":");
+  }
+
+  function collectConsent(config) {
+    if (typeof config.consentProvider === "function") return safeCall(config.consentProvider) || {};
+    if (typeof global.__DEE_CONSENT__ === "object") return global.__DEE_CONSENT__;
+    return {};
+  }
+
+  function collectPageVariables(config) {
+    const variables = {};
+    Object.entries(config.pageVariables || {}).forEach(([key, source]) => {
+      variables[key] = typeof source === "function" ? safeCall(source) : getPath(global, source);
+    });
+    return variables;
+  }
+
+  function evaluateSdkConditions(config) {
+    const result = {};
+    Object.entries(config.conditions || {}).forEach(([key, predicate]) => {
+      result[key] = Boolean(safeCall(predicate));
+    });
+    return result;
+  }
+
+  function urlRulesMatch(rules, url) {
+    const includes = rules.filter((rule) => rule.mode !== "exclude");
+    const excludes = rules.filter((rule) => rule.mode === "exclude");
+    if (includes.length && !includes.some((rule) => urlRuleMatches(rule, url))) return false;
+    if (excludes.some((rule) => urlRuleMatches(rule, url))) return false;
+    return true;
+  }
+
+  function urlRuleMatches(rule, url) {
+    const value = String(rule.value || "");
+    if (rule.operator === "exact") return url === value;
+    if (rule.operator === "starts_with") return url.startsWith(value);
+    if (rule.operator === "regex") {
+      try {
+        return new RegExp(value).test(url);
+      } catch {
+        return false;
+      }
+    }
+    return url.includes(value);
+  }
+
+  function deviceType() {
+    const width = global.innerWidth || document.documentElement.clientWidth || 0;
+    if (width < 768) return "mobile";
+    if (width < 1024) return "tablet";
+    return "desktop";
+  }
+
+  function dispatchSkipped(element, reason, detail) {
+    element.dispatchEvent(new CustomEvent("dee:skipped", { detail: { reason, ...(detail || {}) } }));
+  }
+
+  function findElementForDecision(decision) {
+    if (!decision?.decision_key) return null;
+    return document.querySelector(`[data-dee-decision-key="${cssEscape(decision.decision_key)}"]`);
+  }
+
+  function parseJsonAttribute(value) {
+    if (!value) return null;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+
+  function csvAttribute(value) {
+    return String(value || "").split(",").map((item) => item.trim()).filter(Boolean);
+  }
+
+  function getPath(source, path) {
+    if (!path) return undefined;
+    return String(path).split(".").reduce((current, key) => current == null ? undefined : current[key], source);
+  }
+
+  function compareValue(actual, operator, expected) {
+    if (operator === "not_equals") return actual !== expected;
+    if (operator === "contains") return Array.isArray(actual) ? actual.includes(expected) : String(actual || "").includes(String(expected));
+    if (operator === "greater_than") return Number(actual) > Number(expected);
+    if (operator === "less_than") return Number(actual) < Number(expected);
+    return actual === expected;
+  }
+
+  function safeCall(callback) {
+    try {
+      return callback();
+    } catch {
+      return undefined;
+    }
+  }
+
+  function modeSafe(value) {
+    return String(value || "").replace(/[^a-z0-9_-]/gi, "_");
+  }
+
+  function cssEscape(value) {
+    return global.CSS?.escape ? global.CSS.escape(value) : String(value).replace(/["\\]/g, "\\$&");
   }
 
   function log(message, detail) {
