@@ -42,6 +42,7 @@ const clientRateLimiter = createRateLimiter({
 });
 const requestMetrics = createRequestMetrics();
 const clientTrafficMetrics = createClientTrafficMetrics();
+const experimentEditorSessions = new Map();
 setAuthStore(store);
 let schemaSyncTimer = null;
 let schemaSyncNextRunAt = "";
@@ -360,6 +361,15 @@ async function routeApi(req, res, url) {
       return;
     }
     sendJson(res, 200, createExperimentEditorSession(ruleSet, body));
+    return;
+  }
+
+  const experimentEditorDraftMatch = pathname.match(/^\/v1\/experiments\/([^/]+)\/editor-draft$/);
+  if (req.method === "POST" && experimentEditorDraftMatch) {
+    const key = decodeURIComponent(experimentEditorDraftMatch[1]);
+    const body = await readJson(req, config.requestBodyLimitBytes);
+    const result = await saveExperimentEditorDraft(key, body);
+    sendJson(res, 200, result);
     return;
   }
 
@@ -2108,6 +2118,15 @@ function createExperimentEditorSession(ruleSet, body = {}) {
     randomUUID()
   ].join(":");
   const token = createHash("sha256").update(tokenPayload).digest("hex");
+  cleanupExperimentEditorSessions(now);
+  experimentEditorSessions.set(token, {
+    decision_key: ruleSet.decision_key,
+    rule_version: ruleSet.version || null,
+    variant_key: body.variant_key || "",
+    expires_at: expiresAt,
+    expires_at_ms: now + ttlSeconds * 1000,
+    created_at: new Date(now).toISOString()
+  });
   const websiteUrl = body.website_url || body.url || "http://localhost:8092/experiment-mock-site/";
   const editorUrl = new URL(websiteUrl);
   editorUrl.searchParams.set("dee_editor", "1");
@@ -2123,10 +2142,194 @@ function createExperimentEditorSession(ruleSet, body = {}) {
     editor_url: editorUrl.toString(),
     permissions: {
       can_publish: false,
-      can_save_draft: false,
+      can_save_draft: true,
       can_copy_modifications: true
     }
   };
+}
+
+async function saveExperimentEditorDraft(key, body = {}) {
+  const token = String(body.editor_token || body.token || "").trim();
+  const session = requireExperimentEditorSession(key, token);
+  const ruleSet = await storeCall("getRuleSet", key);
+  if (!ruleSet || ruleSet.type !== "experiment") {
+    notFoundError(`Experiment not found: ${key}`);
+  }
+
+  const metadata = cloneJson(ruleSet.metadata || {});
+  metadata.experiment = metadata.experiment && typeof metadata.experiment === "object" ? metadata.experiment : {};
+  const variants = Array.isArray(metadata.experiment.variants) ? metadata.experiment.variants : [];
+  if (!variants.length) badRequest("Experiment has no variants to update");
+
+  const variantKey = String(body.variant_key || body.variant || session.variant_key || "").trim();
+  if (!variantKey) badRequest("variant_key is required");
+  const variant = variants.find((item) => item.key === variantKey);
+  if (!variant) badRequest(`Variant not found: ${variantKey}`);
+  if (variant.baseline || variantKey === metadata.experiment.baseline_variant) {
+    badRequest("Visual editor can only save draft outputs for non-baseline variants");
+  }
+
+  const validation = validateVisualEditorOutputs(body.outputs || body.payload?.outputs || {});
+  variant.outputs = {
+    ...(variant.outputs || {}),
+    ...validation.outputs,
+    updated_by: "visual_editor",
+    updated_at: new Date().toISOString()
+  };
+
+  validateRuleSetPayload({ metadata }, { partial: true });
+  validateRuleDefinition(ruleSet.draft || {}, ruleSet.input_schema || {});
+  const updated = await storeCall("updateDraft", key, { metadata }, "visual_editor");
+  await saveStore();
+  clientResultCache.clear();
+  return {
+    rule_set: publicRuleSet(updated),
+    draft: updated.draft,
+    variant_key: variantKey,
+    modifications_count: validation.outputs.modifications.length,
+    warnings: validation.warnings,
+    session_expires_at: session.expires_at
+  };
+}
+
+function requireExperimentEditorSession(key, token) {
+  if (!token) badRequest("editor_token is required");
+  cleanupExperimentEditorSessions(Date.now());
+  const session = experimentEditorSessions.get(token);
+  if (!session || session.decision_key !== key) {
+    forbidden("Editor token is invalid or expired");
+  }
+  return session;
+}
+
+function cleanupExperimentEditorSessions(now = Date.now()) {
+  for (const [token, session] of experimentEditorSessions.entries()) {
+    if (!session.expires_at_ms || session.expires_at_ms <= now) {
+      experimentEditorSessions.delete(token);
+    }
+  }
+}
+
+function validateVisualEditorOutputs(outputs) {
+  if (!outputs || typeof outputs !== "object" || Array.isArray(outputs)) {
+    badRequest("outputs must be an object");
+  }
+  if (outputs.template != null && outputs.template !== "dom_modifications") {
+    badRequest("Visual editor can only save dom_modifications outputs");
+  }
+  if (!Array.isArray(outputs.modifications)) {
+    badRequest("outputs.modifications must be an array");
+  }
+  if (outputs.modifications.length > 50) {
+    badRequest("Visual editor outputs can include at most 50 modifications");
+  }
+
+  const warnings = [];
+  const allowedTypes = new Set(["change_text", "change_attribute", "change_style", "insert_html", "move", "remove"]);
+  const modifications = outputs.modifications.map((modification, index) => {
+    if (!modification || typeof modification !== "object" || Array.isArray(modification)) {
+      badRequest(`Modification ${index + 1} must be an object`);
+    }
+    const type = String(modification.type || "").trim();
+    const selector = String(modification.selector || "").trim();
+    if (!allowedTypes.has(type)) {
+      badRequest(`Modification ${index + 1} has unsupported type`);
+    }
+    if (!selector) badRequest(`Modification ${index + 1} selector is required`);
+    if (selector.length > 500) badRequest(`Modification ${index + 1} selector is too long`);
+    if (isBroadVisualSelector(selector)) {
+      warnings.push(`Modification ${index + 1} uses a broad selector: ${selector}`);
+    }
+    return sanitizeVisualModification({ ...modification, type, selector }, index);
+  });
+
+  return {
+    outputs: {
+      ...outputs,
+      template: "dom_modifications",
+      modifications
+    },
+    warnings
+  };
+}
+
+function sanitizeVisualModification(modification, index) {
+  const sanitized = {
+    type: modification.type,
+    selector: modification.selector
+  };
+  if (modification.id != null) sanitized.id = String(modification.id).slice(0, 120);
+  if (modification.type === "change_text") {
+    if (typeof modification.value !== "string") badRequest(`Modification ${index + 1} value must be a string`);
+    sanitized.value = modification.value;
+  }
+  if (modification.type === "change_attribute") {
+    const name = String(modification.attribute || modification.name || "").trim();
+    if (!name) badRequest(`Modification ${index + 1} attribute name is required`);
+    if (!isSafeVisualAttributeName(name)) badRequest(`Modification ${index + 1} attribute name is not allowed`);
+    if (typeof modification.value !== "string") badRequest(`Modification ${index + 1} attribute value must be a string`);
+    sanitized.attribute = name;
+    sanitized.value = modification.value;
+  }
+  if (modification.type === "change_style") {
+    const property = String(modification.property || modification.name || "").trim();
+    if (!property) badRequest(`Modification ${index + 1} CSS property is required`);
+    if (!isSafeVisualStyleProperty(property)) badRequest(`Modification ${index + 1} CSS property is not allowed`);
+    if (typeof modification.value !== "string") badRequest(`Modification ${index + 1} CSS value must be a string`);
+    sanitized.property = property;
+    sanitized.value = modification.value;
+  }
+  if (modification.type === "insert_html") {
+    if (typeof modification.html !== "string") badRequest(`Modification ${index + 1} html must be a string`);
+    const position = String(modification.position || "replace");
+    if (!["replace", "before", "after", "prepend", "append"].includes(position)) {
+      badRequest(`Modification ${index + 1} insert position is not allowed`);
+    }
+    if (/<script[\s>]/i.test(modification.html) || /\son[a-z]+\s*=/i.test(modification.html)) {
+      badRequest(`Modification ${index + 1} html contains unsafe script or event handler`);
+    }
+    sanitized.html = modification.html;
+    sanitized.position = position;
+  }
+  if (modification.type === "move") {
+    const targetSelector = String(modification.target_selector || "").trim();
+    const position = String(modification.position || "after");
+    if (!targetSelector) badRequest(`Modification ${index + 1} target_selector is required`);
+    if (!["before", "after", "prepend", "append"].includes(position)) {
+      badRequest(`Modification ${index + 1} move position is not allowed`);
+    }
+    sanitized.target_selector = targetSelector;
+    sanitized.position = position;
+  }
+  if (modification.type === "remove") {
+    const mode = String(modification.mode || "collapse");
+    if (!["collapse", "preserve_space"].includes(mode)) badRequest(`Modification ${index + 1} remove mode is not allowed`);
+    sanitized.mode = mode;
+  }
+  if (modification.description != null) sanitized.description = String(modification.description).slice(0, 500);
+  return sanitized;
+}
+
+function isSafeVisualAttributeName(name) {
+  const normalized = name.toLowerCase();
+  return /^[a-zA-Z_:][a-zA-Z0-9_:.:-]*$/.test(name)
+    && !normalized.startsWith("on")
+    && !["srcdoc", "innerhtml", "outerhtml"].includes(normalized);
+}
+
+function isSafeVisualStyleProperty(property) {
+  const normalized = property.toLowerCase();
+  return /^[a-z-]+$/.test(normalized)
+    && !normalized.startsWith("--")
+    && !["behavior", "binding"].includes(normalized);
+}
+
+function isBroadVisualSelector(selector) {
+  return ["body", "html", "*", "main", "section", "div"].includes(selector.trim().toLowerCase());
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value ?? null));
 }
 
 function decimalPercent(value) {
