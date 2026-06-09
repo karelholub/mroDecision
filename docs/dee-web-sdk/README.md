@@ -99,6 +99,49 @@ Or force it on a single placement:
 
 Return `false` from a renderer to keep the original fallback content and skip exposure tracking.
 
+## In-Page Web Layers
+
+DEE can render vendor-style in-page blocks such as store selectors, banners, embedded surveys, or custom offer panels. The website still declares the placement; DEE returns the fragment.
+
+```html
+<div
+  data-dee-placement="store_selector_weblayer_cz"
+  data-dee-decision-key="store_selector_weblayer_cz"
+  data-dee-template="web_layer"
+>
+  <div>Vyberte prodejnu</div>
+</div>
+```
+
+Decision output:
+
+```json
+{
+  "outputs": {
+    "template": "web_layer",
+    "html": "<div id=\"dee-store-selector\" class=\"dee-store-selector\" data-dee-select><div class=\"dee-store-title\">Vyberte si svou prodejnu</div><button type=\"button\" class=\"dee-select-trigger\" data-dee-select-trigger><span data-dee-select-value>Vyberte prodejnu</span></button><div class=\"dee-select-dropdown\" data-dee-select-dropdown><input data-dee-select-search placeholder=\"Hledat pobočku...\"><ul><li data-dee-select-option data-dee-conversion=\"store_selected\" data-dee-value=\"Brno\">Brno</li><li data-dee-select-option data-dee-conversion=\"store_selected\" data-dee-value=\"Praha - Čakovice\">Praha - Čakovice</li></ul></div><div data-dee-success hidden>Vaše volba byla uložena</div></div>",
+    "css": ".dee-store-selector{padding:16px;border:1px solid #d8dee8;border-radius:8px;background:#fff}.dee-select-dropdown[hidden]{display:none}.dee-select-trigger{width:100%;text-align:left}.dee-store-title{font-weight:700;margin-bottom:8px}"
+  }
+}
+```
+
+Supported template aliases are `html_fragment`, `web_layer`, `weblayer`, and `inpage`.
+
+The SDK sanitizes HTML fragments before rendering:
+
+- removes `script`, `iframe`, `object`, `embed`, `form`, `link`, `meta`, and `base`
+- removes inline `on*` event attributes
+- removes `javascript:` URLs
+- blocks CSS containing `@import` or `javascript:`
+
+For interactive fragments, prefer data attributes instead of remote JavaScript:
+
+- `data-dee-select` marks a built-in dropdown/select component.
+- `data-dee-select-trigger`, `data-dee-select-dropdown`, `data-dee-select-search`, `data-dee-select-value`, and `data-dee-select-option` wire basic select behavior.
+- `data-dee-success` is shown after an option is selected.
+- `data-dee-conversion="event_name"` sends a conversion event when clicked.
+- `data-dee-value` supplies the conversion value.
+
 ## Experiment Targeting
 
 The SDK sends browser context with every evaluation:

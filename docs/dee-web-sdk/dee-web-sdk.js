@@ -41,6 +41,19 @@
       if (!element || element.dataset.deeWired === "true") return;
       element.dataset.deeWired = "true";
       element.addEventListener("click", (event) => {
+        const action = event.target.closest("[data-dee-conversion]");
+        if (action && element.contains(action)) {
+          const decision = state.decisions.get(element);
+          const name = action.dataset.deeConversion || "interaction";
+          if (decision) {
+            trackConversion(name, element, {
+              action: name,
+              value: action.dataset.deeValue || action.value || action.textContent?.trim() || "",
+              label: action.dataset.deeLabel || action.getAttribute("aria-label") || action.textContent?.trim() || ""
+            }).catch(() => {});
+          }
+          return;
+        }
         const link = event.target.closest("a");
         if (!link || !element.contains(link)) return;
         const decision = state.decisions.get(element);
@@ -233,6 +246,11 @@
   }
 
   const defaultRenderers = {
+    html_fragment: renderHtmlFragment,
+    web_layer: renderHtmlFragment,
+    weblayer: renderHtmlFragment,
+    inpage: renderHtmlFragment,
+
     async cards(element, decision, config) {
       const cards = Array.isArray(decision.outputs?.cards) ? decision.outputs.cards.slice(0, config.maxItems) : [];
       const track = element.querySelector("[data-dee-track]") || element.querySelector(".meiro-banner-track") || element;
@@ -276,6 +294,108 @@
       return true;
     }
   };
+
+  async function renderHtmlFragment(element, decision, config) {
+    const html = decision.outputs?.html || decision.outputs?.fragment || decision.outputs?.markup || "";
+    if (!html || typeof html !== "string") {
+      logWithConfig(config, "HTML fragment renderer received no html output");
+      return false;
+    }
+    installFragmentStyle(element, decision, config);
+    const target = element.querySelector("[data-dee-fragment-target]") || element;
+    const fragment = sanitizedHtmlFragment(html, config);
+    if (!fragment.childNodes.length) {
+      logWithConfig(config, "HTML fragment sanitized to empty output");
+      return false;
+    }
+    target.replaceChildren(fragment);
+    wireHtmlFragmentBehavior(target);
+    return true;
+  }
+
+  function installFragmentStyle(element, decision, config) {
+    const css = decision.outputs?.css;
+    if (!css || typeof css !== "string") return;
+    if (/\bjavascript\s*:|@import\b/i.test(css)) {
+      logWithConfig(config, "Blocked unsafe HTML fragment CSS");
+      return;
+    }
+    const id = `dee-style-${modeSafe(decision.decision_key || element.dataset.deeDecisionKey || "fragment")}-${modeSafe(decision.rule_version || "v0")}-${modeSafe(decision.experiment?.variant_key || "none")}`;
+    let style = document.getElementById(id);
+    if (!style) {
+      style = document.createElement("style");
+      style.id = id;
+      document.head.appendChild(style);
+    }
+    style.textContent = css;
+  }
+
+  function sanitizedHtmlFragment(html, config) {
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    const blockedTags = new Set(["script", "iframe", "object", "embed", "link", "meta", "base", "form"]);
+    template.content.querySelectorAll("*").forEach((node) => {
+      if (blockedTags.has(node.localName)) {
+        node.remove();
+        return;
+      }
+      [...node.attributes].forEach((attr) => {
+        const name = attr.name.toLowerCase();
+        const value = attr.value || "";
+        if (name.startsWith("on")) {
+          node.removeAttribute(attr.name);
+          return;
+        }
+        if (["href", "src", "action", "xlink:href", "formaction"].includes(name) && /^\s*javascript:/i.test(value)) {
+          node.removeAttribute(attr.name);
+          return;
+        }
+        if (name === "style" && /\bjavascript\s*:|expression\s*\(|url\s*\(\s*['"]?\s*javascript:/i.test(value)) {
+          node.removeAttribute(attr.name);
+        }
+      });
+    });
+    logWithConfig(config, "Rendered sanitized HTML fragment");
+    return template.content;
+  }
+
+  function wireHtmlFragmentBehavior(root) {
+    root.querySelectorAll("[data-dee-select]").forEach((select) => {
+      if (select.dataset.deeSelectWired === "true") return;
+      select.dataset.deeSelectWired = "true";
+      const trigger = select.querySelector("[data-dee-select-trigger]");
+      const dropdown = select.querySelector("[data-dee-select-dropdown]");
+      const search = select.querySelector("[data-dee-select-search]");
+      const valueTarget = select.querySelector("[data-dee-select-value]");
+      const success = select.querySelector("[data-dee-success]");
+      const close = () => {
+        select.dataset.open = "false";
+        if (dropdown) dropdown.hidden = true;
+      };
+      trigger?.addEventListener("click", () => {
+        const open = select.dataset.open !== "true";
+        select.dataset.open = open ? "true" : "false";
+        if (dropdown) dropdown.hidden = !open;
+      });
+      search?.addEventListener("input", () => {
+        const query = search.value.trim().toLowerCase();
+        select.querySelectorAll("[data-dee-select-option]").forEach((option) => {
+          option.hidden = query ? !option.textContent.toLowerCase().includes(query) : false;
+        });
+      });
+      select.querySelectorAll("[data-dee-select-option]").forEach((option) => {
+        option.addEventListener("click", () => {
+          const value = option.dataset.deeValue || option.textContent.trim();
+          if (valueTarget) valueTarget.textContent = value;
+          select.dataset.value = value;
+          if (success) success.hidden = false;
+          select.dispatchEvent(new CustomEvent("dee:fragment-select", { bubbles: true, detail: { value, option } }));
+          close();
+        });
+      });
+      close();
+    });
+  }
 
   function placementName(element) {
     return element.dataset.deePlacement || element.dataset.deeSurface || "";
