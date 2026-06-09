@@ -2199,6 +2199,7 @@ function renderExperimentDetail(experiment) {
     });
   });
   bindExperimentDetailActions(experiment);
+  if (activeExperimentTab === "design") loadExperimentVisualDiff(experiment.decision_key);
 }
 
 function experimentTabContent(experiment, tab) {
@@ -2252,6 +2253,9 @@ function experimentDesignTab(experiment) {
         <strong>Visual editor session</strong>
         <span>Open Visual Editor launches the website with a short-lived editor token. The overlay can save DOM changes directly to the selected draft treatment variant; publish and review still happen here in DEE.</span>
       </div>
+      <div class="experiment-visual-diff" data-experiment-visual-diff="${escapeHtml(experiment.decision_key)}">
+        <div class="status-line">Loading draft visual change summary...</div>
+      </div>
       <details class="experiment-visual-import-panel" data-visual-import-panel>
         <summary>Import visual editor payload</summary>
         <div class="experiment-visual-import-grid">
@@ -2302,6 +2306,64 @@ function experimentVariantDesignSummary(variant = {}, experiment = {}) {
   if (Array.isArray(outputs.cards)) return `${outputs.cards.length} card${outputs.cards.length === 1 ? "" : "s"} returned for this variant.`;
   if (outputs.message_id) return `References message ${outputs.message_id}.`;
   return Object.keys(outputs).length ? `${Object.keys(outputs).length} output field${Object.keys(outputs).length === 1 ? "" : "s"} configured.` : "No output payload configured yet.";
+}
+
+async function loadExperimentVisualDiff(decisionKey) {
+  const target = experimentDetail.querySelector(`[data-experiment-visual-diff="${cssEscape(decisionKey)}"]`);
+  if (!target) return;
+  try {
+    const body = await api(`/v1/rule-sets/${encodeURIComponent(decisionKey)}/visual-diff`);
+    target.innerHTML = renderExperimentVisualDiff(body);
+  } catch (error) {
+    target.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderExperimentVisualDiff(diff = {}) {
+  const variants = Array.isArray(diff.variants) ? diff.variants : [];
+  const changed = variants.filter((variant) => variant.added || variant.changed || variant.removed);
+  const rows = (changed.length ? changed : variants).slice(0, 6);
+  return `
+    <div class="experiment-visual-diff-head">
+      <div>
+        <strong>Draft visual changes</strong>
+        <span>${escapeHtml(diff.published_version ? `Compared with published v${diff.published_version}` : "No published visual baseline yet")}</span>
+      </div>
+      <div class="experiment-visual-diff-kpis">
+        ${statusItem("Variants", formatNumber(diff.summary?.changed_variants || 0))}
+        ${statusItem("Added", formatNumber(diff.summary?.added || 0))}
+        ${statusItem("Changed", formatNumber(diff.summary?.changed || 0))}
+        ${statusItem("Removed", formatNumber(diff.summary?.removed || 0))}
+      </div>
+    </div>
+    <div class="experiment-visual-diff-list">
+      ${rows.length ? rows.map(visualDiffVariantRow).join("") : `<div class="status-line">No visual variants configured.</div>`}
+    </div>
+  `;
+}
+
+function visualDiffVariantRow(variant = {}) {
+  const total = Number(variant.added || 0) + Number(variant.changed || 0) + Number(variant.removed || 0);
+  const changes = Array.isArray(variant.changes) ? variant.changes : [];
+  return `
+    <article class="experiment-visual-diff-row ${total ? "changed" : ""}">
+      <div>
+        <strong>${escapeHtml(variant.variant_key || "(empty)")}</strong>
+        <span>${escapeHtml(variant.baseline ? "Control/baseline" : `${formatNumber(variant.before_count || 0)} published -> ${formatNumber(variant.after_count || 0)} draft mods`)}</span>
+      </div>
+      <div class="experiment-visual-diff-counts">
+        <mark>+${formatNumber(variant.added || 0)}</mark>
+        <mark>~${formatNumber(variant.changed || 0)}</mark>
+        <mark>-${formatNumber(variant.removed || 0)}</mark>
+      </div>
+      ${changes.length ? `<ul>${changes.slice(0, 4).map((item) => `
+        <li>
+          <code>${escapeHtml(item.change)}</code>
+          <span>${escapeHtml([item.type, item.selector || item.target_selector, item.field].filter(Boolean).join(" · ") || item.key || "-")}</span>
+        </li>
+      `).join("")}</ul>` : `<small>No draft visual changes for this variant.</small>`}
+    </article>
+  `;
 }
 
 function experimentSettingsTab(experiment) {

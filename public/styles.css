@@ -2902,6 +2902,116 @@ aside input {
   overflow-wrap: anywhere;
 }
 
+.experiment-visual-diff {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.experiment-visual-diff-head {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr);
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+
+.experiment-visual-diff-head > div:first-child,
+.experiment-visual-diff-row > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.experiment-visual-diff-head strong,
+.experiment-visual-diff-row strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.experiment-visual-diff-head span,
+.experiment-visual-diff-row span,
+.experiment-visual-diff-row small {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.experiment-visual-diff-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.experiment-visual-diff-kpis .status-item {
+  padding: 8px;
+}
+
+.experiment-visual-diff-list {
+  display: grid;
+  gap: 8px;
+}
+
+.experiment-visual-diff-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.55fr) minmax(128px, auto) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: #fafafa;
+}
+
+.experiment-visual-diff-row.changed {
+  border-color: rgba(14, 154, 142, 0.24);
+  background: #fbfffe;
+}
+
+.experiment-visual-diff-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.experiment-visual-diff-counts mark {
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.experiment-visual-diff-row ul {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.experiment-visual-diff-row li {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.experiment-visual-diff-row code {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .experiment-visual-import-panel summary {
   cursor: pointer;
   font-weight: 800;
@@ -9381,6 +9491,15 @@ pre {
   .campaign-workbench-assets,
   .experiment-design-card dl {
     grid-template-columns: 1fr;
+  }
+
+  .experiment-visual-diff-head,
+  .experiment-visual-diff-row {
+    grid-template-columns: 1fr;
+  }
+
+  .experiment-visual-diff-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .experiment-workbench-head {

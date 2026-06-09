@@ -226,6 +226,8 @@ Status: in progress. DEE now exposes a draft-safe editor-session endpoint that r
 - Add comments on modifications.
 - Add variant-diff summary: selector, type, before/after.
 
+Status: started. Experiment Design now loads a draft visual change summary comparing published variant DOM modifications with the current draft, grouped by variant with added, changed, and removed selector counts. Full reviewer preview links, comments, and selector snapshot drift detection remain next.
+
 ### Phase 5: Asset And Template Integration
 
 - Add Web Layer asset category.

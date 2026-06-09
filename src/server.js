@@ -1811,6 +1811,15 @@ async function routeRuleSet(req, res, key, suffix) {
     return;
   }
 
+  if (req.method === "GET" && suffix === "visual-diff") {
+    requireScope(req, "viewer");
+    const ruleSet = await storeCall("getRuleSet", key);
+    if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
+    if (ruleSet.type !== "experiment") badRequest("Visual diff is available only for experiments");
+    sendJson(res, 200, visualExperimentDiff(ruleSet));
+    return;
+  }
+
   const versionMatch = suffix.match(/^versions\/(\d+)$/);
   if (req.method === "GET" && versionMatch) {
     requireScope(req, "viewer");
@@ -2343,6 +2352,112 @@ function diffValues(left, right, path = "$") {
   }
   const keys = [...new Set([...Object.keys(left), ...Object.keys(right)])].sort();
   return keys.flatMap((key) => diffValues(left[key], right[key], `${path}.${key}`));
+}
+
+function visualExperimentDiff(ruleSet) {
+  const published = ruleSet.versions.at(-1) || null;
+  const publishedExperiment = published?.metadata?.experiment || {};
+  const draftExperiment = ruleSet.metadata?.experiment || {};
+  const publishedVariants = Array.isArray(publishedExperiment.variants) ? publishedExperiment.variants : [];
+  const draftVariants = Array.isArray(draftExperiment.variants) ? draftExperiment.variants : [];
+  const variantKeys = [...new Set([
+    ...publishedVariants.map((variant) => variant.key).filter(Boolean),
+    ...draftVariants.map((variant) => variant.key).filter(Boolean)
+  ])];
+  const variants = variantKeys.map((variantKey) => {
+    const before = publishedVariants.find((variant) => variant.key === variantKey) || {};
+    const after = draftVariants.find((variant) => variant.key === variantKey) || {};
+    const beforeModifications = visualVariantModifications(before);
+    const afterModifications = visualVariantModifications(after);
+    const changes = visualModificationChanges(beforeModifications, afterModifications);
+    return {
+      variant_key: variantKey,
+      baseline: Boolean(after.baseline || before.baseline || variantKey === draftExperiment.baseline_variant),
+      before_count: beforeModifications.length,
+      after_count: afterModifications.length,
+      added: changes.added.length,
+      changed: changes.changed.length,
+      removed: changes.removed.length,
+      changes: changes.items.slice(0, 20)
+    };
+  });
+  return {
+    decision_key: ruleSet.decision_key,
+    published_version: published?.version || null,
+    published_at: published?.published_at || null,
+    draft_updated_at: ruleSet.updated_at || null,
+    summary: {
+      variants: variants.length,
+      changed_variants: variants.filter((variant) => variant.added || variant.changed || variant.removed).length,
+      added: variants.reduce((sum, variant) => sum + variant.added, 0),
+      changed: variants.reduce((sum, variant) => sum + variant.changed, 0),
+      removed: variants.reduce((sum, variant) => sum + variant.removed, 0)
+    },
+    variants
+  };
+}
+
+function visualVariantModifications(variant = {}) {
+  const outputs = variant.outputs || {};
+  const modifications = outputs.modifications || outputs.dom_modifications || [];
+  return Array.isArray(modifications) ? modifications : [];
+}
+
+function visualModificationChanges(before = [], after = []) {
+  const beforeMap = new Map(before.map((modification, index) => [visualModificationKey(modification, index), modification]));
+  const afterMap = new Map(after.map((modification, index) => [visualModificationKey(modification, index), modification]));
+  const added = [];
+  const changed = [];
+  const removed = [];
+  for (const [key, modification] of afterMap.entries()) {
+    if (!beforeMap.has(key)) {
+      added.push(visualModificationDiffItem("added", key, null, modification));
+    } else if (JSON.stringify(beforeMap.get(key)) !== JSON.stringify(modification)) {
+      changed.push(visualModificationDiffItem("changed", key, beforeMap.get(key), modification));
+    }
+  }
+  for (const [key, modification] of beforeMap.entries()) {
+    if (!afterMap.has(key)) removed.push(visualModificationDiffItem("removed", key, modification, null));
+  }
+  return {
+    added,
+    changed,
+    removed,
+    items: [...added, ...changed, ...removed]
+  };
+}
+
+function visualModificationKey(modification = {}, index = 0) {
+  return [
+    modification.id,
+    modification.type,
+    modification.selector,
+    modification.attribute || modification.property || modification.name || modification.target_selector,
+    modification.position || modification.mode
+  ].filter(Boolean).join("|") || `mod_${index}`;
+}
+
+function visualModificationDiffItem(change, key, before, after) {
+  const modification = after || before || {};
+  return {
+    change,
+    key,
+    type: modification.type || "",
+    selector: modification.selector || "",
+    target_selector: modification.target_selector || "",
+    field: modification.attribute || modification.property || modification.name || "",
+    before: visualModificationPreview(before),
+    after: visualModificationPreview(after)
+  };
+}
+
+function visualModificationPreview(modification) {
+  if (!modification) return "";
+  if (typeof modification.value === "string") return modification.value.slice(0, 160);
+  if (typeof modification.html === "string") return modification.html.replace(/\s+/g, " ").trim().slice(0, 160);
+  if (modification.mode) return modification.mode;
+  if (modification.position) return modification.position;
+  return "";
 }
 
 function isDiffObject(value) {
