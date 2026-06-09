@@ -99,6 +99,21 @@ Or force it on a single placement:
 
 Return `false` from a renderer to keep the original fallback content and skip exposure tracking.
 
+## Planned Experiment Targeting Settings
+
+The next SDK-targeting roadmap is documented in [`../experiment-targeting-roadmap.md`](../experiment-targeting-roadmap.md). The useful browser-side additions are:
+
+- display frequency policies: `always`, `once`, and `once_per_session`
+- consent/category context via a `consentProvider`
+- page variables collected into `context.page_vars`
+- device context: `device_type`, `viewport_width`, and `viewport_height`
+- URL include/exclude targeting helpers
+- trigger listeners for page load, DOM ready, data-layer events, custom DOM events, and manual evaluation
+- named `conditions` registry instead of remotely stored arbitrary JavaScript
+- named conversion tracking with optional value fields
+
+These should be added backward-compatibly. Existing placements should continue evaluating on page load unless a trigger or display policy says otherwise.
+
 ## Notes
 
 - Use client-scoped tokens, ideally restricted to the relevant decision keys, browser origins, environment, and app id.
