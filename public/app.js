@@ -1913,8 +1913,11 @@ function experimentDesignTab(experiment) {
   return `
     <section class="experiment-tab-panel">
       <div class="experiment-tab-intro">
-        <strong>Design</strong>
-        <span>Variants, content payloads, and SDK rendering contracts for this experiment.</span>
+        <div>
+          <strong>Design</strong>
+          <span>Variants, content payloads, and SDK rendering contracts for this experiment.</span>
+        </div>
+        <button type="button" data-experiment-action="open-editor" data-editor-section="design" data-rule-key="${escapeHtml(experiment.decision_key)}">Edit Design</button>
       </div>
       <div class="experiment-design-grid">
         ${variants.length ? variants.map((variant) => `
@@ -1957,8 +1960,11 @@ function experimentSettingsTab(experiment) {
   return `
     <section class="experiment-tab-panel">
       <div class="experiment-tab-intro">
-        <strong>Settings</strong>
-        <span>Audience, trigger, placement, schedule, consent, display frequency, and conversion goal.</span>
+        <div>
+          <strong>Settings</strong>
+          <span>Audience, trigger, placement, schedule, consent, display frequency, and conversion goal.</span>
+        </div>
+        <button type="button" data-experiment-action="open-editor" data-editor-section="settings" data-rule-key="${escapeHtml(experiment.decision_key)}">Edit Settings</button>
       </div>
       <div class="experiment-settings-list">
         ${experimentSettingRow("Trigger", trigger.type || "page_load", trigger.event ? `Event: ${trigger.event}` : "Default website SDK trigger")}
@@ -1981,8 +1987,11 @@ function experimentEvaluateTab(experiment) {
   return `
     <section class="experiment-tab-panel">
       <div class="experiment-tab-intro">
-        <strong>Evaluate</strong>
-        <span>Use the Evaluate workspace to force variants, test payloads, and inspect eligibility reasons.</span>
+        <div>
+          <strong>Evaluate</strong>
+          <span>Use the Evaluate workspace to force variants, test payloads, and inspect eligibility reasons.</span>
+        </div>
+        <button type="button" data-experiment-action="open-evaluate" data-rule-key="${escapeHtml(experiment.decision_key)}">Open Evaluate</button>
       </div>
       <div class="experiment-evaluate-grid">
         ${statusItem("Decision key", experiment.decision_key || "-")}
@@ -2013,6 +2022,13 @@ function experimentResultsTab(experiment) {
   const winnerKey = recommendation.eligible ? recommendation.variant_key : "";
   const mode = experimentMode(experiment);
   return `
+    <div class="experiment-tab-intro">
+      <div>
+        <strong>Results</strong>
+        <span>Variant performance, winner guidance, guardrails, and feedback depth.</span>
+      </div>
+      <button type="button" data-experiment-action="open-editor" data-editor-section="operations" data-rule-key="${escapeHtml(experiment.decision_key)}">Open Draft</button>
+    </div>
     <div class="experiment-detail-table">
       <div class="experiment-detail-table-header">
         <span>Variant Name</span>
@@ -2080,6 +2096,9 @@ function bindExperimentDetailActions(experiment) {
     button.addEventListener("click", () => copyExperimentSnippet(experiment));
   });
   experimentDetail.querySelector('[data-experiment-action="open-evaluate"]')?.addEventListener("click", () => openExperimentInEvaluate(experiment));
+  experimentDetail.querySelectorAll('[data-experiment-action="open-editor"]').forEach((button) => {
+    button.addEventListener("click", () => openExperimentInRuleEditor(experiment, button.dataset.editorSection || "operations"));
+  });
 }
 
 function openExperimentInEvaluate(experiment) {
@@ -2089,6 +2108,17 @@ function openExperimentInEvaluate(experiment) {
   const preset = document.querySelector("#eval-preset");
   if (preset) preset.value = "experiment_holdout";
   loadEvaluatePreset();
+}
+
+async function openExperimentInRuleEditor(experiment, section = "operations") {
+  switchView("rules");
+  await loadRule(experiment.decision_key);
+  const target = document.querySelector(`[data-experiment-editor-section="${cssEscape(section)}"]`) || document.querySelector("#experiment-panel");
+  if (!target) return;
+  target.scrollIntoView({ behavior: "smooth", block: "center" });
+  target.classList.remove("editor-section-focus");
+  window.setTimeout(() => target.classList.add("editor-section-focus"), 0);
+  window.setTimeout(() => target.classList.remove("editor-section-focus"), 1800);
 }
 
 function experimentSettingRow(label, value, detail = "") {

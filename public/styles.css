@@ -1596,18 +1596,50 @@ aside input {
 }
 
 .experiment-tab-intro {
-  display: grid;
-  gap: 3px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  min-width: 0;
 }
 
 .experiment-tab-intro strong {
+  display: block;
   font-size: 16px;
 }
 
 .experiment-tab-intro span {
+  display: block;
+  margin-top: 3px;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.45;
+}
+
+.experiment-tab-intro > div {
+  min-width: 0;
+}
+
+.experiment-tab-intro button {
+  flex: 0 0 auto;
+}
+
+.editor-section-focus {
+  animation: editor-section-focus 1.6s ease-out;
+  outline: 2px solid rgba(14, 154, 142, 0.46);
+  outline-offset: 3px;
+}
+
+@keyframes editor-section-focus {
+  0% {
+    box-shadow: 0 0 0 0 rgba(14, 154, 142, 0.32);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(14, 154, 142, 0);
+  }
+  100% {
+    box-shadow: none;
+  }
 }
 
 .experiment-design-grid {
@@ -7593,6 +7625,11 @@ pre {
 
   .experiment-workbench-head {
     display: grid;
+  }
+
+  .experiment-tab-intro {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .variant-builder-actions,

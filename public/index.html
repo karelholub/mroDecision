@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Meiro DEE</title>
-    <link rel="stylesheet" href="/styles.css?v=20260609-campaign-workbench" />
+    <link rel="stylesheet" href="/styles.css?v=20260609-experiment-editor-bridge" />
   </head>
   <body>
     <aside>
@@ -311,7 +311,7 @@
                   <input id="rule-description" />
                 </label>
                 <div id="experiment-panel" class="experiment-panel" hidden>
-                  <div class="settings-section-head compact-section-head">
+                  <div class="settings-section-head compact-section-head" data-experiment-editor-section="operations">
                     <div>
                       <div class="editor-title compact-title">Experiment Operations</div>
                       <p>Control assignment status, unit, and variant allocation.</p>
@@ -345,7 +345,7 @@
                       </select>
                     </label>
                   </div>
-                  <div id="experiment-bandit-panel" class="bandit-settings-panel" hidden>
+                  <div id="experiment-bandit-panel" class="bandit-settings-panel" data-experiment-editor-section="bandit" hidden>
                     <div class="bandit-settings-head">
                       <strong>Bandit guardrails</strong>
                       <span>DEE keeps some exploration traffic while favoring variants with stronger conversion feedback.</span>
@@ -369,7 +369,7 @@
                       </label>
                     </div>
                   </div>
-                  <div class="experiment-planning-grid">
+                  <div class="experiment-planning-grid" data-experiment-editor-section="planning">
                     <label>
                       Conversion event
                       <input id="experiment-goal-event" placeholder="conversion" />
@@ -396,7 +396,7 @@
                     </label>
                   </div>
                   <div id="experiment-planning-summary" class="experiment-planning-summary"></div>
-                  <div class="experiment-delivery-panel">
+                  <div class="experiment-delivery-panel" data-experiment-editor-section="settings">
                     <div class="settings-section-head compact-section-head">
                       <div>
                         <div class="editor-title compact-title">Delivery & Targeting</div>
@@ -478,7 +478,7 @@
                       </label>
                     </div>
                   </div>
-                  <div class="variant-builder-panel">
+                  <div class="variant-builder-panel" data-experiment-editor-section="design">
                     <div class="variant-builder-head">
                       <div>
                         <strong>Variants</strong>
@@ -2084,7 +2084,7 @@
       </div>
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
-  <script src="/app-utils.js?v=20260609-campaign-workbench"></script>
-  <script src="/app.js?v=20260609-campaign-workbench"></script>
+  <script src="/app-utils.js?v=20260609-experiment-editor-bridge"></script>
+  <script src="/app.js?v=20260609-experiment-editor-bridge"></script>
 </body>
 </html>
