@@ -1487,6 +1487,13 @@
                       Client event retention days
                       <input id="setting-client-event-retention-days" type="number" min="1" />
                     </label>
+                    <label>
+                      Approval workflow
+                      <select id="setting-approval-workflow-enabled">
+                        <option value="false">Disabled</option>
+                        <option value="true">Enabled</option>
+                      </select>
+                    </label>
                   </div>
                 </div>
                 <div class="settings-card wide">
@@ -1995,6 +2002,6 @@
       </div>
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
-  <script src="/app.js?v=20260608-message-application"></script>
+  <script src="/app.js?v=20260609-approval-flag"></script>
 </body>
 </html>

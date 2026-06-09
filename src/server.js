@@ -1549,6 +1549,9 @@ async function applyCampaignAction(body = {}, author = "admin") {
   if (action === "move" && !("target_campaign" in body) && !("target_folder" in body)) {
     badRequest("target_campaign or target_folder is required");
   }
+  if (action === "submit_review" && !(await approvalWorkflowEnabled())) {
+    badRequest("Approval workflow is disabled");
+  }
   const targetLabel = campaignLabelFromParts(targetCampaign, targetFolder) || "Unassigned";
   const result = {
     campaign: assets.campaign,
@@ -1843,7 +1846,7 @@ async function routeRuleSet(req, res, key, suffix) {
     const ruleSet = await storeCall("getRuleSet", key);
     if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
     validateRuleDefinition(ruleSet.draft, ruleSet.input_schema || {});
-    requireApprovedDraft(ruleSet);
+    if (await approvalWorkflowEnabled()) requireApprovedDraft(ruleSet);
     const version = await storeCall("publish", key, req.auth.name);
     await saveStore();
     clientResultCache.clear();
@@ -1853,6 +1856,7 @@ async function routeRuleSet(req, res, key, suffix) {
 
   if (req.method === "POST" && suffix === "submit-review") {
     requireScope(req, "editor");
+    if (!(await approvalWorkflowEnabled())) badRequest("Approval workflow is disabled");
     const body = await readJson(req, config.requestBodyLimitBytes);
     const ruleSet = await storeCall("getRuleSet", key);
     if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
@@ -1870,6 +1874,7 @@ async function routeRuleSet(req, res, key, suffix) {
 
   if (req.method === "POST" && suffix === "approve") {
     requireScope(req, "publisher");
+    if (!(await approvalWorkflowEnabled())) badRequest("Approval workflow is disabled");
     const body = await readJson(req, config.requestBodyLimitBytes);
     const ruleSet = await storeCall("getRuleSet", key);
     if (!ruleSet) notFoundError(`Rule set not found: ${key}`);
@@ -3220,6 +3225,11 @@ function requireApprovedDraft(ruleSet) {
   if (approval.draft_hash !== currentHash) {
     badRequest("Approval is stale. Submit and approve the current draft before publishing");
   }
+}
+
+async function approvalWorkflowEnabled() {
+  const settings = await storeCall("getSettings");
+  return settings.approval_workflow_enabled === true;
 }
 
 function badRequest(message) {

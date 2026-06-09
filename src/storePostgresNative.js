@@ -6,6 +6,7 @@ const allowedSettingKeys = new Set([
   "environment_label",
   "audit_retention_days",
   "client_event_retention_days",
+  "approval_workflow_enabled",
   "bootstrap_tokens_enabled",
   "meiro_url",
   "meiro_source_slug",

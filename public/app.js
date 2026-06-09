@@ -851,6 +851,9 @@ function campaignRollupHeader() {
 
 function campaignRollupItem(item) {
   const feedback = item.client_events || {};
+  const reviewAction = approvalWorkflowEnabled()
+    ? `<button type="button" data-campaign-action="submit_review" data-campaign="${escapeHtml(item.campaign || "Unassigned")}">Review</button>`
+    : "";
   const assetSummary = [
     `${formatNumber(item.rules || 0)} rules`,
     `${formatNumber(item.experiments || 0)} experiments`,
@@ -873,7 +876,7 @@ function campaignRollupItem(item) {
       <mark>${escapeHtml(formatPercent(item.conversion_rate || 0))}</mark>
       <small>${escapeHtml(item.last_activity_at ? formatTime(item.last_activity_at) : "-")}</small>
       <div class="campaign-rollup-actions">
-        <button type="button" data-campaign-action="submit_review" data-campaign="${escapeHtml(item.campaign || "Unassigned")}">Review</button>
+        ${reviewAction}
         <button type="button" data-campaign-action="move" data-campaign="${escapeHtml(item.campaign || "Unassigned")}">Move</button>
         <button type="button" data-campaign-action="duplicate" data-campaign="${escapeHtml(item.campaign || "Unassigned")}">Duplicate</button>
         <button type="button" data-campaign-action="archive" data-campaign="${escapeHtml(item.campaign || "Unassigned")}">Archive</button>
@@ -2804,6 +2807,20 @@ function closePublishConfirm() {
   document.querySelector(".rule-editor-pane")?.classList.remove("publish-open");
 }
 
+function approvalWorkflowEnabled() {
+  return cachedSettings.settings?.approval_workflow_enabled === true;
+}
+
+function renderApprovalWorkflowControls() {
+  const enabled = approvalWorkflowEnabled();
+  ["#submit-rule-review", "#approve-rule-draft", "#approve-publish-rule"].forEach((selector) => {
+    const element = document.querySelector(selector);
+    if (element) element.hidden = !enabled;
+  });
+  const governanceSection = ruleGovernanceTimeline?.closest(".inspector-section");
+  if (governanceSection) governanceSection.hidden = !enabled;
+}
+
 function renderRuleInspector() {
   if (!ruleInspectorSummary) return;
   const key = document.querySelector("#rule-key").value.trim() || "new_eligibility_rule";
@@ -2816,13 +2833,15 @@ function renderRuleInspector() {
   const scope = document.querySelector("#rule-cache-scope").value;
   const fallback = mode === "graph" ? "graph output" : (document.querySelector("#fallback-result").value.trim() || "deferred");
   const approval = selected?.metadata?.approval || {};
-  ruleInspectorSummary.innerHTML = [
+  const summaryItems = [
     statusItem("Status", selected?.status || (selectedRuleKey ? "draft" : "new")),
-    statusItem("Approval", approvalLabel(approval)),
     statusItem("Version", selected?.version ?? "-"),
     statusItem("Type", type),
     statusItem("Priority", priority)
-  ].join("");
+  ];
+  if (approvalWorkflowEnabled()) summaryItems.splice(1, 0, statusItem("Approval", approvalLabel(approval)));
+  ruleInspectorSummary.innerHTML = summaryItems.join("");
+  renderApprovalWorkflowControls();
   renderExperimentPanel();
   inspectorKey.textContent = key;
   inspectorSurface.textContent = surface;
@@ -3765,13 +3784,14 @@ function renderPublishReview(payload, schemaWarnings = []) {
   const validations = publishValidationItems(payload, schemaWarnings);
   const selected = cachedRuleSets.find((item) => item.decision_key === selectedRuleKey);
   const approval = selected?.metadata?.approval || {};
-  publishConfirmSummary.innerHTML = [
+  const summaryItems = [
     statusItem("Decision key", payload.decision_key || "-"),
-    statusItem("Approval", approvalLabel(approval)),
     statusItem("Branches", stats.branches),
     statusItem("Outputs", stats.outputs),
     statusItem("TTL", payload.cache_policy?.client_ttl ? `${payload.cache_policy.client_ttl}s` : "No response TTL")
-  ].join("");
+  ];
+  if (approvalWorkflowEnabled()) summaryItems.splice(1, 0, statusItem("Approval", approvalLabel(approval)));
+  publishConfirmSummary.innerHTML = summaryItems.join("");
   publishConfirmDiff.innerHTML = changes.length
     ? changes.map((item) => `
       <div class="publish-diff-item">
@@ -3786,8 +3806,9 @@ function renderPublishReview(payload, schemaWarnings = []) {
       <span>${escapeHtml(item.detail)}</span>
     </div>
   `).join("");
-  document.querySelector("#confirm-publish-rule").disabled = approval.status !== "approved" || schemaWarnings.length > 0 || hasBlockingExperimentWarnings(payload);
+  document.querySelector("#confirm-publish-rule").disabled = (approvalWorkflowEnabled() && approval.status !== "approved") || schemaWarnings.length > 0 || hasBlockingExperimentWarnings(payload);
   document.querySelector("#approve-publish-rule").disabled = approval.status !== "submitted";
+  renderApprovalWorkflowControls();
 }
 
 function renderPublishReviewError(error) {
@@ -3832,12 +3853,14 @@ function publishValidationItems(payload, schemaWarnings = []) {
   const conflictWarnings = ruleConflictsFor(selectedRuleKey);
   const selected = cachedRuleSets.find((item) => item.decision_key === selectedRuleKey);
   const approval = selected?.metadata?.approval || {};
-  if (approval.status === "approved") {
-    items.push({ title: "Approval", detail: `Approved by ${approval.approved_by || "publisher"}.`, level: "ok" });
-  } else if (approval.status === "submitted") {
-    items.push({ title: "Approval required", detail: "Draft is submitted for review. Approve it before publishing.", level: "warn" });
-  } else {
-    items.push({ title: "Approval required", detail: "Submit this draft for review, then approve it before publishing.", level: "warn" });
+  if (approvalWorkflowEnabled()) {
+    if (approval.status === "approved") {
+      items.push({ title: "Approval", detail: `Approved by ${approval.approved_by || "publisher"}.`, level: "ok" });
+    } else if (approval.status === "submitted") {
+      items.push({ title: "Approval required", detail: "Draft is submitted for review. Approve it before publishing.", level: "warn" });
+    } else {
+      items.push({ title: "Approval required", detail: "Submit this draft for review, then approve it before publishing.", level: "warn" });
+    }
   }
   if (schemaWarnings.length) {
     items.push({ title: "Publish blocked", detail: "Fix schema reference warnings before publishing this rule.", level: "warn" });
@@ -9108,6 +9131,7 @@ async function loadSettings() {
     document.querySelector("#setting-environment-label").value = settings.environment_label || "";
     document.querySelector("#setting-audit-retention-days").value = settings.audit_retention_days || "";
     document.querySelector("#setting-client-event-retention-days").value = settings.client_event_retention_days || "";
+    document.querySelector("#setting-approval-workflow-enabled").value = settings.approval_workflow_enabled === true ? "true" : "false";
     document.querySelector("#setting-bootstrap-tokens-enabled").value = settings.bootstrap_tokens_enabled === false ? "false" : "true";
     document.querySelector("#setting-meiro-url").value = settings.meiro_url || "";
     document.querySelector("#setting-meiro-source-slug").value = settings.meiro_source_slug || "";
@@ -9134,6 +9158,7 @@ async function loadSettings() {
     renderSchemaSyncStatus(settings, body.runtime?.schema_sync || {});
     renderSettingsSummary(settings, body.runtime || {});
     renderAssistantProviderStatus(settings, body.runtime || {});
+    renderApprovalWorkflowControls();
     renderAssistantProviderConfigHistory(body.runtime?.assistant_provider_config_events || []);
     renderAssistantProviderPlanHistory(body.runtime?.assistant_provider_plan_events || []);
     await loadMeiroDeliveries();
@@ -9204,6 +9229,7 @@ async function saveSettings(event) {
       environment_label: document.querySelector("#setting-environment-label").value.trim(),
       audit_retention_days: Number(document.querySelector("#setting-audit-retention-days").value || 90),
       client_event_retention_days: Number(document.querySelector("#setting-client-event-retention-days").value || 180),
+      approval_workflow_enabled: document.querySelector("#setting-approval-workflow-enabled").value === "true",
       bootstrap_tokens_enabled: document.querySelector("#setting-bootstrap-tokens-enabled").value !== "false",
       meiro_url: document.querySelector("#setting-meiro-url").value.trim(),
       meiro_source_slug: document.querySelector("#setting-meiro-source-slug").value.trim(),
@@ -9236,6 +9262,7 @@ async function saveSettings(event) {
     renderSchemaSyncStatus(body.settings || {}, body.runtime?.schema_sync || {});
     renderSettingsSummary(body.settings || {}, body.runtime || {});
     renderAssistantProviderStatus(body.settings || {}, body.runtime || {});
+    renderApprovalWorkflowControls();
     renderAssistantProviderConfigHistory(body.runtime?.assistant_provider_config_events || []);
     renderAssistantProviderPlanHistory(body.runtime?.assistant_provider_plan_events || []);
     renderIntegration();
@@ -9528,6 +9555,14 @@ function renderSettingsSummary(settings, runtime, error = null) {
       value: settings?.bootstrap_tokens_enabled === false ? "Disabled" : "Enabled",
       detail: settings?.bootstrap_tokens_enabled === false ? "DB tokens are required" : "Static admin token remains accepted",
       ok: settings?.bootstrap_tokens_enabled === false
+    },
+    {
+      label: "Approval Workflow",
+      value: settings?.approval_workflow_enabled === true ? "Enabled" : "Disabled",
+      detail: settings?.approval_workflow_enabled === true
+        ? "Drafts must be submitted and approved before publish"
+        : "Publish uses validation preview without approval gating",
+      ok: true
     }
   ];
   settingsHealthSummary.innerHTML = items

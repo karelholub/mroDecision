@@ -4248,6 +4248,9 @@ components:
           type: integer
         client_event_retention_days:
           type: integer
+        approval_workflow_enabled:
+          type: boolean
+          description: Feature flag for formal submit-for-review and approver-gated publish. Disabled means publish uses validation preview without approval status checks.
         bootstrap_tokens_enabled:
           type: boolean
           description: Whether configured bootstrap tokens such as DEE_TOKENS remain accepted after database-backed tokens exist.
