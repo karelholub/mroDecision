@@ -2923,6 +2923,182 @@ aside input {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
+.experiment-visual-import-review {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.visual-import-empty,
+.visual-import-review-error,
+.visual-import-review-head,
+.visual-import-review-row {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.visual-import-empty,
+.visual-import-review-error {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+}
+
+.visual-import-empty strong,
+.visual-import-review-error strong,
+.visual-import-review-head strong,
+.visual-import-review-row strong {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.visual-import-empty span,
+.visual-import-review-error span,
+.visual-import-review-head span,
+.visual-import-review-row span,
+.visual-import-review-row small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.visual-import-review-error {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: #fff7f7;
+}
+
+.visual-import-review-head {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.55fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+}
+
+.visual-import-review-head.ok {
+  border-color: rgba(15, 118, 110, 0.24);
+  background: rgba(15, 118, 110, 0.04);
+}
+
+.visual-import-review-head.warn {
+  border-color: rgba(245, 158, 11, 0.34);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.visual-import-review-head.error {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: #fff7f7;
+}
+
+.visual-import-review-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.visual-import-review-kpis span {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 7px;
+  padding: 6px 7px;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.visual-import-review-kpis strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.visual-import-review-kpis small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.visual-import-review-list {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.visual-import-review-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.95fr) minmax(160px, 0.8fr) minmax(140px, 0.65fr);
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+}
+
+.visual-import-review-row.ok {
+  border-color: rgba(15, 118, 110, 0.22);
+}
+
+.visual-import-review-row.warn {
+  border-color: rgba(245, 158, 11, 0.34);
+}
+
+.visual-import-review-row.error {
+  border-color: rgba(220, 38, 38, 0.32);
+}
+
+.visual-import-review-row > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.visual-import-review-row code {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 7px;
+  background: #f8fafc;
+  color: #344054;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.visual-import-review-row mark {
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  border-radius: 999px;
+  padding: 4px 7px;
+  background: #eef2f6;
+  color: #475467;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.visual-import-review-row.ok mark {
+  background: rgba(15, 118, 110, 0.1);
+  color: #0f766e;
+}
+
+.visual-import-review-row.warn mark {
+  background: #fff7df;
+  color: #92400e;
+}
+
+.visual-import-review-row.error mark {
+  background: #fee4e2;
+  color: #b42318;
+}
+
 .experiment-snippet-guidance {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

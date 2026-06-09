@@ -2264,6 +2264,9 @@ function experimentDesignTab(experiment) {
           </div>
         </div>
         <textarea data-visual-import-json spellcheck="false" placeholder='{"variant":"treatment","outputs":{"template":"dom_modifications","modifications":[]}}'></textarea>
+        <div data-visual-import-review class="experiment-visual-import-review">
+          ${visualImportEmptyReview()}
+        </div>
         <div class="experiment-tab-actions">
           <button type="button" data-experiment-action="apply-visual-payload" data-rule-key="${escapeHtml(experiment.decision_key)}">Apply to Draft Variant</button>
           <span data-visual-import-status>Waiting for copied visual editor JSON.</span>
@@ -2501,6 +2504,12 @@ function bindExperimentDetailActions(experiment) {
   });
   experimentDetail.querySelector('[data-experiment-action="focus-visual-import"]')?.addEventListener("click", () => focusVisualPayloadImport());
   experimentDetail.querySelector('[data-experiment-action="apply-visual-payload"]')?.addEventListener("click", () => applyVisualEditorPayload(experiment));
+  experimentDetail.querySelector("[data-visual-import-json]")?.addEventListener("input", (event) => {
+    renderVisualImportReview(event.target.closest("[data-visual-import-panel]"));
+  });
+  experimentDetail.querySelector("[data-visual-import-variant]")?.addEventListener("change", (event) => {
+    renderVisualImportReview(event.target.closest("[data-visual-import-panel]"));
+  });
   experimentDetail.querySelectorAll('[data-experiment-action="open-editor"]').forEach((button) => {
     button.addEventListener("click", () => openExperimentInRuleEditor(experiment, button.dataset.editorSection || "operations"));
   });
@@ -2511,7 +2520,90 @@ function focusVisualPayloadImport() {
   if (!panel) return;
   panel.open = true;
   panel.scrollIntoView({ behavior: "smooth", block: "center" });
+  renderVisualImportReview(panel);
   panel.querySelector("[data-visual-import-json]")?.focus();
+}
+
+function renderVisualImportReview(panel) {
+  const review = panel?.querySelector("[data-visual-import-review]");
+  if (!review) return;
+  const text = panel.querySelector("[data-visual-import-json]")?.value || "";
+  const selectedVariant = panel.querySelector("[data-visual-import-variant]")?.value || "";
+  if (!text.trim()) {
+    review.innerHTML = visualImportEmptyReview();
+    return;
+  }
+  try {
+    const imported = parseVisualEditorPayload(text, { strict: false });
+    review.innerHTML = visualImportReviewHtml(imported, selectedVariant || imported.variant);
+  } catch (error) {
+    review.innerHTML = `
+      <div class="visual-import-review-error">
+        <strong>Cannot read payload</strong>
+        <span>${escapeHtml(error.message)}</span>
+      </div>
+    `;
+  }
+}
+
+function visualImportEmptyReview() {
+  return `
+    <div class="visual-import-empty">
+      <strong>No payload loaded</strong>
+      <span>Open the visual editor, copy its structured JSON, and paste it here to review selector changes before saving to the draft.</span>
+    </div>
+  `;
+}
+
+function visualImportReviewHtml(imported, selectedVariant) {
+  const modifications = imported.outputs.modifications || [];
+  const quality = domModificationQuality(modifications);
+  const targetVariant = selectedVariant || imported.variant || "Choose target";
+  return `
+    <div class="visual-import-review-head ${quality.invalid ? "error" : quality.warnings ? "warn" : "ok"}">
+      <div>
+        <strong>Payload review</strong>
+        <span>Target variant: ${escapeHtml(targetVariant)}</span>
+      </div>
+      <div class="visual-import-review-kpis">
+        ${visualImportKpi("Changes", quality.total)}
+        ${visualImportKpi("Ready", quality.ready)}
+        ${visualImportKpi("Warnings", quality.warnings)}
+        ${visualImportKpi("Invalid", quality.invalid)}
+      </div>
+    </div>
+    <div class="visual-import-review-list">
+      ${modifications.length ? modifications.map((modification, index) => visualImportModificationRow(modification, index)).join("") : `<div class="visual-import-empty"><strong>No changes</strong><span>The payload is valid but contains no DOM modifications.</span></div>`}
+    </div>
+  `;
+}
+
+function visualImportKpi(label, value) {
+  return `<span><strong>${escapeHtml(formatNumber(value || 0))}</strong><small> ${escapeHtml(label)}</small></span>`;
+}
+
+function visualImportModificationRow(modification = {}, index = 0) {
+  const warning = domModificationRowWarning(modification);
+  const invalid = warning && /missing selector|syntax looks invalid|unsupported action type|attribute name may be unsafe|styles must be valid json/i.test(warning);
+  const tone = invalid ? "error" : warning ? "warn" : "ok";
+  const selector = modification.selector || modification.source_selector || modification.sourceSelector || "-";
+  const targetSelector = modification.target_selector || modification.targetSelector || modification.target || "";
+  const scope = modification.scope || {};
+  const scopeLabel = [
+    scope.url_rules?.length ? `${scope.url_rules.length} URL rule${scope.url_rules.length === 1 ? "" : "s"}` : "",
+    scope.devices?.length ? `Devices: ${scope.devices.join(", ")}` : ""
+  ].filter(Boolean).join(" · ") || "No page/device scope";
+  return `
+    <article class="visual-import-review-row ${tone}">
+      <div>
+        <strong>${escapeHtml(index + 1)}. ${escapeHtml(domModificationTypeLabel(modification.type || "change_text"))}</strong>
+        <span>${escapeHtml(domModificationSummary(modification))}</span>
+      </div>
+      <code>${escapeHtml(selector)}</code>
+      <small>${escapeHtml(targetSelector ? `Target: ${targetSelector} · ${scopeLabel}` : scopeLabel)}</small>
+      <mark>${escapeHtml(warning || "Ready")}</mark>
+    </article>
+  `;
 }
 
 async function applyVisualEditorPayload(experiment) {
@@ -2569,7 +2661,8 @@ async function applyVisualEditorPayload(experiment) {
   }
 }
 
-function parseVisualEditorPayload(text) {
+function parseVisualEditorPayload(text, options = {}) {
+  const strict = options.strict !== false;
   const payload = parseJsonStrict(text || "{}", "Visual editor payload");
   const outputs = payload.outputs || payload;
   if (outputs.template !== "dom_modifications") {
@@ -2580,7 +2673,13 @@ function parseVisualEditorPayload(text) {
   }
   for (const modification of outputs.modifications) {
     if (!modification || typeof modification !== "object") throw new Error("Each modification must be an object.");
-    if (!modification.type || !modification.selector) throw new Error("Each modification must include type and selector.");
+    if (strict && (!modification.type || !modification.selector)) throw new Error("Each modification must include type and selector.");
+    if (strict) {
+      const warning = domModificationRowWarning(modification);
+      if (/missing selector|syntax looks invalid|unsupported action type|attribute name may be unsafe|styles must be valid json/i.test(warning)) {
+        throw new Error(`Invalid visual modification: ${warning}`);
+      }
+    }
   }
   return {
     variant: payload.variant || "",
@@ -4231,16 +4330,17 @@ function domModificationRowWarning(modification = {}) {
   const type = modification.type || "";
   const selector = modification.selector || modification.source_selector || modification.sourceSelector || "";
   if (!type) return "Missing action type.";
+  if (!["change_text", "change_attribute", "change_style", "insert_html", "remove", "move"].includes(type)) return "Unsupported action type.";
   if (!selector) return "Missing selector.";
   if (!isLikelyValidSelector(selector)) return "Selector syntax looks invalid.";
   if (isBroadSelector(selector)) return "Broad selector; use a stable data attribute when possible.";
-  if (!modification.scope?.url_rules?.length) return "No URL scope; consider limiting this change to target pages.";
   if (type === "change_attribute" && !(modification.attribute || modification.name)) return "Attribute name is required.";
   if (type === "change_attribute" && !isSafeDomAttributeName(modification.attribute || modification.name)) return "Attribute name may be unsafe.";
   if (type === "change_style" && !(modification.property || modification.styles)) return "CSS property or styles JSON is required.";
   if (type === "change_style" && modification.styles && typeof modification.styles !== "object") return "Styles must be valid JSON when CSS property is empty.";
   if (type === "insert_html" && !(modification.html || modification.fragment || modification.markup)) return "HTML is required.";
   if (type === "move" && !(modification.target_selector || modification.targetSelector || modification.target)) return "Move target selector is required.";
+  if (!modification.scope?.url_rules?.length) return "No URL scope; consider limiting this change to target pages.";
   return "";
 }
 
