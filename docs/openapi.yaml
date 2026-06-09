@@ -631,6 +631,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CampaignActionResult"
+  /v1/campaign-assets/move:
+    post:
+      summary: Preview or move selected assets to a campaign or folder
+      description: Moves selected rule, experiment, and message assets without applying an action to the whole campaign. Dry-run is enabled by default for guarded UI confirmation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignAssetMoveRequest"
+      responses:
+        "200":
+          description: Selected asset move preview or execution result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignActionResult"
   /v1/rule-conflicts:
     get:
       summary: List rule conflict diagnostics
@@ -4198,6 +4215,30 @@ components:
               type: integer
             messages:
               type: integer
+    CampaignAssetMoveRequest:
+      type: object
+      required: [assets]
+      properties:
+        assets:
+          type: array
+          items:
+            type: object
+            required: [object_type, object_id]
+            properties:
+              object_type:
+                type: string
+                enum: [rule, experiment, message]
+              object_id:
+                type: string
+        dry_run:
+          type: boolean
+          default: true
+        target_campaign:
+          type: string
+          description: Campaign name to assign. Empty with an empty folder moves assets to Unassigned.
+        target_folder:
+          type: string
+          description: Folder name to assign.
     Settings:
       type: object
       properties:

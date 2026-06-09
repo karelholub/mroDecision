@@ -376,6 +376,17 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  if (req.method === "POST" && pathname === "/v1/campaign-assets/move") {
+    requireScope(req, "editor");
+    const result = await moveCampaignAssets(await readJson(req, config.requestBodyLimitBytes), req.auth.name);
+    if (!result.dry_run) {
+      await saveStore();
+      clientResultCache.clear();
+    }
+    sendJson(res, 200, result);
+    return;
+  }
+
   if (req.method === "POST" && pathname === "/v1/rule-sets") {
     requireScope(req, "editor");
     const body = await readJson(req, config.requestBodyLimitBytes);
@@ -1666,6 +1677,87 @@ function normalizeCampaignDuplicateSuffix(value) {
 
 function campaignLabelFromParts(campaign = "", folder = "") {
   return [String(campaign || "").trim(), String(folder || "").trim()].filter(Boolean).join(" / ");
+}
+
+function campaignLabelFromMetadata(metadata = {}) {
+  const campaign = typeof metadata?.campaign === "string" ? metadata.campaign : metadata?.campaign?.name || "";
+  const folder = metadata?.campaign?.folder || metadata?.folder || "";
+  return campaignLabelFromParts(campaign, folder) || "Unassigned";
+}
+
+async function moveCampaignAssets(body = {}, author = "admin") {
+  const assets = Array.isArray(body.assets) ? body.assets : [];
+  const dryRun = body.dry_run !== false;
+  const targetCampaign = typeof body.target_campaign === "string"
+    ? body.target_campaign.trim()
+    : typeof body.campaign === "string" ? body.campaign.trim() : "";
+  const targetFolder = typeof body.target_folder === "string"
+    ? body.target_folder.trim()
+    : typeof body.folder === "string" ? body.folder.trim() : "";
+  if (!assets.length) badRequest("assets is required");
+  if (!("target_campaign" in body) && !("target_folder" in body) && !("campaign" in body) && !("folder" in body)) {
+    badRequest("target_campaign or target_folder is required");
+  }
+  const targetLabel = campaignLabelFromParts(targetCampaign, targetFolder) || "Unassigned";
+  const result = {
+    action: "move",
+    dry_run: dryRun,
+    target_campaign: targetLabel,
+    affected: [],
+    skipped: []
+  };
+
+  for (const asset of assets) {
+    const objectType = String(asset.object_type || asset.type || "").trim().toLowerCase();
+    const objectId = String(asset.object_id || asset.id || asset.key || "").trim();
+    if (!objectId) {
+      result.skipped.push({ object_type: objectType || "unknown", object_id: "", reason: "missing_object_id" });
+      continue;
+    }
+    if (objectType === "rule" || objectType === "experiment") {
+      const rule = await storeCall("getRuleSet", objectId);
+      if (!rule) {
+        result.skipped.push({ object_type: objectType, object_id: objectId, reason: "not_found" });
+        continue;
+      }
+      const resolvedType = rule.type === "experiment" ? "experiment" : "rule";
+      const currentCampaign = campaignLabelFromMetadata(rule.metadata || {});
+      if (currentCampaign === targetLabel) {
+        result.skipped.push({ object_type: resolvedType, object_id: objectId, reason: "already_in_target_campaign" });
+        continue;
+      }
+      result.affected.push({ object_type: resolvedType, object_id: objectId, action: "move", from_campaign: currentCampaign, target_campaign: targetLabel });
+      if (!dryRun) await storeCall("setRuleCampaign", objectId, { campaign: targetCampaign, folder: targetFolder }, author);
+      continue;
+    }
+    if (objectType === "message") {
+      const message = await storeCall("getMessage", objectId);
+      if (!message) {
+        result.skipped.push({ object_type: "message", object_id: objectId, reason: "not_found" });
+        continue;
+      }
+      const currentCampaign = campaignLabelFromMetadata(message.metadata || {});
+      if (currentCampaign === targetLabel) {
+        result.skipped.push({ object_type: "message", object_id: objectId, reason: "already_in_target_campaign" });
+        continue;
+      }
+      result.affected.push({ object_type: "message", object_id: objectId, action: "move", from_campaign: currentCampaign, target_campaign: targetLabel });
+      if (!dryRun) await storeCall("setMessageCampaign", objectId, { campaign: targetCampaign, folder: targetFolder }, author);
+      continue;
+    }
+    result.skipped.push({ object_type: objectType || "unknown", object_id: objectId, reason: "unsupported_type" });
+  }
+
+  return {
+    ...result,
+    summary: {
+      affected: result.affected.length,
+      skipped: result.skipped.length,
+      rules: result.affected.filter((item) => item.object_type === "rule").length,
+      experiments: result.affected.filter((item) => item.object_type === "experiment").length,
+      messages: result.affected.filter((item) => item.object_type === "message").length
+    }
+  };
 }
 
 function normalizeCampaignDuplicateId(base, suffix) {

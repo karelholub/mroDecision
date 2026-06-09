@@ -184,7 +184,7 @@ document.querySelectorAll("nav button").forEach((button) => {
 
 document.body.dataset.currentView = document.querySelector("nav button.active")?.dataset.view || "overview";
 
-function switchView(viewName) {
+function switchView(viewName, options = {}) {
   const button = document.querySelector(`nav button[data-view="${cssEscape(viewName)}"]`);
   const view = document.querySelector(`#${cssEscape(viewName)}`);
   if (!button || !view) return;
@@ -192,10 +192,20 @@ function switchView(viewName) {
   button.classList.add("active");
   document.body.dataset.currentView = viewName;
   view.classList.add("active");
+  if (options.updateHash !== false && window.location.hash !== `#${viewName}`) {
+    window.history.replaceState(null, "", `#${viewName}`);
+  }
   if (viewName === "overview") loadMetrics();
   if (viewName === "experiments") loadExperiments();
   if (viewName === "audit") loadAudit();
 }
+
+window.addEventListener("hashchange", () => {
+  const viewName = window.location.hash.replace(/^#/, "");
+  if (viewName) switchView(viewName, { updateHash: false });
+});
+
+switchView(window.location.hash.replace(/^#/, "") || document.body.dataset.currentView || "overview", { updateHash: false });
 
 document.querySelectorAll("[data-settings-tab]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -3266,10 +3276,10 @@ function renderRuleList() {
   target.querySelectorAll("[data-rule-sort]").forEach((button) => {
     button.addEventListener("click", () => setRuleSort(button.dataset.ruleSort));
   });
-  document.querySelectorAll("[data-rule-key]").forEach((element) => {
+  target.querySelectorAll(".row[data-rule-key]").forEach((element) => {
     element.addEventListener("click", () => loadRule(element.dataset.ruleKey));
   });
-  document.querySelectorAll("[data-rule-action]").forEach((button) => {
+  target.querySelectorAll("[data-rule-action]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       runRuleAction(button.dataset.ruleAction, button.dataset.ruleKey);
@@ -3342,6 +3352,7 @@ function ruleSetRow(item) {
   const conflicts = ruleConflictsFor(item.decision_key);
   const actions = [
     `<button type="button" data-rule-action="duplicate" data-rule-key="${escapeHtml(item.decision_key)}">Duplicate</button>`,
+    `<button type="button" data-rule-action="move_campaign" data-rule-key="${escapeHtml(item.decision_key)}">Move</button>`,
     item.status === "archived"
       ? ""
       : `<button type="button" data-rule-action="archive" data-rule-key="${escapeHtml(item.decision_key)}">Archive</button>`
@@ -3412,8 +3423,32 @@ async function runRuleAction(action, key) {
       });
       editorOutput.textContent = JSON.stringify(body, null, 2);
       await loadRule(body.rule_set.decision_key);
+    } else if (action === "move_campaign") {
+      const item = cachedRuleSets.find((candidate) => candidate.decision_key === key);
+      const target = promptCampaignMoveTarget(campaignLabelForMetadata(item?.metadata || {}));
+      if (!target) return;
+      const assetType = item?.type === "experiment" ? "experiment" : "rule";
+      const preview = await api("/v1/campaign-assets/move", {
+        method: "POST",
+        body: JSON.stringify({
+          assets: [{ object_type: assetType, object_id: key }],
+          dry_run: true,
+          ...target
+        })
+      });
+      const ok = window.confirm(`Move ${preview.summary?.affected || 0} asset(s) to "${preview.target_campaign || "Unassigned"}"? ${preview.summary?.skipped || 0} item(s) will be skipped.`);
+      if (!ok) return;
+      const body = await api("/v1/campaign-assets/move", {
+        method: "POST",
+        body: JSON.stringify({
+          assets: [{ object_type: assetType, object_id: key }],
+          dry_run: false,
+          ...target
+        })
+      });
+      editorOutput.textContent = JSON.stringify(body, null, 2);
     }
-    await loadRules();
+    await Promise.all([loadRules(), loadMetrics()]);
   } catch (error) {
     editorOutput.textContent = error.message;
   }
@@ -4609,11 +4644,17 @@ function renderMessageList() {
       (!surface || String(item.surface || "").toLowerCase().includes(surface)) &&
       (!campaign || campaignSearchText(item.metadata || {}).includes(campaign));
   });
-  target.innerHTML = header(["Preview", "Name", "Application", "Surface", "Campaign", "Status", "Updated", "Details"]);
+  target.innerHTML = header(["Preview", "Name", "Application", "Surface", "Campaign", "Status", "Updated", "Details", "Actions"]);
   target.innerHTML += filtered.length
     ? filtered.map((item) => messageCatalogRow(item)).join("")
-    : row(["No messages match the current filters", "", "", "", "", "", "", ""]);
-  target.querySelectorAll("[data-message-id]").forEach((element) => {
+    : row(["No messages match the current filters", "", "", "", "", "", "", "", ""]);
+  target.querySelectorAll("[data-message-action]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      runMessageListAction(button.dataset.messageAction, button.dataset.messageActionId);
+    });
+  });
+  target.querySelectorAll(".row[data-message-id]").forEach((element) => {
     element.addEventListener("click", () => loadMessage(element.dataset.messageId, cachedMessages));
   });
 }
@@ -4631,6 +4672,7 @@ function messageCatalogRow(item) {
     ctas.length ? `${ctas.length} CTA${ctas.length === 1 ? "" : "s"}` : "No CTA",
     expiresAt ? `Expires ${formatTime(expiresAt)}` : ""
   ].filter(Boolean).join(" · ");
+  const actions = `<button type="button" data-message-action="move_campaign" data-message-action-id="${escapeHtml(item.id)}">Move</button>`;
   return row([
     messageCatalogPreview(item),
     item.name,
@@ -4639,8 +4681,40 @@ function messageCatalogRow(item) {
     campaignValue(item.metadata) || folderValue(item.metadata) || "-",
     item.status || "active",
     item.updated_at ? formatTime(item.updated_at) : "-",
-    `${title} · ${details}`
-  ], { messageId: item.id, rawColumns: [0] });
+    `${title} · ${details}`,
+    actions
+  ], { messageId: item.id, rawColumns: [0, 8] });
+}
+
+async function runMessageListAction(action, id) {
+  if (action !== "move_campaign") return;
+  try {
+    const message = cachedMessages.find((candidate) => candidate.id === id);
+    const target = promptCampaignMoveTarget(campaignLabelForMetadata(message?.metadata || {}));
+    if (!target) return;
+    const preview = await api("/v1/campaign-assets/move", {
+      method: "POST",
+      body: JSON.stringify({
+        assets: [{ object_type: "message", object_id: id }],
+        dry_run: true,
+        ...target
+      })
+    });
+    const ok = window.confirm(`Move ${preview.summary?.affected || 0} message(s) to "${preview.target_campaign || "Unassigned"}"? ${preview.summary?.skipped || 0} item(s) will be skipped.`);
+    if (!ok) return;
+    const body = await api("/v1/campaign-assets/move", {
+      method: "POST",
+      body: JSON.stringify({
+        assets: [{ object_type: "message", object_id: id }],
+        dry_run: false,
+        ...target
+      })
+    });
+    messageOutput.textContent = JSON.stringify(body, null, 2);
+    await Promise.all([loadMessages(), loadMetrics()]);
+  } catch (error) {
+    messageOutput.textContent = error.message;
+  }
 }
 
 function messageCatalogPreview(item) {
@@ -6088,6 +6162,10 @@ function campaignValue(metadata = {}) {
 
 function folderValue(metadata = {}) {
   return metadata?.campaign?.folder || metadata?.folder || "";
+}
+
+function campaignLabelForMetadata(metadata = {}) {
+  return [campaignValue(metadata), folderValue(metadata)].filter(Boolean).join(" / ") || "Unassigned";
 }
 
 function applicationValue(metadata = {}) {
