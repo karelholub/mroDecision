@@ -30,12 +30,24 @@ This is intentionally low risk: it reduces the main app file and creates a patte
      - `evaluate-workbench.js`
      - `settings-workbench.js`
    - Each workbench should expose `init`, `load`, and `render` entry points.
+   - Prioritize `experiments-workbench.js` around the Campaigns UX redesign: campaign master/detail state, experiment list filters, workbench tab state, and variant design summaries should be separable from global app routing.
 
 4. Performance improvements.
    - Lazy-load data only for the active view.
    - Avoid initial fan-out API calls for hidden views.
    - Add request cancellation or stale response guards when switching views quickly.
    - Render large lists with pagination or bounded windows before adding virtualization.
+
+## Campaigns Workbench Refactor Notes
+
+UX feedback shows the current Campaigns page mixes campaign, experiment, and variant levels. The refactor should preserve DEE's product model while reducing page confusion:
+
+- Treat Campaigns as a campaign asset workbench, not a generic analytics dashboard.
+- Keep the global Evaluate workspace, but expose a single contextual "Open in Evaluate" action from campaign/experiment detail.
+- Split rendering into campaign list, experiment list, experiment detail header, readiness checklist, design summaries, settings summary, and results panels.
+- Use status chips as active filters; avoid aggregate metric bars that duplicate experiment cards without changing the list.
+- Collapse raw JSON by default in marketer views and keep developer payloads in disclosures.
+- Normalize action hierarchy: primary create action, secondary export, utility refresh.
 
 5. Module migration.
    - Once feature files are split, convert static scripts to ES modules.

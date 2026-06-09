@@ -192,8 +192,34 @@ Goal: make DEE safer and easier for marketing practitioners to operate without e
 - Add web experiment targeting and delivery settings for display frequency, URL rules, page variables, consent/category gates, device targeting, trigger model, named SDK conditions, and richer conversion goal attribution. See `docs/experiment-targeting-roadmap.md`.
 - Add a visual website experiment editor for selector-based page modifications, variant switching, modification inventory, responsive preview, guarded HTML/web-layer insertion, shareable preview links, and draft-only save-back. See `docs/visual-experiment-editor-roadmap.md`.
 - Replace remaining modal-heavy editors with page-level workbenches, inline detail panels, or persistent side panels.
+- Refine the Campaigns workbench around a clear Campaign -> Experiment -> Variant hierarchy instead of a flat experiment-only list.
+- Harmonize experiment status terminology across cards, filters, readiness checks, and rollups; use aggregate status chips as filters rather than decorative metrics.
+- Consolidate duplicate experiment actions: keep a single top-level Evaluate workspace and use contextual "Open in Evaluate" links instead of a partial in-panel Evaluate tab.
+- Reduce marketer-facing raw JSON in the Experiment Design tab by replacing always-visible payload blocks with human-readable summaries and collapsed developer payload drawers.
+- Add Campaigns list search, status filters, campaign filters, and sorting by recency/performance; tune experiment cards so draft cards show setup actions while running/completed cards prioritize winner/significance signals.
+- Clean campaign breadcrumbs and status placement so user-facing labels are shown once, with setup checklist actions linking to the relevant Design or Settings section.
 
 Status: started with experiment significance calculations, confidence labels, minimum-sample guidance, CSV export fields, significance-methodology copy, declare-winner draft preparation, a guarded adaptive multi-armed bandit assignment mode with exploration floor, minimum-sample guardrail, optional rolling window, freeze-to-winner support, and recent assignment-history rollups, a visual experiment variant builder with allocation controls, output fields, and blocking 100% weight validation, plain-language branch condition summaries with schema-aware inline field hints, branch output message linking with compact content previews, message-to-rule backlink inventory in the message editor, live message preview syncing, image upload/drop support for managed message assets, message personalization token suggestions with sample-rendered previews, real-time message preview health states for lifecycle, content completeness, CTA readiness, token sample coverage, and mobile clipping risk, approval workflow behind a feature flag, typed rule creation, decision-key locking after save, experiment quick-create shortcuts, goal configuration, scheduling, sample-size guidance, first-pass web experiment targeting/delivery metadata validation plus SDK execution, marketer-facing experiment delivery controls for display frequency, URL/device targeting, SDK conditions, consent gates, triggers, attribution window, and value field, plus conversion-goal reporting with attribution-window and value-field rollups. Reference Data search/filtering, column quality checks, editable validation rules with advisory/warn/block save policies, Audit default date ranges, auto-load, matched-rule/payload filters, collapsible raw payload detail, client feedback event mode with event type/object/surface filters, Message catalog status/template/surface filters, message duplication, surface suggestions, preview thumbnails, persistent image asset storage with unused cleanup, Overview range selection with operational alerts, baseline alert history, a documented visual experiment editor implementation track, the first SDK `dom_modifications` runtime renderer with mock-site coverage, a first-pass in-app DOM modification builder for experiment variant outputs, marketer-friendly DOM modification presets with visual summaries, selector-quality/payload-preview panels, and mock-site DOM modification diagnostics for applied/skipped selector operations are implemented.
+
+### Campaign Workbench UX Refinement
+
+Accepted from UX review because it fits DEE's campaign-oriented decisioning model:
+
+- Add an explicit campaign master/detail entry point so users select a campaign first, then inspect related experiments, rules, messages, surfaces, recent events, and review status.
+- Convert top aggregate experiment chips into useful filters or remove them in favor of a compact filter/sort toolbar directly above the list.
+- Standardize status language: use `draft`, `running`, `paused`, and `completed/archived` consistently, with display labels mapped from internal states.
+- Replace the partial Experiment Workbench "Evaluate" tab with a contextual action that opens the global Evaluate workspace preloaded for the experiment.
+- Rename readiness overview actions from edit-like labels to checklist/navigation labels, and route failing checks directly to Design or Settings sections.
+- Make experiment cards progressive: draft cards emphasize setup completion and Configure actions; running/completed cards emphasize winner, significance, lift, last event, and feedback depth.
+- Add search, status filters, campaign filters, and sort controls for the experiment list.
+- Clean breadcrumbs to user-facing labels only, and show experiment status once next to the title.
+- Collapse raw variant output JSON by default behind developer payload disclosures; show marketer-readable variant summaries first.
+- Apply clearer action hierarchy: New Experiment as primary, export as secondary, refresh as a utility action.
+
+Deferred or not adopted:
+
+- Removing the global Evaluate page is not adopted. DEE needs a shared QA workspace for rules, messages, and experiments; Campaigns should deep-link into it instead.
+- Turning Campaigns into a generic analytics dashboard is not adopted. Overview remains the broad operational dashboard; Campaigns should focus on campaign assets, setup, delivery, and experiment operations.
 
 ## Second-Pass User Feedback Roadmap
 
