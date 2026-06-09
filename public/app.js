@@ -3590,54 +3590,61 @@ function renderResultDistribution(metrics) {
   const target = document.querySelector("#metrics-result-distribution");
   if (!target) return;
   const items = metrics.result_distribution || [];
-  const total = Math.max(1, items.reduce((sum, item) => sum + Number(item.count || 0), 0));
-  const primary = items[0];
-  const primaryShare = primary ? Math.round((Number(primary.count || 0) / total) * 100) : 0;
-  target.innerHTML = `
-    <div class="donut-summary" style="--donut:${primaryShare * 3.6}deg">
-      <div><strong>${escapeHtml(formatNumber(total))}</strong><span>Total</span></div>
-    </div>
-    <div class="distribution-list">
-      ${items.length ? items.map((item) => distributionRow(item, total)).join("") : `<div class="status-line">No results yet</div>`}
+  target.innerHTML = portfolioComposition(
+    "Decision outcomes",
+    items.map((item) => ({ label: item.result, value: Number(item.count || 0), tone: portfolioResultTone(item.result) })),
+    "No results yet"
+  );
+}
+
+function portfolioComposition(title, rows = [], emptyLabel = "No data yet") {
+  const visibleRows = rows.filter((row) => Number(row.value || 0) > 0);
+  const total = visibleRows.reduce((sum, row) => sum + Number(row.value || 0), 0);
+  if (!visibleRows.length) return `<div class="status-line">${escapeHtml(emptyLabel)}</div>`;
+  return `
+    <div class="portfolio-composition">
+      <strong>${escapeHtml(title)} - ${escapeHtml(formatNumber(total))} total</strong>
+      <div class="portfolio-stack" aria-label="${escapeHtml(title)}">
+        ${visibleRows.map((row) => {
+          const share = Math.max(0.5, (Number(row.value || 0) / Math.max(1, total)) * 100);
+          return `<span class="${escapeHtml(row.tone || "neutral")}" style="width:${share}%"></span>`;
+        }).join("")}
+      </div>
+      <div class="portfolio-composition-list">
+        ${visibleRows.map((row) => portfolioCompositionRow(row, total)).join("")}
+      </div>
     </div>
   `;
 }
 
-function distributionRow(item, total) {
-  const share = Math.round((Number(item.count || 0) / Math.max(1, total)) * 100);
+function portfolioCompositionRow(row, total) {
+  const share = Math.round((Number(row.value || 0) / Math.max(1, total)) * 100);
   return `
-    <div class="distribution-row">
-      <span>${escapeHtml(item.result)}</span>
-      <strong>${escapeHtml(formatNumber(item.count))}</strong>
+    <div class="portfolio-composition-row">
+      <span><i class="${escapeHtml(row.tone || "neutral")}"></i>${escapeHtml(titleCase(row.label || "-"))}</span>
+      <strong>${escapeHtml(formatNumber(row.value || 0))}</strong>
       <small>${share}%</small>
     </div>
   `;
 }
 
+function portfolioResultTone(result = "") {
+  const normalized = String(result || "").toLowerCase();
+  if (normalized === "eligible") return "eligible";
+  if (normalized === "deferred") return "deferred";
+  if (normalized === "suppressed") return "suppressed";
+  if (normalized === "ineligible") return "ineligible";
+  return "neutral";
+}
+
 function renderRulesInventory(rules) {
   const target = document.querySelector("#metrics-rule-inventory");
   if (!target) return;
-  const total = Math.max(1, Number(rules.total || 0));
-  target.innerHTML = `
-    <div class="inventory-ring" style="--published:${Math.round((Number(rules.published || 0) / total) * 360)}deg">
-      <div><strong>${escapeHtml(formatNumber(rules.total || 0))}</strong><span>Total</span></div>
-    </div>
-    <div class="inventory-list">
-      ${inventoryRow("Published", rules.published || 0, total)}
-      ${inventoryRow("Draft", rules.draft || 0, total)}
-      ${inventoryRow("Archived", rules.archived || 0, total)}
-    </div>
-  `;
-}
-
-function inventoryRow(label, value, total) {
-  return `
-    <div class="inventory-row">
-      <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(formatNumber(value))}</strong>
-      <small>${Math.round((Number(value || 0) / Math.max(1, total)) * 100)}%</small>
-    </div>
-  `;
+  target.innerHTML = portfolioComposition("Rules & experiments", [
+    { label: "Published", value: Number(rules.published || 0), tone: "published" },
+    { label: "Draft", value: Number(rules.draft || 0), tone: "draft" },
+    { label: "Archived", value: Number(rules.archived || 0), tone: "archived" }
+  ], "No rules or experiments yet");
 }
 
 function renderOverviewFooter(metrics) {
