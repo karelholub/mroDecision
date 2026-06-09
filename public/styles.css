@@ -2233,6 +2233,59 @@ aside input {
   font-weight: 800;
 }
 
+.experiment-visual-import-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid rgba(14, 154, 142, 0.24);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(14, 154, 142, 0.04);
+}
+
+.experiment-visual-import-panel summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.experiment-visual-import-panel[open] summary {
+  margin-bottom: 10px;
+}
+
+.experiment-visual-import-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.35fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: end;
+  min-width: 0;
+}
+
+.experiment-visual-import-grid label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.experiment-visual-import-help,
+.experiment-visual-import-panel [data-visual-import-status] {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.experiment-visual-import-panel textarea {
+  width: 100%;
+  min-height: 180px;
+  min-width: 0;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
 .experiment-snippet-guidance {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -7893,6 +7946,7 @@ pre {
   .variant-dom-row,
   .variant-dom-target-grid,
   .experiment-workbench-head,
+  .experiment-visual-import-grid,
   .experiment-design-card dl {
     grid-template-columns: 1fr;
   }

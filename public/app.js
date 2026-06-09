@@ -1920,6 +1920,7 @@ function experimentTabContent(experiment, tab) {
 
 function experimentDesignTab(experiment) {
   const variants = Array.isArray(experiment.variants) ? experiment.variants : [];
+  const defaultEditableVariant = variants.find((variant) => !variant.baseline && variant.key !== "control")?.key || "";
   return `
     <section class="experiment-tab-panel">
       <div class="experiment-tab-intro">
@@ -1929,6 +1930,7 @@ function experimentDesignTab(experiment) {
         </div>
         <div class="experiment-tab-actions">
           <button type="button" data-experiment-action="open-visual-editor" data-rule-key="${escapeHtml(experiment.decision_key)}">Open Visual Editor</button>
+          <button type="button" data-experiment-action="focus-visual-import" data-rule-key="${escapeHtml(experiment.decision_key)}">Import Visual Payload</button>
           <button type="button" data-experiment-action="open-editor" data-editor-section="design" data-rule-key="${escapeHtml(experiment.decision_key)}">Edit Design</button>
         </div>
       </div>
@@ -1949,6 +1951,27 @@ function experimentDesignTab(experiment) {
           </article>
         `).join("") : `<div class="status-line">No variants configured.</div>`}
       </div>
+      <details class="experiment-visual-import-panel" data-visual-import-panel>
+        <summary>Import visual editor payload</summary>
+        <div class="experiment-visual-import-grid">
+          <label>
+            Target variant
+            <select data-visual-import-variant>
+              ${variants.map((variant) => `
+                <option value="${escapeHtml(variant.key || "")}" ${variant.key === defaultEditableVariant ? "selected" : ""} ${variant.baseline || variant.key === "control" ? "disabled" : ""}>${escapeHtml(variant.key || "(empty)")}${variant.baseline || variant.key === "control" ? " (control)" : ""}</option>
+              `).join("")}
+            </select>
+          </label>
+          <div class="experiment-visual-import-help">
+            Paste the JSON copied from the mock-site visual editor. DEE updates only the selected draft variant outputs; publishing still happens through the normal review flow.
+          </div>
+        </div>
+        <textarea data-visual-import-json spellcheck="false" placeholder='{"variant":"treatment","outputs":{"template":"dom_modifications","modifications":[]}}'></textarea>
+        <div class="experiment-tab-actions">
+          <button type="button" data-experiment-action="apply-visual-payload" data-rule-key="${escapeHtml(experiment.decision_key)}">Apply to Draft Variant</button>
+          <span data-visual-import-status>Waiting for copied visual editor JSON.</span>
+        </div>
+      </details>
       <details class="experiment-snippet-panel">
         <summary>Website rendering contract</summary>
         <div class="experiment-snippet-guidance">
@@ -2159,9 +2182,97 @@ function bindExperimentDetailActions(experiment) {
   });
   experimentDetail.querySelector('[data-experiment-action="open-evaluate"]')?.addEventListener("click", () => openExperimentInEvaluate(experiment));
   experimentDetail.querySelector('[data-experiment-action="open-visual-editor"]')?.addEventListener("click", () => openExperimentVisualEditor(experiment));
+  experimentDetail.querySelector('[data-experiment-action="focus-visual-import"]')?.addEventListener("click", () => focusVisualPayloadImport());
+  experimentDetail.querySelector('[data-experiment-action="apply-visual-payload"]')?.addEventListener("click", () => applyVisualEditorPayload(experiment));
   experimentDetail.querySelectorAll('[data-experiment-action="open-editor"]').forEach((button) => {
     button.addEventListener("click", () => openExperimentInRuleEditor(experiment, button.dataset.editorSection || "operations"));
   });
+}
+
+function focusVisualPayloadImport() {
+  const panel = experimentDetail?.querySelector("[data-visual-import-panel]");
+  if (!panel) return;
+  panel.open = true;
+  panel.scrollIntoView({ behavior: "smooth", block: "center" });
+  panel.querySelector("[data-visual-import-json]")?.focus();
+}
+
+async function applyVisualEditorPayload(experiment) {
+  const panel = experimentDetail?.querySelector("[data-visual-import-panel]");
+  const status = panel?.querySelector("[data-visual-import-status]");
+  try {
+    if (!panel) throw new Error("Visual import panel is not available.");
+    const imported = parseVisualEditorPayload(panel.querySelector("[data-visual-import-json]")?.value || "");
+    const selectedVariant = panel.querySelector("[data-visual-import-variant]")?.value || imported.variant;
+    if (!selectedVariant) throw new Error("Choose a treatment variant before applying the payload.");
+    if (selectedVariant === "control") throw new Error("Control variants cannot be edited by visual payload import.");
+    const body = await api(`/v1/rule-sets/${encodeURIComponent(experiment.decision_key)}`);
+    const ruleSet = body.rule_set || {};
+    const metadata = JSON.parse(JSON.stringify(ruleSet.metadata || {}));
+    const experimentMetadata = metadata.experiment || {};
+    const variants = Array.isArray(experimentMetadata.variants) ? experimentMetadata.variants : [];
+    const variant = variants.find((item) => item.key === selectedVariant);
+    if (!variant) throw new Error(`Variant not found in draft metadata: ${selectedVariant}`);
+    if (variant.baseline || variant.key === "control") throw new Error("Baseline/control variants cannot receive visual editor modifications.");
+    variant.outputs = {
+      ...(variant.outputs || {}),
+      ...imported.outputs,
+      template: "dom_modifications",
+      modifications: imported.outputs.modifications
+    };
+    experimentMetadata.variants = variants;
+    metadata.experiment = experimentMetadata;
+    const update = await api(`/v1/rule-sets/${encodeURIComponent(experiment.decision_key)}/draft`, {
+      method: "PUT",
+      body: JSON.stringify({
+        name: ruleSet.name,
+        decision_key: ruleSet.decision_key,
+        description: ruleSet.description || "",
+        type: ruleSet.type || "experiment",
+        priority: Number(ruleSet.priority || 0),
+        surface: ruleSet.surface || "",
+        cache_policy: ruleSet.cache_policy || {},
+        input_schema: ruleSet.input_schema || {},
+        output_schema: ruleSet.output_schema || {},
+        metadata,
+        draft: body.draft,
+        tags: ruleSet.tags || []
+      })
+    });
+    if (status) {
+      status.textContent = `Saved ${imported.outputs.modifications.length} DOM modification${imported.outputs.modifications.length === 1 ? "" : "s"} to ${selectedVariant}.`;
+    }
+    await Promise.all([loadRules(), loadExperiments()]);
+    selectedExperimentKey = experiment.decision_key;
+    renderExperiments();
+    editorOutput.textContent = JSON.stringify(update, null, 2);
+  } catch (error) {
+    if (status) status.textContent = error.message;
+    else editorOutput.textContent = error.message;
+  }
+}
+
+function parseVisualEditorPayload(text) {
+  const payload = parseJsonStrict(text || "{}", "Visual editor payload");
+  const outputs = payload.outputs || payload;
+  if (outputs.template !== "dom_modifications") {
+    throw new Error("Visual editor payload must use outputs.template = dom_modifications.");
+  }
+  if (!Array.isArray(outputs.modifications)) {
+    throw new Error("Visual editor payload must include outputs.modifications as an array.");
+  }
+  for (const modification of outputs.modifications) {
+    if (!modification || typeof modification !== "object") throw new Error("Each modification must be an object.");
+    if (!modification.type || !modification.selector) throw new Error("Each modification must include type and selector.");
+  }
+  return {
+    variant: payload.variant || "",
+    outputs: {
+      ...outputs,
+      template: "dom_modifications",
+      modifications: outputs.modifications
+    }
+  };
 }
 
 async function openExperimentVisualEditor(experiment) {
