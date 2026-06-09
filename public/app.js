@@ -2020,8 +2020,7 @@ function experimentStatusFilterChips(summary = {}, activeStatus = "") {
     { key: "running", label: "Running", value: summary.running || 0, detail: "receiving traffic" },
     { key: "draft", label: "Draft", value: summary.draft || 0, detail: "setup needed" },
     { key: "paused", label: "Paused", value: summary.paused || 0, detail: "not assigning" },
-    { key: "archived", label: "Archived", value: summary.archived || 0, detail: "completed" },
-    { key: "feedback", label: "Feedback", value: summary.exposures || 0, detail: `${formatNumber(summary.conversions || 0)} conversions` }
+    { key: "archived", label: "Archived", value: summary.archived || 0, detail: "completed" }
   ];
   return chips.map((chip) => {
     const statusFilter = chip.key === "feedback" ? "" : chip.key;

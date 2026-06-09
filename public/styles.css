@@ -11,6 +11,8 @@
   --nav-ink: #eef3f8;
   --accent: #0f766e;
   --accent-soft: #dff3ef;
+  --teal: #0f766e;
+  --teal-dark: #0b5f59;
   --success-soft: #ecfdf3;
   --warning-soft: #fff4d6;
   --danger: #b42318;
@@ -40,13 +42,13 @@ aside {
   height: 100vh;
   overflow: auto;
   background:
-    radial-gradient(circle at 16% 8%, rgba(71, 117, 255, 0.28), transparent 24%),
-    linear-gradient(180deg, #06182d 0%, #09233c 45%, #07172a 100%);
+    radial-gradient(circle at 18% 6%, rgba(20, 184, 166, 0.18), transparent 25%),
+    linear-gradient(180deg, #0b1724 0%, #0c1a28 48%, #081421 100%);
   color: var(--nav-ink);
-  padding: 28px 18px;
+  padding: 22px 14px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
 .brand {
@@ -63,12 +65,12 @@ aside {
   grid-row: 1 / span 2;
   width: 46px;
   height: 46px;
-  border: 1px solid rgba(96, 165, 250, 0.72);
+  border: 1px solid rgba(125, 211, 202, 0.7);
   border-radius: 10px;
-  background: linear-gradient(135deg, rgba(30, 64, 175, 0.78), rgba(15, 23, 42, 0.22));
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.86), rgba(15, 23, 42, 0.28));
   color: #ffffff;
   font-weight: 800;
-  box-shadow: 0 12px 30px rgba(37, 99, 235, 0.28);
+  box-shadow: 0 10px 24px rgba(15, 118, 110, 0.24);
 }
 
 h1,
@@ -99,12 +101,12 @@ h2 {
 
 nav {
   display: grid;
-  gap: 8px;
+  gap: 5px;
 }
 
 .nav-section {
-  margin: 14px 8px 4px;
-  color: #9aa8ba;
+  margin: 12px 10px 4px;
+  color: #a7b3c2;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0;
@@ -129,18 +131,18 @@ button:hover {
 nav button {
   display: flex;
   align-items: center;
-  min-height: 46px;
+  min-height: 40px;
   border-radius: 8px;
   justify-content: flex-start;
   border-color: transparent;
   background: transparent;
-  color: #d7dee8;
+  color: #c7d2df;
   text-align: left;
 }
 
 nav button.active,
 nav button:hover {
-  background: rgba(148, 163, 184, 0.16);
+  background: rgba(20, 184, 166, 0.18);
   color: #ffffff;
 }
 
@@ -1544,25 +1546,40 @@ aside input {
 
 .experiment-filter-bar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
-  align-items: stretch;
+  grid-template-columns: minmax(0, auto) minmax(340px, 1fr);
+  gap: 8px 12px;
+  align-items: center;
   min-width: 0;
-  padding: 8px 14px;
+  padding: 7px 14px;
   background: #ffffff;
   border-bottom: 1px solid var(--line);
 }
 
 .experiment-filter-controls {
   display: grid;
-  grid-template-columns: minmax(170px, 0.75fr) minmax(190px, 1fr) minmax(130px, 0.45fr) minmax(150px, 0.55fr);
+  grid-template-columns: minmax(180px, 0.8fr) minmax(220px, 1fr) minmax(120px, 0.45fr);
   gap: 8px;
-  align-items: end;
+  align-items: center;
   min-width: 0;
+  order: 2;
 }
 
 .experiment-filter-bar .compact-filter {
+  gap: 0;
   min-width: 0;
+  font-size: 0;
+}
+
+.experiment-filter-bar .compact-filter:nth-child(3) {
+  display: none;
+}
+
+.experiment-filter-bar .compact-filter input,
+.experiment-filter-bar .compact-filter select {
+  min-height: 32px;
+  padding: 6px 10px;
+  color: #344054;
+  font-size: 13px;
 }
 
 .experiment-filter-bar .campaign-master-list {
@@ -1575,6 +1592,7 @@ aside input {
   gap: 8px;
   min-width: 0;
   overflow-x: auto;
+  order: 1;
   padding-bottom: 1px;
   scrollbar-width: none;
 }
@@ -1899,21 +1917,21 @@ aside input {
 .experiment-status-chip {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   flex: 0 0 auto;
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 7px 10px;
+  padding: 5px 9px;
   background: #ffffff;
   color: var(--ink);
   text-align: left;
-  min-height: 34px;
+  min-height: 30px;
 }
 
 .experiment-status-chip:hover,
 .experiment-status-chip.active {
-  border-color: rgba(14, 154, 142, 0.45);
-  background: rgba(14, 154, 142, 0.06);
+  border-color: rgba(15, 118, 110, 0.55);
+  background: rgba(15, 118, 110, 0.07);
 }
 
 .experiment-status-chip strong,
@@ -1927,18 +1945,28 @@ aside input {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 26px;
-  min-height: 22px;
+  min-width: 24px;
+  min-height: 20px;
   border-radius: 999px;
-  padding: 0 7px;
-  background: var(--panel-soft);
-  font-size: 13px;
+  padding: 0 6px;
+  background: #eef2f6;
+  color: #475467;
+  font-size: 12px;
   font-weight: 900;
+}
+
+.experiment-status-chip.active span {
+  background: #0f766e;
+  color: #ffffff;
 }
 
 .experiment-status-chip small {
   color: var(--muted);
   font-size: 11px;
+}
+
+.experiment-filter-bar .experiment-status-chip small {
+  display: none;
 }
 
 .experiment-pane-head {
@@ -3453,6 +3481,26 @@ header {
 .view.active {
   display: block;
   min-width: 0;
+}
+
+#experiments header {
+  align-items: center;
+  min-height: 46px;
+  margin-bottom: 10px;
+}
+
+#experiments header h2 {
+  font-size: 22px;
+}
+
+#experiments .page-subtitle {
+  color: #475467;
+  font-size: 12px;
+}
+
+#experiments header .actions button {
+  min-height: 34px;
+  padding: 0 11px;
 }
 
 .overview-workbench {
