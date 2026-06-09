@@ -909,6 +909,84 @@ aside input {
   background: #ffffff;
 }
 
+.variant-dom-quality {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px;
+  background: #ffffff;
+}
+
+.variant-dom-quality.ok {
+  border-color: rgba(14, 154, 142, 0.24);
+  background: rgba(14, 154, 142, 0.05);
+}
+
+.variant-dom-quality.warn {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.variant-dom-quality.error {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: rgba(254, 242, 242, 0.82);
+}
+
+.variant-dom-quality-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.variant-dom-quality-kpis span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  padding: 7px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.variant-dom-quality-kpis strong {
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.variant-dom-json {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.variant-dom-json summary {
+  cursor: pointer;
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.variant-dom-json pre {
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+  padding: 10px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .variant-weight-control {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 76px;
@@ -7293,6 +7371,7 @@ pre {
   .variant-dom-head,
   .variant-dom-toolbar,
   .variant-dom-preview,
+  .variant-dom-quality-kpis,
   .variant-dom-row,
   .variant-dom-target-grid {
     grid-template-columns: 1fr;

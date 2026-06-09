@@ -3064,9 +3064,11 @@ function renderExperimentVariantBuilder(variants = []) {
         <div class="variant-dom-preview">
           ${domModificationPreview(variant.outputs || {})}
         </div>
-        <div class="variant-dom-guidance">
-          ${domModificationWarnings(variant.outputs || {}).map((warning) => `<span>${escapeHtml(warning)}</span>`).join("") || "<span>No DOM modification warnings.</span>"}
-        </div>
+        <details class="variant-dom-json">
+          <summary>Generated SDK output</summary>
+          <pre>${escapeHtml(JSON.stringify(domModificationSdkOutputPreview(variant.outputs || {}), null, 2))}</pre>
+        </details>
+        ${domModificationQualityPanel(variant.outputs || {})}
       </div>
       <div class="variant-builder-actions">
         <button type="button" data-variant-action="add-output">Add Output</button>
@@ -3276,6 +3278,13 @@ function domModificationPreview(outputs = {}) {
   }).join("");
 }
 
+function domModificationSdkOutputPreview(outputs = {}) {
+  const modifications = domModificationFields(outputs);
+  return modifications.length
+    ? { template: "dom_modifications", modifications }
+    : { template: "dom_modifications", modifications: [] };
+}
+
 function domModificationSummary(modification = {}) {
   if (modification.type === "change_text") return `Set text to "${truncateForUi(modification.value || modification.text || "", 70)}"`;
   if (modification.type === "change_attribute") return `Set ${modification.attribute || modification.name || "attribute"} to "${truncateForUi(modification.value || "", 70)}"`;
@@ -3316,6 +3325,37 @@ function domModificationWarnings(outputs = {}) {
     const prefix = modification.id || `mod_${index + 1}`;
     return warning ? [`${prefix}: ${warning}`] : [];
   });
+}
+
+function domModificationQualityPanel(outputs = {}) {
+  const modifications = domModificationFields(outputs);
+  const quality = domModificationQuality(modifications);
+  const messages = domModificationWarnings(outputs);
+  return `
+    <div class="variant-dom-quality ${quality.invalid ? "error" : quality.warnings ? "warn" : "ok"}">
+      <div class="variant-dom-quality-kpis">
+        <span><strong>${escapeHtml(quality.total)}</strong> modifications</span>
+        <span><strong>${escapeHtml(quality.ready)}</strong> ready</span>
+        <span><strong>${escapeHtml(quality.warnings)}</strong> warnings</span>
+        <span><strong>${escapeHtml(quality.invalid)}</strong> invalid</span>
+      </div>
+      <div class="variant-dom-guidance">
+        ${messages.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("") || "<span>No DOM modification warnings.</span>"}
+      </div>
+    </div>
+  `;
+}
+
+function domModificationQuality(modifications = []) {
+  return modifications.reduce((acc, modification) => {
+    const warning = domModificationRowWarning(modification);
+    const invalid = warning && /missing selector|syntax looks invalid|attribute name may be unsafe|styles must be valid json/i.test(warning);
+    acc.total += 1;
+    if (!warning) acc.ready += 1;
+    if (warning) acc.warnings += 1;
+    if (invalid) acc.invalid += 1;
+    return acc;
+  }, { total: 0, ready: 0, warnings: 0, invalid: 0 });
 }
 
 function domModificationRowWarning(modification = {}) {
