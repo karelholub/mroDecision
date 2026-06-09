@@ -102,6 +102,7 @@ const overviewServiceFooter = document.querySelector("#overview-service-footer")
 const overviewChangeLog = document.querySelector("#overview-change-log");
 const overviewCampaignRollups = document.querySelector("#overview-campaign-rollups");
 const overviewCampaignDetail = document.querySelector("#overview-campaign-detail");
+const overviewLiveAssets = document.querySelector("#overview-live-assets");
 const overviewRuleDetailPanel = document.querySelector("#overview-rule-detail-panel");
 const experimentKpis = document.querySelector("#experiment-kpis");
 const experimentList = document.querySelector("#experiment-list");
@@ -756,16 +757,16 @@ function renderMetrics(metrics) {
   const impressionRate = rate(eventCounts.impression || 0, windowRequests);
   const conversionRate = rate(eventCounts.conversion || 0, Math.max(eventCounts.impression || 0, eventCounts.exposure || 0));
   metricCards.innerHTML = [
-    metricCard("Decisions", formatNumber(windowRequests), `${windowLabel} evaluations`, "D", "teal"),
-    metricCard("Audience Reach", formatNumber(requests.unique_profiles_window ?? requests.unique_profiles), "unique profiles", "A", "blue"),
-    metricCard("Eligible Rate", formatPercent(eligibilityRate), `${formatNumber(eligibleCount)} eligible outcomes`, "ER", "teal"),
-    metricCard("Precompute", formatNumber(precompute.profile_count || 0), `${formatNumber(precompute.eligible_profiles || 0)} eligible profiles`, "IP", "blue"),
-    metricCard("Impression Rate", formatPercent(impressionRate), `${formatNumber(eventCounts.impression || 0)} impressions`, "IR", "blue"),
-    metricCard("Conversion Rate", formatPercent(conversionRate), `${formatNumber(eventCounts.conversion || 0)} conversions`, "CR", "purple"),
-    metricCard("Live Assets", formatNumber(rules.published), `${formatNumber(rules.draft)} drafts waiting`, "LA", "purple")
+    pipelineCell("REQ", "Evaluations", formatNumber(windowRequests), windowLabel, "teal"),
+    pipelineCell("AUD", "Audience", formatNumber(requests.unique_profiles_window ?? requests.unique_profiles), "unique profiles", "blue"),
+    pipelineCell("ELG", "Eligibility", formatPercent(eligibilityRate), `${formatNumber(eligibleCount)} eligible`, "teal"),
+    pipelineCell("EXP", "Exposures", formatNumber(eventCounts.exposure || 0), `${formatPercent(rate(eventCounts.exposure || 0, windowRequests))} of evaluations`, "purple"),
+    pipelineCell("IMP", "Impressions", formatNumber(eventCounts.impression || 0), `${formatPercent(impressionRate)} impression rate`, "blue"),
+    pipelineCell("CVR", "Conversions", formatNumber(eventCounts.conversion || 0), `${formatPercent(conversionRate)} conversion rate`, "teal")
   ].join("");
 
   renderOverviewAlerts(metrics);
+  renderOverviewLiveAssets(metrics);
   renderOverviewAnomalyHistory(metrics.anomaly_baseline || {});
   renderRuleUsage(metrics.rule_usage || []);
   loadClientEventMetrics();
@@ -794,13 +795,60 @@ function resultCount(items = [], result) {
 function renderOverviewAlerts(metrics) {
   if (!overviewAlerts) return;
   const alerts = overviewAlertItems(metrics);
-  overviewAlerts.innerHTML = alerts.map((item) => `
-    <div class="overview-alert ${escapeHtml(item.level)}">
-      <span>${escapeHtml(item.label)}</span>
-      <strong>${escapeHtml(item.title)}</strong>
-      <small>${escapeHtml(item.detail)}</small>
+  const active = alerts.find((item) => item.level !== "ok") || alerts[0] || { level: "ok", title: "All systems healthy", detail: "Runtime, traffic, schema, and feedback signals look normal." };
+  const checks = overviewHealthChecks(metrics);
+  overviewAlerts.innerHTML = `
+    <div class="overview-health-bar ${escapeHtml(active.level)}">
+      <span class="overview-health-dot"></span>
+      <div>
+        <strong>${escapeHtml(active.level === "ok" ? "All systems healthy" : active.title)}</strong>
+        <small>${escapeHtml(active.detail)}</small>
+      </div>
+      <div class="overview-health-checks">
+        ${checks.map((check) => `<span class="${check.ok ? "ok" : "warn"}">${escapeHtml(check.label)}</span>`).join("")}
+      </div>
     </div>
-  `).join("");
+  `;
+}
+
+function overviewHealthChecks(metrics = {}) {
+  const schema = metrics.schema || {};
+  const events = metrics.client_events || {};
+  const runtime = metrics.runtime_requests || {};
+  const rateLimit = metrics.client_rate_limit || {};
+  const profileCache = metrics.profile_cache || {};
+  return [
+    { label: "Profile fields", ok: Number(profileCache.errors || 0) === 0 },
+    { label: "Feedback loop", ok: Number(events.window ?? events.last_24h ?? 0) > 0 },
+    { label: "Service reliability", ok: Number(runtime.error_rate || 0) < 0.05 },
+    { label: "Schema sync", ok: !schema.last_sync_status || ["ok", "success", "never"].includes(String(schema.last_sync_status).toLowerCase()) },
+    { label: "Rate limits", ok: Number(rateLimit.blocked || 0) === 0 }
+  ];
+}
+
+function renderOverviewLiveAssets(metrics = {}) {
+  if (!overviewLiveAssets) return;
+  const rules = metrics.rules || {};
+  const precompute = metrics.precompute || {};
+  const cache = metrics.client_cache || {};
+  const live = Number(rules.published || 0);
+  const drafts = Number(rules.draft || 0);
+  overviewLiveAssets.innerHTML = `
+    <div class="live-assets-badge">${escapeHtml(formatNumber(live))}</div>
+    <div>
+      <span>Live Assets</span>
+      <strong>${escapeHtml(formatNumber(rules.total || live))} rules and experiments tracked</strong>
+      <small>${escapeHtml(formatNumber(drafts))} drafts waiting · ${escapeHtml(formatNumber(precompute.profile_count || 0))} precomputed profiles</small>
+    </div>
+    <div class="live-assets-divider"></div>
+    <div>
+      <span>Cache quality</span>
+      <strong>${escapeHtml(formatPercent(cache.hit_rate || 0))} client hit rate</strong>
+      <small>${escapeHtml(formatNumber(cache.entries || 0))} active entries</small>
+    </div>
+    ${drafts ? `<button type="button" data-view="rules">Review drafts</button>` : `<span class="live-assets-ready">No drafts waiting</span>`}
+  `;
+  overviewLiveAssets.querySelector("[data-view='rules']")?.addEventListener("click", () => switchView("rules"));
 }
 
 function overviewAlertItems(metrics) {
@@ -3402,6 +3450,19 @@ function metricCard(label, value, meta, icon = "M", tone = "blue") {
         <span>${escapeHtml(label)}</span>
         <strong>${escapeHtml(String(value))}</strong>
         <small>${escapeHtml(meta)}</small>
+      </div>
+    </div>
+  `;
+}
+
+function pipelineCell(icon, label, value, meta, tone = "teal") {
+  return `
+    <div class="pipeline-cell">
+      <span class="pipeline-icon ${escapeHtml(tone)}">${escapeHtml(icon)}</span>
+      <div>
+        <small>${escapeHtml(label)}</small>
+        <strong>${escapeHtml(String(value))}</strong>
+        <em>${escapeHtml(meta)}</em>
       </div>
     </div>
   `;
