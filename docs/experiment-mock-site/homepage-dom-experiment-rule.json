@@ -1,0 +1,204 @@
+{
+  "name": "Homepage DOM Modification Experiment",
+  "decision_key": "homepage_dom_experiment",
+  "description": "Sample visual-editor-style experiment for the DEE website lab. The treatment variant applies structured DOM modifications through the SDK.",
+  "type": "experiment",
+  "surface": "homepage_visual_editor",
+  "priority": 75,
+  "tags": ["example", "website", "experiment", "dom_modifications"],
+  "input_schema": {
+    "attributes": {
+      "lead_score": "number",
+      "sustainability_score": "number"
+    },
+    "segments": {
+      "demo_site_visitor": "boolean"
+    },
+    "context": {
+      "channel": "string",
+      "surface": "string",
+      "placement": "string",
+      "page_url": "string"
+    }
+  },
+  "output_schema": {
+    "template": "string",
+    "modifications": "array",
+    "campaign": "string"
+  },
+  "cache_policy": {
+    "client_ttl": 300,
+    "scope": "profile"
+  },
+  "metadata": {
+    "campaign": "Homepage Visual Editor Demo",
+    "folder": "Website experiments",
+    "ttl_seconds": 300,
+    "experiment": {
+      "status": "running",
+      "unit": "profile",
+      "mode": "fixed",
+      "baseline_variant": "control",
+      "goal": {
+        "event": "mock_purchase",
+        "type": "conversion",
+        "minimum_detectable_lift_pct": 10,
+        "baseline_conversion_rate_pct": 5,
+        "attribution_window_hours": 168
+      },
+      "schedule": {
+        "daily_eligible_profiles": 1000
+      },
+      "display": {
+        "mode": "always",
+        "reset_on_version_change": true
+      },
+      "targeting": {
+        "devices": ["desktop", "tablet", "mobile"],
+        "url_rules": [
+          { "mode": "include", "operator": "contains", "value": "/experiment-mock-site" }
+        ]
+      },
+      "variants": [
+        {
+          "key": "control",
+          "weight": 50,
+          "baseline": true,
+          "outputs": {
+            "template": "dom_modifications",
+            "campaign": "Homepage Visual Editor Demo",
+            "modifications": []
+          }
+        },
+        {
+          "key": "visual_editor_treatment",
+          "weight": 50,
+          "outputs": {
+            "template": "dom_modifications",
+            "campaign": "Homepage Visual Editor Demo",
+            "modifications": [
+              {
+                "id": "headline",
+                "type": "change_text",
+                "selector": "[data-demo-selector='headline']",
+                "value": "Visual editor treatment changed this headline",
+                "scope": {
+                  "url_rules": [
+                    { "mode": "include", "operator": "contains", "value": "/experiment-mock-site" }
+                  ]
+                },
+                "max_matches": 1
+              },
+              {
+                "id": "body",
+                "type": "change_text",
+                "selector": "[data-demo-selector='body']",
+                "value": "DEE returned selector-based page changes. The SDK applied them without replacing the whole placement.",
+                "scope": {
+                  "url_rules": [
+                    { "mode": "include", "operator": "contains", "value": "/experiment-mock-site" }
+                  ]
+                },
+                "max_matches": 1
+              },
+              {
+                "id": "trust_highlight",
+                "type": "change_style",
+                "selector": "[data-demo-selector='trust']",
+                "styles": {
+                  "backgroundColor": "#effbf8",
+                  "borderColor": "#0f8f81",
+                  "boxShadow": "0 10px 24px rgba(15, 143, 129, 0.12)"
+                },
+                "scope": {
+                  "url_rules": [
+                    { "mode": "include", "operator": "contains", "value": "/experiment-mock-site" }
+                  ]
+                },
+                "max_matches": 1
+              },
+              {
+                "id": "trust_copy",
+                "type": "change_text",
+                "selector": "[data-demo-selector='trust'] strong",
+                "value": "Selector quality: stable data attributes",
+                "scope": {
+                  "url_rules": [
+                    { "mode": "include", "operator": "contains", "value": "/experiment-mock-site" }
+                  ]
+                },
+                "max_matches": 1
+              },
+              {
+                "id": "cta_label",
+                "type": "change_text",
+                "selector": "[data-demo-selector='cta'] a",
+                "value": "Track demo conversion",
+                "scope": {
+                  "url_rules": [
+                    { "mode": "include", "operator": "contains", "value": "/experiment-mock-site" }
+                  ]
+                },
+                "max_matches": 1
+              },
+              {
+                "id": "cta_href",
+                "type": "change_attribute",
+                "selector": "[data-demo-selector='cta'] a",
+                "attribute": "href",
+                "value": "#checkout",
+                "scope": {
+                  "url_rules": [
+                    { "mode": "include", "operator": "contains", "value": "/experiment-mock-site" }
+                  ]
+                },
+                "max_matches": 1
+              },
+              {
+                "id": "proof_block",
+                "type": "insert_html",
+                "selector": "[data-demo-selector='insert-target']",
+                "position": "replace",
+                "html": "<strong>DOM modification applied</strong><p>Open Diagnostics to see the rendered decision and modification diagnostics.</p>",
+                "scope": {
+                  "url_rules": [
+                    { "mode": "include", "operator": "contains", "value": "/experiment-mock-site" }
+                  ]
+                },
+                "max_matches": 1
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "draft": {
+    "fallback": {
+      "result": "eligible",
+      "outputs": {
+        "template": "dom_modifications",
+        "campaign": "Homepage Visual Editor Demo",
+        "modifications": []
+      }
+    },
+    "branches": [
+      {
+        "id": "website_lab_request",
+        "label": "Website lab visual editor placement",
+        "when": {
+          "all": [
+            { "source": "context", "key": "channel", "operator": "equals", "value": "web" },
+            { "source": "context", "key": "surface", "operator": "contains", "value": "visual_editor" }
+          ]
+        },
+        "result": "eligible",
+        "outputs": {
+          "template": "dom_modifications",
+          "campaign": "Homepage Visual Editor Demo",
+          "modifications": []
+        }
+      }
+    ]
+  }
+}

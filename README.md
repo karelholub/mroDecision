@@ -152,6 +152,8 @@ Open `http://localhost:8091/experiment-mock-site/`, enter the published decision
 - `POST /v1/client/impression`
 - `POST /v1/client/conversion`
 
+The seed data includes a ready-to-demo visual-editor-style experiment, `homepage_dom_experiment`. Open `http://localhost:8091/experiment-mock-site/?dee_force_variant=visual_editor_treatment`, or choose `Force visual_editor_treatment` in the QA override dropdown, then click **Apply modifications**. The SDK receives `template: "dom_modifications"` and applies selector-based changes to the headline, body copy, CTA, styles, and proof block without replacing the whole page section.
+
 Experiment operations are available in the DEE UI and through `GET /v1/experiments`. The endpoint reports baseline variant, current winner, lift versus baseline, exposure/impression/conversion counts, and conversion rates. Add `?format=csv` to export the same analysis for downstream reporting.
 
 For website retry safety, send `event_id` in the JSON body or an `Idempotency-Key` header when calling impression, exposure, or conversion endpoints. New events return `202`; duplicate retry events return `200` with `duplicate: true` and do not increment metrics.
