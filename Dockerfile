@@ -4,8 +4,8 @@ WORKDIR /app
 COPY package*.json ./
 COPY src ./src
 COPY public ./public
-COPY docs ./docs
-COPY data ./data
+RUN mkdir -p data
+COPY data/seed.json ./data/seed.json
 
 ENV NODE_ENV=production
 ENV PORT=8080
