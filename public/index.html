@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Meiro DEE</title>
-    <link rel="stylesheet" href="/styles.css?v=20260609-campaigns-ux" />
+    <link rel="stylesheet" href="/styles.css?v=20260609-campaign-master" />
   </head>
   <body>
     <aside>
@@ -875,6 +875,17 @@
           </div>
         </header>
         <div class="experiment-ops-workbench">
+          <div class="editor campaign-master-panel">
+            <div class="campaign-master-head">
+              <div>
+                <div class="editor-title">Campaigns</div>
+                <p>Select a campaign to focus its experiments, messages, rules, surfaces, and recent activity.</p>
+              </div>
+              <button type="button" id="clear-campaign-selection">All campaigns</button>
+            </div>
+            <div id="campaign-master-list" class="campaign-master-list"></div>
+            <div id="campaign-master-detail" class="campaign-master-detail"></div>
+          </div>
           <div id="experiment-kpis" class="metric-grid experiment-kpi-strip"></div>
           <div class="experiment-ops-grid">
             <div class="editor experiment-list-pane">
@@ -2146,6 +2157,6 @@
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
   <script src="/app-utils.js?v=20260609-visual-editor-overlay"></script>
-  <script src="/app.js?v=20260609-campaigns-ux"></script>
+  <script src="/app.js?v=20260609-campaign-master"></script>
 </body>
 </html>

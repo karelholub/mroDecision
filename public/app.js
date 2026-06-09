@@ -109,6 +109,9 @@ const experimentDetail = document.querySelector("#experiment-detail");
 const experimentFilterSearch = document.querySelector("#experiment-filter-search");
 const experimentFilterStatus = document.querySelector("#experiment-filter-status");
 const experimentSort = document.querySelector("#experiment-sort");
+const campaignMasterList = document.querySelector("#campaign-master-list");
+const campaignMasterDetail = document.querySelector("#campaign-master-detail");
+const clearCampaignSelection = document.querySelector("#clear-campaign-selection");
 const ruleInspectorSummary = document.querySelector("#rule-inspector-summary");
 const inspectorKey = document.querySelector("#inspector-key");
 const inspectorSurface = document.querySelector("#inspector-surface");
@@ -155,6 +158,7 @@ let cachedAssistantPlan = null;
 let cachedAssistantRollback = [];
 let assistantChatHistory = [];
 let selectedExperimentKey = null;
+let selectedCampaignName = "";
 let activeExperimentTab = "design";
 let selectedLookupMetadata = {};
 let conditionBlocksLoaded = false;
@@ -272,6 +276,12 @@ document.querySelector("#experiment-filter-campaign")?.addEventListener("input",
 experimentFilterSearch?.addEventListener("input", () => renderExperiments());
 experimentFilterStatus?.addEventListener("change", () => renderExperiments());
 experimentSort?.addEventListener("change", () => renderExperiments());
+clearCampaignSelection?.addEventListener("click", () => {
+  selectedCampaignName = "";
+  const campaignInput = document.querySelector("#experiment-filter-campaign");
+  if (campaignInput) campaignInput.value = "";
+  renderExperiments();
+});
 document.querySelector("#quick-create-experiment")?.addEventListener("click", quickCreateExperiment);
 document.querySelector("#export-experiments-csv")?.addEventListener("click", exportExperimentsCsv);
 document.querySelector("#assistant-fab")?.addEventListener("click", openAssistantPanel);
@@ -1264,9 +1274,13 @@ function changeLogLabel(change) {
 async function loadExperiments() {
   if (!experimentList) return;
   try {
-    const body = await api("/v1/experiments");
+    const [body, campaignsBody] = await Promise.all([
+      api("/v1/experiments"),
+      api("/v1/campaigns?window_hours=168&limit=50").catch(() => ({ campaigns: [] }))
+    ]);
     cachedExperiments = body.experiments || [];
     cachedExperimentSummary = body.summary || {};
+    cachedCampaigns = campaignsBody.campaigns || cachedCampaigns || [];
     renderExperiments();
   } catch (error) {
     experimentList.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
@@ -1780,6 +1794,7 @@ async function handleAssistantHandoffAction(event) {
 }
 
 function renderExperiments() {
+  renderCampaignMasterPanel();
   const summary = summarizeExperimentList(experimentFilterBaseExperiments());
   const experiments = campaignFilteredExperiments();
   if (experimentKpis) {
@@ -1826,10 +1841,13 @@ function campaignFilteredExperiments() {
 }
 
 function experimentFilterBaseExperiments() {
-  const campaign = document.querySelector("#experiment-filter-campaign")?.value.trim().toLowerCase() || "";
+  const campaign = (selectedCampaignName || document.querySelector("#experiment-filter-campaign")?.value.trim() || "").toLowerCase();
   const search = experimentFilterSearch?.value.trim().toLowerCase() || "";
   return cachedExperiments
-    .filter((experiment) => matchesDecisionCampaign(experiment.decision_key, campaign))
+    .filter((experiment) => {
+      if (selectedCampaignName === "Unassigned") return !campaignForDecisionKey(experiment.decision_key);
+      return matchesDecisionCampaign(experiment.decision_key, campaign);
+    })
     .filter((experiment) => {
       if (!search) return true;
       return [
@@ -1839,6 +1857,94 @@ function experimentFilterBaseExperiments() {
         campaignForDecisionKey(experiment.decision_key)
       ].filter(Boolean).join(" ").toLowerCase().includes(search);
     });
+}
+
+function renderCampaignMasterPanel() {
+  if (!campaignMasterList || !campaignMasterDetail) return;
+  const campaigns = cachedCampaigns || [];
+  if (!campaigns.length) {
+    campaignMasterList.innerHTML = `<div class="status-line">No campaigns configured yet.</div>`;
+    campaignMasterDetail.innerHTML = `<div class="status-line">Assign experiments, rules, or messages to a campaign to see grouped assets here.</div>`;
+    return;
+  }
+  const selected = campaigns.find((item) => (item.campaign || "Unassigned") === selectedCampaignName) || (selectedCampaignName ? null : campaigns[0]);
+  campaignMasterList.innerHTML = campaigns.map((campaign) => campaignMasterCard(campaign, (campaign.campaign || "Unassigned") === (selectedCampaignName || ""))).join("");
+  campaignMasterList.querySelectorAll("[data-campaign-select]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedCampaignName = button.dataset.campaignSelect || "";
+      const campaignInput = document.querySelector("#experiment-filter-campaign");
+      if (campaignInput) campaignInput.value = selectedCampaignName === "Unassigned" ? "" : selectedCampaignName;
+      selectedExperimentKey = null;
+      renderExperiments();
+    });
+  });
+  const detailCampaign = selectedCampaignName
+    ? campaigns.find((item) => (item.campaign || "Unassigned") === selectedCampaignName)
+    : selected;
+  campaignMasterDetail.innerHTML = detailCampaign
+    ? campaignWorkbenchDetail(detailCampaign)
+    : `<div class="status-line">Select a campaign to inspect its assets.</div>`;
+  campaignMasterDetail.querySelectorAll("[data-campaign-nav]").forEach((button) => {
+    button.addEventListener("click", handleCampaignNavigation);
+  });
+}
+
+function campaignMasterCard(campaign = {}, selected = false) {
+  const name = campaign.campaign || "Unassigned";
+  const feedback = campaign.client_events || {};
+  return `
+    <button type="button" class="campaign-master-card ${selected ? "selected" : ""}" data-campaign-select="${escapeHtml(name)}">
+      <div>
+        <strong>${escapeHtml(name)}</strong>
+        <span>${escapeHtml((campaign.surfaces || []).join(", ") || "No surfaces")}</span>
+      </div>
+      <dl>
+        <div><dt>Experiments</dt><dd>${formatNumber(campaign.experiments || 0)}</dd></div>
+        <div><dt>Rules</dt><dd>${formatNumber(campaign.rules || 0)}</dd></div>
+        <div><dt>Messages</dt><dd>${formatNumber(campaign.messages || 0)}</dd></div>
+        <div><dt>Feedback</dt><dd>${formatNumber(Object.values(feedback).reduce((sum, value) => sum + Number(value || 0), 0))}</dd></div>
+      </dl>
+    </button>
+  `;
+}
+
+function campaignWorkbenchDetail(campaign = {}) {
+  const assets = campaign.assets || {};
+  const events = campaign.client_events || {};
+  return `
+    <div class="campaign-workbench-detail-head">
+      <div>
+        <strong>${escapeHtml(campaign.campaign || "Unassigned")}</strong>
+        <span>${escapeHtml((campaign.surfaces || []).join(", ") || "No surfaces configured")}</span>
+      </div>
+      <div class="campaign-workbench-kpis">
+        ${campaignDetailKpi("Requests", campaign.requests || 0, "selected window")}
+        ${campaignDetailKpi("Exposure", events.exposure || 0, "client events")}
+        ${campaignDetailKpi("Conversion", formatPercent(campaign.conversion_rate || 0), `${formatNumber(events.conversion || 0)} conversions`)}
+        ${campaignDetailKpi("Conflicts", campaign.conflict_count || 0, (campaign.conflict_count || 0) ? "review" : "clear")}
+      </div>
+    </div>
+    <div class="campaign-workbench-assets">
+      ${campaignCompactAssetSection("Experiments", assets.experiments || [], "experiment")}
+      ${campaignCompactAssetSection("Rules", assets.rules || [], "rule")}
+      ${campaignCompactAssetSection("Messages", assets.messages || [], "message")}
+      ${campaignRecentEventsSection((campaign.recent_events || []).slice(0, 5))}
+    </div>
+  `;
+}
+
+function campaignCompactAssetSection(title, items = [], kind) {
+  return `
+    <section class="campaign-compact-section">
+      <div>
+        <strong>${escapeHtml(title)}</strong>
+        <span>${formatNumber(items.length)} item${items.length === 1 ? "" : "s"}</span>
+      </div>
+      <div class="campaign-compact-list">
+        ${items.length ? items.slice(0, 5).map((item) => campaignAssetRow(item, kind)).join("") : `<div class="status-line">No ${escapeHtml(title.toLowerCase())} linked.</div>`}
+      </div>
+    </section>
+  `;
 }
 
 function summarizeExperimentList(experiments = []) {
