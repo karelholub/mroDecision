@@ -5193,7 +5193,7 @@ header {
 .client-event-row strong {
   color: var(--ink);
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -5201,14 +5201,14 @@ header {
   color: var(--ink);
   font-size: 14px;
   font-style: normal;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .client-event-row small,
 .client-event-row time {
   color: var(--muted);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .client-event-row small {
@@ -5375,20 +5375,20 @@ header {
 .precompute-activity-row strong {
   color: var(--ink);
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .precompute-activity-row span,
 .precompute-activity-row time {
   color: var(--muted);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .precompute-activity-row em {
   color: var(--ink);
   font-size: 14px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .precompute-activity-row time {
