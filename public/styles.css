@@ -1820,6 +1820,13 @@ aside input {
   min-width: 0;
 }
 
+.experiment-tab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .experiment-tab-intro strong {
   display: block;
   font-size: 16px;

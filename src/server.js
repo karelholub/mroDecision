@@ -349,6 +349,20 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  const experimentEditorSessionMatch = pathname.match(/^\/v1\/experiments\/([^/]+)\/editor-session$/);
+  if (req.method === "POST" && experimentEditorSessionMatch) {
+    requireScope(req, "editor");
+    const key = decodeURIComponent(experimentEditorSessionMatch[1]);
+    const body = await readJson(req, config.requestBodyLimitBytes);
+    const ruleSet = await storeCall("getRuleSet", key);
+    if (!ruleSet || ruleSet.type !== "experiment") {
+      sendJson(res, 404, { error: "not_found", message: `Experiment not found: ${key}` });
+      return;
+    }
+    sendJson(res, 200, createExperimentEditorSession(ruleSet, body));
+    return;
+  }
+
   if (req.method === "GET" && pathname === "/v1/change-log") {
     requireScope(req, "viewer");
     sendJson(res, 200, { changes: store.listChangeLog(Object.fromEntries(url.searchParams)) });
@@ -2081,6 +2095,38 @@ function experimentOperationsToCsv(operations) {
     }
   }
   return `${lines.join("\n")}\n`;
+}
+
+function createExperimentEditorSession(ruleSet, body = {}) {
+  const now = Date.now();
+  const ttlSeconds = Math.max(60, Math.min(Number(body.ttl_seconds || 900), 3600));
+  const expiresAt = new Date(now + ttlSeconds * 1000).toISOString();
+  const tokenPayload = [
+    ruleSet.decision_key,
+    ruleSet.version || 0,
+    expiresAt,
+    randomUUID()
+  ].join(":");
+  const token = createHash("sha256").update(tokenPayload).digest("hex");
+  const websiteUrl = body.website_url || body.url || "http://localhost:8092/experiment-mock-site/";
+  const editorUrl = new URL(websiteUrl);
+  editorUrl.searchParams.set("dee_editor", "1");
+  editorUrl.searchParams.set("dee_editor_rule", ruleSet.decision_key);
+  editorUrl.searchParams.set("dee_editor_token", token);
+  if (body.variant_key) editorUrl.searchParams.set("dee_editor_variant", body.variant_key);
+  return {
+    decision_key: ruleSet.decision_key,
+    rule_version: ruleSet.version || null,
+    editor_token: token,
+    expires_at: expiresAt,
+    ttl_seconds: ttlSeconds,
+    editor_url: editorUrl.toString(),
+    permissions: {
+      can_publish: false,
+      can_save_draft: false,
+      can_copy_modifications: true
+    }
+  };
 }
 
 function decimalPercent(value) {

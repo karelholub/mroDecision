@@ -1927,7 +1927,10 @@ function experimentDesignTab(experiment) {
           <strong>Design</strong>
           <span>Variants, content payloads, and SDK rendering contracts for this experiment.</span>
         </div>
-        <button type="button" data-experiment-action="open-editor" data-editor-section="design" data-rule-key="${escapeHtml(experiment.decision_key)}">Edit Design</button>
+        <div class="experiment-tab-actions">
+          <button type="button" data-experiment-action="open-visual-editor" data-rule-key="${escapeHtml(experiment.decision_key)}">Open Visual Editor</button>
+          <button type="button" data-experiment-action="open-editor" data-editor-section="design" data-rule-key="${escapeHtml(experiment.decision_key)}">Edit Design</button>
+        </div>
       </div>
       <div class="experiment-design-grid">
         ${variants.length ? variants.map((variant) => `
@@ -2155,9 +2158,28 @@ function bindExperimentDetailActions(experiment) {
     button.addEventListener("click", () => copyExperimentSnippet(experiment));
   });
   experimentDetail.querySelector('[data-experiment-action="open-evaluate"]')?.addEventListener("click", () => openExperimentInEvaluate(experiment));
+  experimentDetail.querySelector('[data-experiment-action="open-visual-editor"]')?.addEventListener("click", () => openExperimentVisualEditor(experiment));
   experimentDetail.querySelectorAll('[data-experiment-action="open-editor"]').forEach((button) => {
     button.addEventListener("click", () => openExperimentInRuleEditor(experiment, button.dataset.editorSection || "operations"));
   });
+}
+
+async function openExperimentVisualEditor(experiment) {
+  try {
+    const body = await api(`/v1/experiments/${encodeURIComponent(experiment.decision_key)}/editor-session`, {
+      method: "POST",
+      body: JSON.stringify({
+        website_url: "http://localhost:8092/experiment-mock-site/",
+        variant_key: experiment.variants?.find((variant) => !variant.baseline && variant.key !== "control")?.key || "treatment"
+      })
+    });
+    window.open(body.editor_url, "_blank", "noopener,noreferrer");
+  } catch (error) {
+    experimentDetail.querySelector(".experiment-workbench-body")?.insertAdjacentHTML(
+      "afterbegin",
+      `<div class="experiment-warning-list"><div>${escapeHtml(error.message)}</div></div>`
+    );
+  }
 }
 
 function openExperimentInEvaluate(experiment) {

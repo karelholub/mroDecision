@@ -217,6 +217,8 @@ Performance guardrails:
 - Add overlay bundle with toolbar, selector picker, variant switcher, modification list, undo/redo, and mobile preview.
 - Save back to DEE draft via editor-token API.
 
+Status: started. DEE now exposes a draft-safe editor-session endpoint that returns a short-lived editor URL for a selected experiment, and the mock website supports `dee_editor=1` overlay mode with click-to-select, selector generation, modification preview, and copyable structured `dom_modifications` JSON. Save-back, undo/redo, and durable editor-token APIs remain next.
+
 ### Phase 4: Preview And Collaboration
 
 - Add short-lived preview links.

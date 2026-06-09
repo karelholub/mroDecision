@@ -6,7 +6,14 @@ const state = {
   modifications: new Map(),
   lastPayload: null,
   eventCount: 0,
-  evaluationRuns: 0
+  evaluationRuns: 0,
+  editor: {
+    enabled: new URLSearchParams(location.search).get("dee_editor") === "1",
+    selected: null,
+    selector: "",
+    variant: new URLSearchParams(location.search).get("dee_editor_variant") || "treatment",
+    ruleKey: new URLSearchParams(location.search).get("dee_editor_rule") || ""
+  }
 };
 
 const elements = {
@@ -52,6 +59,7 @@ restoreSettings();
 ensureVisitor();
 bindEvents();
 initializeSdk({ autoEvaluate: false });
+initializeVisualEditorOverlay();
 renderDiagnostics();
 logEvent("ready", "Mock site loaded. Apply runtime setup to evaluate all placements.");
 
@@ -115,6 +123,174 @@ function bindEvents() {
     logEvent(event.detail?.type || "event", `${placement}: ${event.detail?.response?.duplicate ? "duplicate" : "accepted"}`);
     renderMetrics();
   }, true);
+}
+
+function initializeVisualEditorOverlay() {
+  if (!state.editor.enabled) return;
+  const panel = document.createElement("aside");
+  panel.className = "visual-editor-overlay";
+  panel.innerHTML = `
+    <div class="visual-editor-head">
+      <div>
+        <strong>DEE Visual Editor</strong>
+        <span>${escapeHtml(state.editor.ruleKey || "Draft experiment")} · ${escapeHtml(state.editor.variant)}</span>
+      </div>
+      <button type="button" data-editor-close>Close</button>
+    </div>
+    <label>
+      Selected selector
+      <input data-editor-selector readonly placeholder="Click an element on the page" />
+    </label>
+    <div class="visual-editor-grid">
+      <label>
+        Type
+        <select data-editor-type>
+          <option value="change_text">Change text</option>
+          <option value="change_attribute">Change attribute</option>
+          <option value="change_style">Change style</option>
+          <option value="insert_html">Insert HTML</option>
+          <option value="remove">Remove</option>
+        </select>
+      </label>
+      <label>
+        Attribute / CSS property
+        <input data-editor-attribute placeholder="href, src, color" />
+      </label>
+    </div>
+    <label>
+      Value / HTML
+      <textarea data-editor-value placeholder="New text, URL, CSS value, or safe HTML"></textarea>
+    </label>
+    <div class="visual-editor-actions">
+      <button type="button" data-editor-preview>Preview</button>
+      <button type="button" data-editor-copy>Copy JSON</button>
+    </div>
+    <pre data-editor-output></pre>
+  `;
+  document.body.append(panel);
+  document.body.classList.add("visual-editor-active");
+  panel.querySelector("[data-editor-close]").addEventListener("click", () => {
+    state.editor.enabled = false;
+    panel.remove();
+    document.body.classList.remove("visual-editor-active");
+    clearEditorSelection();
+  });
+  panel.querySelector("[data-editor-preview]").addEventListener("click", () => {
+    const modification = currentEditorModification(panel);
+    previewEditorModification(modification);
+    panel.querySelector("[data-editor-output]").textContent = JSON.stringify(editorOutput(modification), null, 2);
+  });
+  panel.querySelector("[data-editor-copy]").addEventListener("click", async () => {
+    const modification = currentEditorModification(panel);
+    const payload = editorOutput(modification);
+    panel.querySelector("[data-editor-output]").textContent = JSON.stringify(payload, null, 2);
+    await navigator.clipboard?.writeText(JSON.stringify(payload, null, 2)).catch(() => {});
+    logEvent("editor", "Copied visual editor modification JSON.");
+  });
+  document.addEventListener("click", handleVisualEditorPick, true);
+  logEvent("editor", "Visual editor mode active. Click a page element to build a DOM modification.");
+}
+
+function handleVisualEditorPick(event) {
+  if (!state.editor.enabled) return;
+  const overlay = event.target.closest?.(".visual-editor-overlay");
+  if (overlay) return;
+  const target = event.target.closest?.("a, button, img, h1, h2, h3, p, strong, span, div, section, article");
+  if (!target || target.closest(".visual-editor-overlay")) return;
+  event.preventDefault();
+  event.stopPropagation();
+  clearEditorSelection();
+  state.editor.selected = target;
+  state.editor.selector = selectorForElement(target);
+  target.classList.add("visual-editor-selected");
+  const panel = document.querySelector(".visual-editor-overlay");
+  if (!panel) return;
+  panel.querySelector("[data-editor-selector]").value = state.editor.selector;
+  panel.querySelector("[data-editor-value]").value = target.tagName === "IMG"
+    ? target.getAttribute("src") || ""
+    : target.textContent.trim().slice(0, 300);
+  if (target.tagName === "IMG") {
+    panel.querySelector("[data-editor-type]").value = "change_attribute";
+    panel.querySelector("[data-editor-attribute]").value = "src";
+  }
+  panel.querySelector("[data-editor-output]").textContent = JSON.stringify(editorOutput(currentEditorModification(panel)), null, 2);
+}
+
+function clearEditorSelection() {
+  document.querySelectorAll(".visual-editor-selected").forEach((item) => item.classList.remove("visual-editor-selected"));
+}
+
+function selectorForElement(element) {
+  if (element.id) return `#${cssEscape(element.id)}`;
+  const dataSelector = element.getAttribute("data-demo-selector") || element.getAttribute("data-feature-card") || element.getAttribute("data-config-feature");
+  if (dataSelector) return `[${element.hasAttribute("data-demo-selector") ? "data-demo-selector" : element.hasAttribute("data-feature-card") ? "data-feature-card" : "data-config-feature"}="${cssEscape(dataSelector)}"]`;
+  const className = [...element.classList].filter((item) => !item.startsWith("visual-editor")).slice(0, 2).map(cssEscape).join(".");
+  const base = `${element.tagName.toLowerCase()}${className ? `.${className}` : ""}`;
+  return uniqueSelector(base, element) || base;
+}
+
+function uniqueSelector(base, element) {
+  try {
+    if (document.querySelectorAll(base).length === 1) return base;
+  } catch {
+    return "";
+  }
+  const parent = element.parentElement;
+  if (!parent) return "";
+  const index = [...parent.children].indexOf(element) + 1;
+  const parentSelector = parent.id ? `#${cssEscape(parent.id)}` : parent.tagName.toLowerCase();
+  return `${parentSelector} > ${element.tagName.toLowerCase()}:nth-child(${index})`;
+}
+
+function currentEditorModification(panel) {
+  const type = panel.querySelector("[data-editor-type]").value;
+  const selector = panel.querySelector("[data-editor-selector]").value || state.editor.selector;
+  const attribute = panel.querySelector("[data-editor-attribute]").value.trim();
+  const value = panel.querySelector("[data-editor-value]").value;
+  const modification = {
+    id: `mod_${slugForEditor(selector || type)}`,
+    type,
+    selector
+  };
+  if (type === "change_text") modification.value = value;
+  if (type === "change_attribute") {
+    modification.attribute = attribute || "href";
+    modification.value = value;
+  }
+  if (type === "change_style") {
+    modification.property = attribute || "color";
+    modification.value = value;
+  }
+  if (type === "insert_html") {
+    modification.html = value;
+    modification.position = "replace";
+  }
+  if (type === "remove") modification.mode = "collapse";
+  return modification;
+}
+
+function previewEditorModification(modification) {
+  const target = state.editor.selected || document.querySelector(modification.selector);
+  if (!target) return;
+  if (modification.type === "change_text") target.textContent = modification.value || "";
+  if (modification.type === "change_attribute") target.setAttribute(modification.attribute || "href", modification.value || "");
+  if (modification.type === "change_style") target.style[modification.property || "color"] = modification.value || "";
+  if (modification.type === "insert_html") target.innerHTML = modification.html || "";
+  if (modification.type === "remove") target.hidden = true;
+}
+
+function editorOutput(modification) {
+  return {
+    variant: state.editor.variant,
+    outputs: {
+      template: "dom_modifications",
+      modifications: [modification]
+    }
+  };
+}
+
+function slugForEditor(value) {
+  return String(value || "change").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48) || "change";
 }
 
 function initializeSdk(options = {}) {
@@ -261,9 +437,11 @@ async function renderMessage(element, decision) {
   const outputs = decision.outputs || {};
   const message = outputs.message || {};
   const content = outputs.message_content || message.content || outputs;
+  const imageUrl = messageImageUrl(content);
   element.classList.add("message-slot-live");
   element.innerHTML = `
     <span>${escapeHtml(message.template_type || outputs.template || "DEE message")}</span>
+    ${imageUrl ? `<img class="message-slot-image" src="${escapeAttribute(imageUrl)}" alt="${escapeAttribute(content.image_alt || content.alt || content.title || message.name || "Message image")}" referrerpolicy="no-referrer" />` : ""}
     <strong>${escapeHtml(content.title || content.headline || message.name || "Personalized message")}</strong>
     <p>${escapeHtml(content.body || content.text || "DEE returned an eligible in-app message.")}</p>
     ${content.footer ? `<small>${escapeHtml(content.footer)}</small>` : ""}
@@ -287,7 +465,7 @@ async function renderCards(element, decision, config) {
     item.rel = "noopener noreferrer";
 
     const image = document.createElement("img");
-    image.src = safeUrl(card.image_url || card.image || card.src || "https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=900&q=80");
+    image.src = assetUrl(card.image_url || card.image || card.src || "https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=900&q=80");
     image.alt = card.alt || card.title || "Offer";
     image.referrerPolicy = "no-referrer";
 
@@ -359,6 +537,11 @@ function renderCtas(content) {
     content.cta_label ? { label: content.cta_label, url: content.cta_url || "#" } : null
   ].filter(Boolean);
   return ctas.slice(0, 3).map((cta) => `<a href="${escapeAttribute(safeUrl(cta.url || "#"))}">${escapeHtml(cta.label || "Open")}</a>`).join("");
+}
+
+function messageImageUrl(content = {}) {
+  const image = content.image_url || content.imageUrl || content.image || content.media_url || content.media?.url || "";
+  return image ? assetUrl(image) : "";
 }
 
 function rememberDecision(element, decision, meta = {}) {
@@ -570,6 +753,18 @@ function safeUrl(value) {
     return new URL(value || "#", location.href).href;
   } catch {
     return "#";
+  }
+}
+
+function assetUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^(https?:|data:|blob:)/i.test(raw)) return safeUrl(raw);
+  const base = elements.baseUrl?.value?.trim().replace(/\/$/, "") || location.origin;
+  try {
+    return new URL(raw, `${base}/`).href;
+  } catch {
+    return safeUrl(raw);
   }
 }
 
