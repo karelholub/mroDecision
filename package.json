@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "check": "node --check src/*.js && node --check public/app.js && node --check scripts/benchmark.js && node --check scripts/postgres-migrate.js && node --check docs/dee-web-sdk/dee-web-sdk.js",
+    "check": "node --check src/*.js && node --check public/app-utils.js && node --check public/app.js && node --check scripts/benchmark.js && node --check scripts/postgres-migrate.js && node --check docs/dee-web-sdk/dee-web-sdk.js",
     "test": "node --test",
     "bench": "node scripts/benchmark.js",
     "bench:client": "DEE_BENCH_ENDPOINT=/v1/client/evaluate node scripts/benchmark.js",
