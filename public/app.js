@@ -2349,6 +2349,7 @@ function renderPrecomputeMetrics(metrics = {}) {
       ${precomputeGroup("Candidate Results", (metrics.by_result || []).map((item) => ({ key: item.result, count: item.count })))}
     </div>
     ${precomputeDiagnosticHint(metrics)}
+    ${precomputeErrorSummary(metrics)}
     <div class="precompute-recent">
       <div class="editor-title">Recent Runs</div>
       <div class="traffic-call-list">${precomputeRunRows(metrics.recent_runs)}</div>
@@ -2358,6 +2359,39 @@ function renderPrecomputeMetrics(metrics = {}) {
       <div class="traffic-call-list">${precomputeRecentRows(metrics.recent_profiles)}</div>
     </div>
   `;
+}
+
+function precomputeErrorSummary(metrics = {}) {
+  const errors = metrics.error_summary || [];
+  const errorProfiles = Number(metrics.error_profiles || 0);
+  if (!errorProfiles && !errors.length) return "";
+  return `
+    <div class="precompute-hint warn">
+      <strong>${formatNumber(errorProfiles)} profiles had precompute evaluation errors.</strong>
+      ${errors.length ? `<div class="traffic-group-list compact-list">
+        ${errors.slice(0, 6).map((item) => `
+          <div class="traffic-group-row">
+            <strong title="${escapeHtml(item.key || "-")}">${escapeHtml(item.key || "-")}</strong>
+            <span>${formatNumber(item.count || 0)}</span>
+          </div>
+        `).join("")}
+      </div>` : ""}
+      <small>${escapeHtml(precomputeErrorFixHint(errors))}</small>
+    </div>
+  `;
+}
+
+function precomputeErrorFixHint(errors = []) {
+  if ((errors || []).some((item) => item.category === "missing_attribute")) {
+    return "Most errors are missing attributes. Check the Pipes sender payload, Profile API enrichment mode, and the rule input schema for this surface.";
+  }
+  if ((errors || []).some((item) => item.category === "message")) {
+    return "Some rules point to unavailable messages. Open the linked rule or message and confirm the message is active and published.";
+  }
+  if ((errors || []).some((item) => item.category === "lookup")) {
+    return "Some rules depend on reference data. Check Reference Data tables and lookup output mappings.";
+  }
+  return "Inspect recent profile rows and rule audit payloads to find the failing branch or output dependency.";
 }
 
 function precomputeDiagnosticHint(metrics = {}) {
@@ -2407,7 +2441,7 @@ function precomputeRecentRows(items = []) {
   return items.length ? items.map((item) => `
     <div class="traffic-call-row">
       <strong>${escapeHtml(item.profile_key || "-")}</strong>
-      <span>${escapeHtml(item.eligible ? "eligible" : item.errors ? "error" : "suppressed")}</span>
+      <span title="${escapeHtml((item.error_messages || []).join("; "))}">${escapeHtml(item.eligible ? "eligible" : item.errors ? "error" : "suppressed")}</span>
       <em>${formatNumber(item.evaluations || 0)} evaluations</em>
       <small>${item.last_seen_at ? escapeHtml(formatTime(item.last_seen_at)) : "-"}</small>
     </div>

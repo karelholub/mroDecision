@@ -3451,10 +3451,15 @@ function precomputeMetrics(entries = [], runs = []) {
       eligible: false,
       errors: 0,
       evaluations: 0,
-      last_seen_at: ""
+      last_seen_at: "",
+      error_messages: []
     };
     current.eligible = current.eligible || entry.result === "eligible";
     current.errors += Array.isArray(entry.errors) && entry.errors.length ? 1 : 0;
+    current.error_messages = [...new Set([
+      ...current.error_messages,
+      ...(Array.isArray(entry.errors) ? entry.errors.map(precomputeErrorLabel).filter(Boolean) : [])
+    ])].slice(0, 5);
     current.evaluations += 1;
     current.last_seen_at = maxIso(current.last_seen_at, entry.evaluated_at);
     profiles.set(profileKey, current);
@@ -3488,11 +3493,41 @@ function precomputeMetrics(entries = [], runs = []) {
     by_result: Object.entries(byResult).map(([result, count]) => ({ result, count })).sort((left, right) => right.count - left.count || left.result.localeCompare(right.result)),
     by_surface: topSimple(bySurface),
     by_sync_id: topSimple(bySync),
+    error_summary: precomputeErrorSummary(entries),
     recent_runs: runs.slice(0, 8),
     recent_profiles: profileList
       .sort((left, right) => String(right.last_seen_at).localeCompare(String(left.last_seen_at)))
       .slice(0, 8)
   };
+}
+
+function precomputeErrorSummary(entries = []) {
+  const counts = new Map();
+  for (const entry of entries) {
+    for (const error of entry.errors || []) {
+      const label = precomputeErrorLabel(error);
+      if (label) incrementSimple(counts, label);
+    }
+  }
+  return topSimple(counts).map((item) => ({
+    ...item,
+    category: precomputeErrorCategory(item.key)
+  }));
+}
+
+function precomputeErrorLabel(error = "") {
+  const text = String(error || "").trim();
+  if (!text) return "";
+  const missing = text.match(/^Missing attribute:\s*(.+)$/i)?.[1]?.trim();
+  if (missing) return `Missing attribute: ${missing}`;
+  return text.length > 140 ? `${text.slice(0, 137)}...` : text;
+}
+
+function precomputeErrorCategory(label = "") {
+  if (/^Missing attribute:/i.test(label)) return "missing_attribute";
+  if (/message unavailable|message_not_found/i.test(label)) return "message";
+  if (/lookup/i.test(label)) return "lookup";
+  return "runtime";
 }
 
 function incrementSimple(map, key, amount = 1) {

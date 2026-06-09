@@ -842,6 +842,36 @@ test("metrics expose Meiro Pipes in-app precompute profile rollups", async () =>
       sync_id: "sync-123"
     }
   });
+  store.addAudit({
+    evaluated_at: evaluatedAt,
+    decision_key: "homepage_alert",
+    profile_key: "profile-3",
+    rule_version: 1,
+    result: "deferred",
+    outputs: {},
+    matched_rules: ["fallback"],
+    errors: ["Missing attribute: lead_score", "Missing attribute: customer_lifetime_value"],
+    inputs: {
+      request_source: "meiro_pipes_inapp_precompute",
+      surface: "homepage_hero",
+      sync_id: "sync-123"
+    }
+  });
+  store.addAudit({
+    evaluated_at: evaluatedAt,
+    decision_key: "homepage_banner",
+    profile_key: "profile-4",
+    rule_version: 1,
+    result: "deferred",
+    outputs: {},
+    matched_rules: ["fallback"],
+    errors: ["Missing attribute: lead_score"],
+    inputs: {
+      request_source: "meiro_pipes_inapp_precompute",
+      surface: "homepage_hero",
+      sync_id: "sync-123"
+    }
+  });
 
   const originalDateNow = Date.now;
   Date.now = () => Date.parse("2026-06-05T11:00:00.000Z");
@@ -849,11 +879,20 @@ test("metrics expose Meiro Pipes in-app precompute profile rollups", async () =>
     const metrics = store.getMetrics({ window_hours: 24 });
     assert.equal(metrics.precompute.run_count, 2);
     assert.equal(metrics.precompute.profile_count, 62);
-    assert.equal(metrics.precompute.candidate_evaluations, 3);
+    assert.equal(metrics.precompute.candidate_evaluations, 5);
     assert.equal(metrics.precompute.eligible_profiles, 1);
     assert.equal(metrics.precompute.suppressed_profiles, 61);
+    assert.equal(metrics.precompute.error_profiles, 2);
     assert.equal(metrics.precompute.by_surface[0].key, "homepage_footer");
     assert.equal(metrics.precompute.by_sync_id[0].key, "sync-empty");
+    assert.deepEqual(metrics.precompute.error_summary.slice(0, 2), [
+      { key: "Missing attribute: lead_score", count: 2, category: "missing_attribute" },
+      { key: "Missing attribute: customer_lifetime_value", count: 1, category: "missing_attribute" }
+    ]);
+    assert.deepEqual(
+      metrics.precompute.recent_profiles.find((profile) => profile.profile_key === "profile-3").error_messages,
+      ["Missing attribute: lead_score", "Missing attribute: customer_lifetime_value"]
+    );
     const emptyRun = metrics.precompute.recent_runs.find((run) => run.sync_id === "sync-empty");
     assert.equal(emptyRun.diagnostics.no_candidate_reason, "no_published_inapp_rules_for_surface");
   } finally {

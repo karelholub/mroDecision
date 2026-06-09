@@ -3490,6 +3490,22 @@ header {
   color: var(--ink);
 }
 
+.precompute-hint.warn {
+  border-color: rgba(217, 119, 6, 0.36);
+  background: #fff7ed;
+  color: #7c2d12;
+}
+
+.precompute-hint.warn strong,
+.precompute-hint.warn code {
+  color: #431407;
+}
+
+.precompute-hint small {
+  display: block;
+  margin-top: 8px;
+}
+
 .precompute-groups,
 .precompute-recent {
   min-width: 0;
