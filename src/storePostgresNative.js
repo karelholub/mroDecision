@@ -548,6 +548,11 @@ export class PostgresNativeReadStore {
          ORDER BY event_type ASC`,
         [rule.decision_key]
       );
+      const rawEventRows = await this.client.query(
+        "SELECT event_json FROM client_events WHERE decision_key = $1 ORDER BY occurred_at ASC",
+        [rule.decision_key]
+      );
+      const rawEvents = rawEventRows.rows.map((row) => parseJson(row.event_json, {}));
       const variantMetrics = variants.map((variant) => {
         const rows = eventRows.rows.filter((row) => (row.variant_key || "") === (variant.key || ""));
         const events = eventCounts(rows);
@@ -604,6 +609,7 @@ export class PostgresNativeReadStore {
         targeting: activeExperiment.targeting || null,
         trigger: activeExperiment.trigger || null,
         consent: activeExperiment.consent || null,
+        goal_report: experimentGoalReport({ events: rawEvents, variants, goal: activeExperiment.goal || {} }),
         draft_status: draftExperiment.status || "draft",
         published_status: publishedExperiment.status || "",
         assignment_unit: activeExperiment.unit || "profile",
@@ -2035,6 +2041,100 @@ function conversionRate(events = {}) {
   const exposures = Number(events.exposure?.count || 0);
   if (!exposures) return 0;
   return Number(events.conversion?.count || 0) / exposures;
+}
+
+function experimentGoalReport({ events = [], variants = [], goal = {} } = {}) {
+  const goalEvent = String(goal.event || "conversion").trim() || "conversion";
+  const attributionHours = Number(goal.attribution_window_hours || 0);
+  const attributionMs = Number.isFinite(attributionHours) && attributionHours > 0 ? attributionHours * 60 * 60 * 1000 : 0;
+  const valueField = String(goal.value_field || "").trim();
+  const keys = new Set([
+    ...variants.map((variant) => variant.key).filter(Boolean),
+    ...events.map((event) => event.variant_key).filter(Boolean)
+  ]);
+  const byVariant = new Map([...keys].map((key) => [key, emptyGoalVariant(key)]));
+  const ensureVariant = (key) => {
+    const safeKey = key || "(empty)";
+    if (!byVariant.has(safeKey)) byVariant.set(safeKey, emptyGoalVariant(safeKey));
+    return byVariant.get(safeKey);
+  };
+  const exposures = events.filter((event) => event?.event_type === "exposure");
+  for (const exposure of exposures) {
+    ensureVariant(exposure.variant_key).exposures += 1;
+  }
+  const goalConversions = events.filter((event) => isGoalConversion(event, goalEvent));
+  const attributedProfiles = new Set();
+  for (const conversion of goalConversions) {
+    const attributed = !attributionMs || exposures.some((exposure) => sameAttributionSubject(exposure, conversion) && withinAttributionWindow(exposure, conversion, attributionMs));
+    if (!attributed) continue;
+    const variant = ensureVariant(conversion.variant_key);
+    variant.count += 1;
+    if (conversion.profile_key) {
+      variant.profiles.add(conversion.profile_key);
+      attributedProfiles.add(conversion.profile_key);
+    }
+    variant.value_sum += numericPathValue(conversion, valueField);
+    const occurredAt = isoValue(conversion.occurred_at || "");
+    if (!variant.last_seen_at || occurredAt > variant.last_seen_at) variant.last_seen_at = occurredAt;
+  }
+  const variantsReport = [...byVariant.values()].map((variant) => ({
+    key: variant.key,
+    exposures: variant.exposures,
+    count: variant.count,
+    unique_profiles: variant.profiles.size,
+    value_sum: roundMetric(variant.value_sum),
+    conversion_rate: variant.exposures > 0 ? variant.count / variant.exposures : 0,
+    last_seen_at: variant.last_seen_at || null
+  }));
+  return {
+    event: goalEvent,
+    type: goal.type || "conversion",
+    attribution_window_hours: attributionMs ? attributionHours : 0,
+    value_field: valueField || null,
+    count: variantsReport.reduce((sum, item) => sum + item.count, 0),
+    unique_profiles: attributedProfiles.size,
+    value_sum: roundMetric(variantsReport.reduce((sum, item) => sum + item.value_sum, 0)),
+    by_variant: variantsReport
+  };
+}
+
+function emptyGoalVariant(key) {
+  return { key, exposures: 0, count: 0, profiles: new Set(), value_sum: 0, last_seen_at: "" };
+}
+
+function isGoalConversion(event = {}, goalEvent = "conversion") {
+  if (event.event_type !== "conversion") return false;
+  if (!goalEvent || goalEvent === "conversion") return true;
+  const payload = isPlainObject(event.event) ? event.event : {};
+  return [payload.name, payload.event_name, payload.type, payload.action, payload.goal, payload.conversion_name]
+    .some((value) => String(value || "") === goalEvent);
+}
+
+function sameAttributionSubject(exposure = {}, conversion = {}) {
+  return String(exposure.profile_key || "") === String(conversion.profile_key || "") &&
+    String(exposure.variant_key || "") === String(conversion.variant_key || "");
+}
+
+function withinAttributionWindow(exposure = {}, conversion = {}, attributionMs = 0) {
+  const exposureAt = Date.parse(exposure.occurred_at || "");
+  const conversionAt = Date.parse(conversion.occurred_at || "");
+  if (!Number.isFinite(exposureAt) || !Number.isFinite(conversionAt)) return false;
+  const delta = conversionAt - exposureAt;
+  return delta >= 0 && delta <= attributionMs;
+}
+
+function numericPathValue(source = {}, path = "") {
+  if (!path) return 0;
+  const value = String(path).split(".").filter(Boolean).reduce((current, key) => {
+    if (!isPlainObject(current) && !Array.isArray(current)) return undefined;
+    return current[key];
+  }, source);
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function roundMetric(value) {
+  return Math.round(Number(value || 0) * 1000000) / 1000000;
 }
 
 function baselineVariant(variants = []) {

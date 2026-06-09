@@ -2062,6 +2062,7 @@ function experimentResultsTab(experiment) {
         <span>DEE compares each non-baseline variant against the baseline with a two-sided z-test for conversion-rate difference. The confidence label is 1 - p-value; "95% significant" requires at least 95% confidence and the minimum exposure guardrail.</span>
       </div>
     </div>
+    ${experimentGoalReportPanel(experiment)}
     ${mode === "bandit" ? experimentBanditDetail(experiment) : ""}
     ${experimentWinnerAutomationPanel(experiment)}
     <div class="experiment-detail-actions">
@@ -2099,6 +2100,53 @@ function experimentResultsTab(experiment) {
       </div>
     </section>
   `;
+}
+
+function experimentGoalReportPanel(experiment = {}) {
+  const report = experiment.goal_report || {};
+  const rows = Array.isArray(report.by_variant) ? report.by_variant : [];
+  const valueLabel = report.value_field ? `Value from ${report.value_field}` : "No value field";
+  const windowLabel = report.attribution_window_hours ? `${formatNumber(report.attribution_window_hours)}h attribution` : "All conversion events";
+  return `
+    <section class="experiment-depth-panel experiment-goal-report">
+      <div class="experiment-depth-head">
+        <div>
+          <strong>Conversion goal report</strong>
+          <span>${escapeHtml([report.event || "conversion", report.type || "conversion", windowLabel, valueLabel].filter(Boolean).join(" · "))}</span>
+        </div>
+      </div>
+      <div class="experiment-goal-kpis">
+        ${statusItem("Goal conversions", formatNumber(report.count || 0))}
+        ${statusItem("Unique profiles", formatNumber(report.unique_profiles || 0))}
+        ${statusItem("Attributed value", formatGoalValue(report.value_sum || 0))}
+        ${statusItem("Attribution window", report.attribution_window_hours ? `${formatNumber(report.attribution_window_hours)}h` : "None")}
+      </div>
+      <div class="experiment-goal-table">
+        <div class="experiment-goal-header">
+          <span>Variant</span>
+          <span>Goal conv.</span>
+          <span>Goal rate</span>
+          <span>Value</span>
+          <span>Last goal</span>
+        </div>
+        ${rows.length ? rows.map((row) => `
+          <div class="experiment-goal-row">
+            <strong>${escapeHtml(row.key || "(empty)")}</strong>
+            <span>${escapeHtml(`${formatNumber(row.count || 0)} / ${formatNumber(row.unique_profiles || 0)} profiles`)}</span>
+            <span>${escapeHtml(formatPercent(row.conversion_rate || 0))}</span>
+            <span>${escapeHtml(formatGoalValue(row.value_sum || 0))}</span>
+            <span>${escapeHtml(row.last_seen_at ? formatTime(row.last_seen_at) : "-")}</span>
+          </div>
+        `).join("") : `<div class="status-line">No goal conversions recorded yet.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function formatGoalValue(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return "0";
+  return number.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 function bindExperimentDetailActions(experiment) {

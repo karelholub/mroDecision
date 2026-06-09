@@ -472,6 +472,10 @@ test("native postgres experiment operations report variants and assignments", as
   assert.equal(experiment.baseline_variant, "control");
   assert.equal(experiment.winner_variant, "destination_focus");
   assert.equal(experiment.variants.find((variant) => variant.key === "control").conversion_rate, 0.1);
+  assert.equal(experiment.goal_report.event, "purchase");
+  assert.equal(experiment.goal_report.count, 2);
+  assert.equal(experiment.goal_report.value_sum, 125);
+  assert.equal(experiment.goal_report.by_variant.find((variant) => variant.key === "destination_focus").value_sum, 100);
   assert.ok(experiment.variants.find((variant) => variant.key === "destination_focus").lift_vs_baseline > 0);
   assert.equal(experiment.assignment_history.total, 2);
   assert.equal(experiment.assignment_history.by_variant[0].key, "destination_focus");
@@ -1117,6 +1121,12 @@ function nativeExperimentClient() {
       experiment: {
         status: "running",
         unit: "profile",
+        goal: {
+          event: "purchase",
+          type: "revenue",
+          attribution_window_hours: 24,
+          value_field: "event.revenue"
+        },
         variants: [
           { key: "control", weight: 50, outputs: { headline: "Default" } },
           { key: "destination_focus", weight: 50, outputs: { headline: "Travel deals" } }
@@ -1131,6 +1141,13 @@ function nativeExperimentClient() {
     eventRow("exposure", "destination_focus", 160),
     eventRow("conversion", "destination_focus", 29),
     eventRow("impression", "destination_focus", 120)
+  ];
+  const rawEvents = [
+    eventJson("exposure", "control", "profile-control-1", "2026-06-01T10:00:00.000Z"),
+    eventJson("conversion", "control", "profile-control-1", "2026-06-01T11:00:00.000Z", { name: "purchase", revenue: 25 }),
+    eventJson("conversion", "control", "profile-control-2", "2026-06-01T11:10:00.000Z", { name: "signup", revenue: 50 }),
+    eventJson("exposure", "destination_focus", "profile-focus-1", "2026-06-01T10:05:00.000Z"),
+    eventJson("conversion", "destination_focus", "profile-focus-1", "2026-06-01T10:20:00.000Z", { name: "purchase", revenue: 100 })
   ];
   const assignments = [
     assignmentRow("assign-1", "destination_focus", "2026-06-01T11:10:00.000Z"),
@@ -1148,6 +1165,7 @@ function nativeExperimentClient() {
         if (sql.includes("GROUP BY event_type")) {
           return { rows: eventTotals(events) };
         }
+        if (sql.startsWith("SELECT event_json FROM client_events WHERE decision_key")) return { rows: rawEvents.map((event) => ({ event_json: event })) };
         if (sql.startsWith("SELECT COUNT(*) AS count FROM experiment_assignments")) {
           return { rows: [{ count: assignments.length }] };
         }
@@ -1312,6 +1330,21 @@ function eventRow(eventType, variantKey, count) {
     count,
     unique_profiles: count,
     last_seen_at: "2026-06-01T12:00:00.000Z"
+  };
+}
+
+function eventJson(eventType, variantKey, profileKey, occurredAt, event = {}) {
+  return {
+    event_id: `${eventType}_${variantKey}_${profileKey}`,
+    event_type: eventType,
+    occurred_at: occurredAt,
+    decision_key: "homepage_experiment",
+    profile_key: profileKey,
+    variant_key: variantKey,
+    message_id: "",
+    surface: "homepage",
+    context: {},
+    event
   };
 }
 

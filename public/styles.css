@@ -2257,6 +2257,54 @@ aside input {
   background: #ffffff;
 }
 
+.experiment-goal-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.experiment-goal-table {
+  display: grid;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.experiment-goal-header,
+.experiment-goal-row {
+  display: grid;
+  grid-template-columns:
+    minmax(140px, 1fr)
+    minmax(130px, 0.85fr)
+    minmax(90px, 0.55fr)
+    minmax(110px, 0.65fr)
+    minmax(150px, 0.8fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 720px;
+  padding: 10px 12px;
+}
+
+.experiment-goal-header {
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.experiment-goal-row {
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.experiment-goal-row strong,
+.experiment-goal-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .experiment-depth-head {
   display: flex;
   justify-content: space-between;
@@ -7765,6 +7813,7 @@ pre {
   .experiment-design-grid,
   .experiment-settings-list,
   .experiment-evaluate-grid,
+  .experiment-goal-kpis,
   .experiment-readiness-list,
   .client-traffic-summary,
   .client-traffic-groups,
@@ -7891,6 +7940,7 @@ pre {
     .experiment-design-grid,
     .experiment-settings-list,
     .experiment-evaluate-grid,
+    .experiment-goal-kpis,
     .experiment-readiness-list,
     .overview-service-footer,
     .client-event-subsections,

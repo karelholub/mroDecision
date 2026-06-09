@@ -177,6 +177,12 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
         experiment: {
           status: "running",
           unit: "profile",
+          goal: {
+            event: "signup",
+            type: "revenue",
+            attribution_window_hours: 1,
+            value_field: "event.value"
+          },
           variants: [
             { key: "control", weight: 50, outputs: { headline: "A" } },
             { key: "treatment", weight: 50, outputs: { headline: "B" } }
@@ -246,6 +252,10 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(experimentOps.summary.archived, 0);
   assert.equal(experimentOps.summary.exposures, 3);
   assert.equal(experimentOps.summary.conversions, 2);
+  assert.equal(experimentOps.experiments[0].goal_report.event, "signup");
+  assert.equal(experimentOps.experiments[0].goal_report.count, 2);
+  assert.equal(experimentOps.experiments[0].goal_report.value_sum, 2);
+  assert.equal(experimentOps.experiments[0].goal_report.by_variant.find((variant) => variant.key === "treatment").conversion_rate, 1);
   assert.equal(experimentOps.experiments[0].baseline_variant, "control");
   assert.equal(experimentOps.experiments[0].winner_variant, "treatment");
   const treatmentVariant = experimentOps.experiments[0].variants.find((variant) => variant.key === "treatment");
