@@ -1544,17 +1544,29 @@ aside input {
 
 .experiment-filter-bar {
   display: grid;
-  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
-  gap: 12px;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
   min-width: 0;
-  padding: 12px 14px;
+  padding: 8px 14px;
   background: #ffffff;
   border-bottom: 1px solid var(--line);
 }
 
+.experiment-filter-controls {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.75fr) minmax(190px, 1fr) minmax(130px, 0.45fr) minmax(150px, 0.55fr);
+  gap: 8px;
+  align-items: end;
+  min-width: 0;
+}
+
 .experiment-filter-bar .compact-filter {
   min-width: 0;
+}
+
+.experiment-filter-bar .campaign-master-list {
+  display: none;
 }
 
 .experiment-kpi-strip {
@@ -1597,7 +1609,7 @@ aside input {
   gap: 8px;
   min-width: 0;
   overflow-x: auto;
-  padding: 0 0 2px;
+  padding: 0 0 1px;
   scrollbar-width: none;
 }
 
@@ -1609,14 +1621,16 @@ aside input {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 7px 10px;
+  padding: 6px 9px;
   background: #ffffff;
   color: var(--ink);
   text-align: left;
+  max-width: 260px;
+  min-height: 38px;
 }
 
 .campaign-master-card:hover,
@@ -1630,13 +1644,20 @@ aside input {
 .campaign-master-card span {
   display: block;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.campaign-master-card > div:first-child {
+  min-width: 0;
+  max-width: 170px;
 }
 
 .campaign-master-card span {
-  margin-top: 3px;
+  margin-top: 1px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .campaign-master-card dl {
@@ -1645,12 +1666,16 @@ aside input {
   margin: 0;
 }
 
+.campaign-master-card dl div:nth-child(n+3) {
+  display: none;
+}
+
 .campaign-master-card dl div {
   display: grid;
   gap: 2px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 3px 7px;
+  padding: 2px 6px;
   background: var(--panel-soft);
 }
 
@@ -1667,12 +1692,93 @@ aside input {
 
 .campaign-master-detail {
   display: grid;
+  gap: 0;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.campaign-focus-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.55fr);
   gap: 10px;
+  align-items: stretch;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
+  background: var(--panel-soft);
+}
+
+.campaign-focus-main,
+.campaign-focus-assets {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.campaign-focus-assets {
+  align-content: center;
+  border-left: 1px solid var(--line);
+  padding-left: 10px;
+}
+
+.campaign-focus-main span,
+.campaign-focus-main small,
+.campaign-focus-assets span,
+.campaign-focus-assets small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.campaign-focus-main span,
+.campaign-focus-assets span {
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.campaign-focus-main strong {
+  color: var(--ink);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.campaign-focus-metrics {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+  order: 3;
+}
+
+.campaign-focus-metrics > div {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 8px;
   background: #ffffff;
+}
+
+.campaign-focus-metrics span,
+.campaign-focus-metrics small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.campaign-focus-metrics strong {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .campaign-workbench-detail-head {
@@ -1801,6 +1907,7 @@ aside input {
   background: #ffffff;
   color: var(--ink);
   text-align: left;
+  min-height: 34px;
 }
 
 .experiment-status-chip:hover,
@@ -1884,11 +1991,11 @@ aside input {
 
 .experiment-ops-grid {
   display: grid;
-  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
   gap: 0;
   align-items: stretch;
   min-width: 0;
-  min-height: calc(100vh - 230px);
+  min-height: calc(100vh - 250px);
 }
 
 .experiment-list-pane,
@@ -1901,6 +2008,7 @@ aside input {
 .experiment-list-pane {
   border-right: 1px solid var(--line);
   background: #f4f7fa;
+  padding: 14px;
 }
 
 .experiment-detail-pane {
@@ -1908,6 +2016,7 @@ aside input {
   align-content: start;
   gap: 12px;
   background: #ffffff;
+  padding: 16px;
 }
 
 .experiment-list,
@@ -1918,18 +2027,18 @@ aside input {
 }
 
 .experiment-list {
-  max-height: calc(100vh - 405px);
+  max-height: calc(100vh - 355px);
   overflow: auto;
   padding-right: 2px;
 }
 
 .experiment-ops-card {
   display: grid;
-  gap: 9px;
+  gap: 8px;
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 11px;
+  padding: 12px;
   background: #ffffff;
   color: var(--ink);
   text-align: left;
@@ -2488,16 +2597,46 @@ aside input {
 }
 
 .experiment-card-metrics {
+  display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--line);
 }
 
-.experiment-card-metrics .status-item {
-  min-height: 58px;
+.experiment-card-metric {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
   background: #ffffff;
 }
 
-.experiment-card-metrics .status-item strong {
-  font-size: 13px;
+.experiment-card-metric span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.experiment-card-metric strong {
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.experiment-card-metric.winner strong {
+  color: #166534;
+}
+
+.experiment-card-metric.winner {
+  grid-column: span 2;
 }
 
 .experiment-detail-table {

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Meiro DEE</title>
-    <link rel="stylesheet" href="/styles.css?v=20260609-overview-redesign" />
+    <link rel="stylesheet" href="/styles.css?v=20260609-campaigns-v2" />
   </head>
   <body>
     <aside>
@@ -873,11 +873,38 @@
         </header>
         <div class="experiment-ops-workbench">
           <div class="experiment-filter-bar">
-            <label class="compact-filter">
-              Campaign
-              <input id="experiment-filter-campaign" placeholder="Any campaign" />
-            </label>
+            <div class="experiment-filter-controls">
+              <label class="compact-filter">
+                Campaign
+                <input id="experiment-filter-campaign" placeholder="Any campaign" />
+              </label>
+              <label class="compact-filter">
+                Search
+                <input id="experiment-filter-search" placeholder="Name or key" />
+              </label>
+              <label class="compact-filter">
+                Status
+                <select id="experiment-filter-status">
+                  <option value="">All</option>
+                  <option value="running">Running</option>
+                  <option value="draft">Draft</option>
+                  <option value="paused">Paused</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </label>
+              <label class="compact-filter">
+                Sort
+                <select id="experiment-sort">
+                  <option value="recent">Recently updated</option>
+                  <option value="status">Status</option>
+                  <option value="feedback">Feedback volume</option>
+                  <option value="performance">Performance</option>
+                  <option value="name">Name</option>
+                </select>
+              </label>
+            </div>
             <div id="experiment-kpis" class="experiment-kpi-strip"></div>
+            <div id="campaign-master-list" class="campaign-master-list" aria-label="Campaign focus"></div>
           </div>
           <div class="experiment-ops-grid">
             <div class="editor experiment-list-pane">
@@ -888,37 +915,10 @@
                 </div>
                 <button type="button" id="clear-campaign-selection">All</button>
               </div>
-              <div class="experiment-list-toolbar">
-                <label>
-                  Search
-                  <input id="experiment-filter-search" placeholder="Name or key" />
-                </label>
-                <label>
-                  Status
-                  <select id="experiment-filter-status">
-                    <option value="">All</option>
-                    <option value="running">Running</option>
-                    <option value="draft">Draft</option>
-                    <option value="paused">Paused</option>
-                    <option value="archived">Archived</option>
-                  </select>
-                </label>
-                <label>
-                  Sort
-                  <select id="experiment-sort">
-                    <option value="recent">Recently updated</option>
-                    <option value="status">Status</option>
-                    <option value="feedback">Feedback volume</option>
-                    <option value="performance">Performance</option>
-                    <option value="name">Name</option>
-                  </select>
-                </label>
-              </div>
               <div id="experiment-list" class="experiment-list"></div>
             </div>
             <div class="editor experiment-detail-pane">
               <div class="editor-title">Experiment Workbench</div>
-              <div id="campaign-master-list" class="campaign-master-list" aria-label="Campaign focus"></div>
               <div id="campaign-master-detail" class="campaign-master-detail"></div>
               <div id="experiment-detail" class="experiment-detail"></div>
             </div>
@@ -2157,6 +2157,6 @@
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
   <script src="/app-utils.js?v=20260609-visual-editor-overlay"></script>
-  <script src="/app.js?v=20260609-overview-redesign"></script>
+  <script src="/app.js?v=20260609-campaigns-v2"></script>
 </body>
 </html>

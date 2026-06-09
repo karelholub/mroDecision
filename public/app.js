@@ -1963,24 +1963,28 @@ function campaignMasterCard(campaign = {}, selected = false) {
 function campaignWorkbenchDetail(campaign = {}) {
   const assets = campaign.assets || {};
   const events = campaign.client_events || {};
+  const recentAsset = [
+    ...(assets.experiments || []).slice(0, 2).map((item) => item.name || item.id),
+    ...(assets.rules || []).slice(0, 2).map((item) => item.name || item.id),
+    ...(assets.messages || []).slice(0, 2).map((item) => item.name || item.id)
+  ].filter(Boolean).slice(0, 4);
   return `
-    <div class="campaign-workbench-detail-head">
-      <div>
+    <div class="campaign-focus-panel">
+      <div class="campaign-focus-main">
+        <span>Campaign focus</span>
         <strong>${escapeHtml(campaign.campaign || "Unassigned")}</strong>
-        <span>${escapeHtml((campaign.surfaces || []).join(", ") || "No surfaces configured")}</span>
+        <small>${escapeHtml((campaign.surfaces || []).join(", ") || "No surfaces configured")}</small>
       </div>
-      <div class="campaign-workbench-kpis">
-        ${campaignDetailKpi("Requests", campaign.requests || 0, "selected window")}
-        ${campaignDetailKpi("Exposure", events.exposure || 0, "client events")}
-        ${campaignDetailKpi("Conversion", formatPercent(campaign.conversion_rate || 0), `${formatNumber(events.conversion || 0)} conversions`)}
+      <div class="campaign-focus-metrics">
+        ${campaignDetailKpi("Requests", campaign.requests || 0, "window")}
+        ${campaignDetailKpi("Exposure", events.exposure || 0, "events")}
+        ${campaignDetailKpi("Conversion", formatPercent(campaign.conversion_rate || 0), `${formatNumber(events.conversion || 0)} conv`)}
         ${campaignDetailKpi("Conflicts", campaign.conflict_count || 0, (campaign.conflict_count || 0) ? "review" : "clear")}
       </div>
-    </div>
-    <div class="campaign-workbench-assets">
-      ${campaignCompactAssetSection("Experiments", assets.experiments || [], "experiment")}
-      ${campaignCompactAssetSection("Rules", assets.rules || [], "rule")}
-      ${campaignCompactAssetSection("Messages", assets.messages || [], "message")}
-      ${campaignRecentEventsSection((campaign.recent_events || []).slice(0, 5))}
+      <div class="campaign-focus-assets">
+        <span>${escapeHtml(`${formatNumber(campaign.experiments || 0)} exp · ${formatNumber(campaign.rules || 0)} rules · ${formatNumber(campaign.messages || 0)} msgs`)}</span>
+        <small>${escapeHtml(recentAsset.join(", ") || "No linked assets yet")}</small>
+      </div>
     </div>
   `;
 }
@@ -2077,6 +2081,7 @@ function experimentOpsCard(experiment, index, selected = false) {
   const significance = experiment.significant_winner_confidence || confidence;
   const winner = experiment.significant_winner_variant || experiment.winner_variant || "-";
   const isDraft = status === "draft";
+  const executions = exposureCount || impressionCount || conversionCount;
   return `
     <button type="button" class="experiment-ops-card ${selected ? "selected" : ""}" data-experiment-index="${index}">
       <div class="experiment-ops-head">
@@ -2098,15 +2103,23 @@ function experimentOpsCard(experiment, index, selected = false) {
       </div>
       ${isDraft ? experimentDraftCardState(experiment, allocationState) : `
         <div class="experiment-card-metrics">
-          ${statusItem("Winner", winner)}
-          ${statusItem("Significance", significance ? formatPercent(significance) : "-")}
-          ${statusItem("Lift", formatLift(experiment.winner_lift_vs_baseline))}
-          ${statusItem("Exposures", formatNumber(exposureCount))}
-          ${statusItem("Conversions", formatNumber(conversionCount))}
-          ${statusItem("Impressions", formatNumber(impressionCount))}
+          ${experimentCardMetric("Confidence", confidence ? formatPercent(confidence) : "-")}
+          ${experimentCardMetric("Significance", significance ? formatPercent(significance) : "-")}
+          ${experimentCardMetric("Executions", formatNumber(executions))}
+          ${experimentCardMetric("Lift", formatLift(experiment.winner_lift_vs_baseline))}
+          ${experimentCardMetric("Winner", winner, "winner")}
         </div>
       `}
     </button>
+  `;
+}
+
+function experimentCardMetric(label, value, tone = "") {
+  return `
+    <div class="experiment-card-metric ${escapeHtml(tone)}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(String(value))}</strong>
+    </div>
   `;
 }
 
