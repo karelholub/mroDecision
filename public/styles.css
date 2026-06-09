@@ -2880,6 +2880,28 @@ aside input {
   background: rgba(14, 154, 142, 0.04);
 }
 
+.experiment-visual-session-note {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid rgba(14, 154, 142, 0.22);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f3fbf9;
+}
+
+.experiment-visual-session-note strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.experiment-visual-session-note span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .experiment-visual-import-panel summary {
   cursor: pointer;
   font-weight: 800;

@@ -2248,6 +2248,10 @@ function experimentDesignTab(experiment) {
           </article>
         `).join("") : `<div class="status-line">No variants configured.</div>`}
       </div>
+      <div class="experiment-visual-session-note">
+        <strong>Visual editor session</strong>
+        <span>Open Visual Editor launches the website with a short-lived editor token. The overlay can save DOM changes directly to the selected draft treatment variant; publish and review still happen here in DEE.</span>
+      </div>
       <details class="experiment-visual-import-panel" data-visual-import-panel>
         <summary>Import visual editor payload</summary>
         <div class="experiment-visual-import-grid">
