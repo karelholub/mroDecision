@@ -655,11 +655,101 @@ select {
   resize: vertical;
 }
 
+.visual-editor-quality,
+.visual-editor-inventory {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.visual-editor-quality.good {
+  border-color: rgba(14, 154, 142, 0.35);
+  background: #eefbf8;
+}
+
+.visual-editor-quality.warn {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: #fff8e8;
+}
+
+.visual-editor-quality.bad {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: #fff1f2;
+}
+
+.visual-editor-quality strong,
+.visual-editor-inventory strong {
+  overflow-wrap: anywhere;
+}
+
+.visual-editor-quality span,
+.visual-editor-inventory span,
+.visual-editor-inventory small {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .visual-editor-grid,
 .visual-editor-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.visual-editor-actions {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.visual-editor-actions button,
+.visual-editor-inventory button {
+  min-width: 0;
+}
+
+.visual-editor-inventory > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.visual-editor-inventory ol {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  padding: 0;
+  list-style: none;
+}
+
+.visual-editor-inventory li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.visual-editor-inventory li.empty {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.visual-editor-inventory li > button:first-child {
+  display: grid;
+  gap: 3px;
+  justify-items: start;
+  text-align: left;
+  border-color: var(--line);
+  background: #ffffff;
+  color: var(--ink);
 }
 
 .visual-editor-overlay pre {

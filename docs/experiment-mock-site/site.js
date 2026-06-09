@@ -11,6 +11,8 @@ const state = {
     enabled: new URLSearchParams(location.search).get("dee_editor") === "1",
     selected: null,
     selector: "",
+    modifications: [],
+    snapshots: new Map(),
     variant: new URLSearchParams(location.search).get("dee_editor_variant") || "treatment",
     ruleKey: new URLSearchParams(location.search).get("dee_editor_rule") || ""
   }
@@ -141,6 +143,10 @@ function initializeVisualEditorOverlay() {
       Selected selector
       <input data-editor-selector readonly placeholder="Click an element on the page" />
     </label>
+    <div class="visual-editor-quality" data-editor-quality>
+      <strong>No element selected</strong>
+      <span>Click a page element to generate a selector and preview a modification.</span>
+    </div>
     <div class="visual-editor-grid">
       <label>
         Type
@@ -163,7 +169,16 @@ function initializeVisualEditorOverlay() {
     </label>
     <div class="visual-editor-actions">
       <button type="button" data-editor-preview>Preview</button>
+      <button type="button" data-editor-add>Add change</button>
+      <button type="button" data-editor-reset>Reset preview</button>
       <button type="button" data-editor-copy>Copy JSON</button>
+    </div>
+    <div class="visual-editor-inventory">
+      <div>
+        <strong>Changes</strong>
+        <span data-editor-count>0 queued</span>
+      </div>
+      <ol data-editor-inventory></ol>
     </div>
     <pre data-editor-output></pre>
   `;
@@ -180,13 +195,59 @@ function initializeVisualEditorOverlay() {
     previewEditorModification(modification);
     panel.querySelector("[data-editor-output]").textContent = JSON.stringify(editorOutput(modification), null, 2);
   });
+  panel.querySelector("[data-editor-add]").addEventListener("click", () => {
+    const modification = currentEditorModification(panel);
+    if (!modification.selector) return;
+    state.editor.modifications.push({ ...modification, id: uniqueModificationId(modification) });
+    previewEditorModification(modification);
+    renderEditorPanel(panel);
+    logEvent("editor", `Queued ${modification.type} for ${modification.selector}.`);
+  });
+  panel.querySelector("[data-editor-reset]").addEventListener("click", () => {
+    resetEditorPreview();
+    renderEditorPanel(panel);
+    logEvent("editor", "Reset visual editor preview changes.");
+  });
   panel.querySelector("[data-editor-copy]").addEventListener("click", async () => {
     const modification = currentEditorModification(panel);
-    const payload = editorOutput(modification);
+    const payload = editorOutput(modification.selector ? modification : null);
     panel.querySelector("[data-editor-output]").textContent = JSON.stringify(payload, null, 2);
     await navigator.clipboard?.writeText(JSON.stringify(payload, null, 2)).catch(() => {});
     logEvent("editor", "Copied visual editor modification JSON.");
   });
+  panel.querySelector("[data-editor-inventory]").addEventListener("click", (event) => {
+    const removeButton = event.target.closest?.("[data-editor-remove]");
+    const focusButton = event.target.closest?.("[data-editor-focus]");
+    if (removeButton) {
+      state.editor.modifications.splice(Number(removeButton.dataset.editorRemove), 1);
+      resetEditorPreview();
+      applyQueuedEditorPreview();
+      renderEditorPanel(panel);
+      return;
+    }
+    if (focusButton) {
+      const modification = state.editor.modifications[Number(focusButton.dataset.editorFocus)];
+      const target = modification?.selector ? document.querySelector(modification.selector) : null;
+      if (target) {
+        clearEditorSelection();
+        state.editor.selected = target;
+        state.editor.selector = modification.selector;
+        target.classList.add("visual-editor-selected");
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        panel.querySelector("[data-editor-selector]").value = modification.selector;
+        renderSelectorQuality(panel, modification.selector);
+      }
+    }
+  });
+  panel.addEventListener("input", (event) => {
+    if (event.target.closest?.("[data-editor-selector], [data-editor-type], [data-editor-attribute], [data-editor-value]")) {
+      renderEditorPanel(panel);
+    }
+  });
+  panel.addEventListener("change", (event) => {
+    if (event.target.closest?.("[data-editor-type]")) renderEditorPanel(panel);
+  });
+  renderEditorPanel(panel);
   document.addEventListener("click", handleVisualEditorPick, true);
   logEvent("editor", "Visual editor mode active. Click a page element to build a DOM modification.");
 }
@@ -209,15 +270,78 @@ function handleVisualEditorPick(event) {
   panel.querySelector("[data-editor-value]").value = target.tagName === "IMG"
     ? target.getAttribute("src") || ""
     : target.textContent.trim().slice(0, 300);
+  panel.querySelector("[data-editor-type]").value = target.tagName === "IMG" ? "change_attribute" : "change_text";
+  panel.querySelector("[data-editor-attribute]").value = "";
   if (target.tagName === "IMG") {
-    panel.querySelector("[data-editor-type]").value = "change_attribute";
     panel.querySelector("[data-editor-attribute]").value = "src";
   }
-  panel.querySelector("[data-editor-output]").textContent = JSON.stringify(editorOutput(currentEditorModification(panel)), null, 2);
+  renderEditorPanel(panel);
 }
 
 function clearEditorSelection() {
   document.querySelectorAll(".visual-editor-selected").forEach((item) => item.classList.remove("visual-editor-selected"));
+}
+
+function renderEditorPanel(panel = document.querySelector(".visual-editor-overlay")) {
+  if (!panel) return;
+  renderSelectorQuality(panel, panel.querySelector("[data-editor-selector]").value || state.editor.selector);
+  renderEditorInventory(panel);
+  const modification = currentEditorModification(panel);
+  panel.querySelector("[data-editor-output]").textContent = JSON.stringify(editorOutput(modification.selector ? modification : null), null, 2);
+}
+
+function renderSelectorQuality(panel, selector) {
+  const quality = panel.querySelector("[data-editor-quality]");
+  if (!quality) return;
+  if (!selector) {
+    quality.className = "visual-editor-quality";
+    quality.innerHTML = "<strong>No element selected</strong><span>Click a page element to generate a selector and preview a modification.</span>";
+    return;
+  }
+  let count = 0;
+  let valid = true;
+  try {
+    count = document.querySelectorAll(selector).length;
+  } catch {
+    valid = false;
+  }
+  const brittle = selector.includes(":nth-child");
+  const stateName = !valid || count === 0 ? "bad" : count === 1 && !brittle ? "good" : "warn";
+  const title = !valid
+    ? "Invalid selector"
+    : count === 0
+      ? "No matches"
+      : count === 1
+        ? brittle ? "Unique but brittle" : "Unique selector"
+        : `${count} matches`;
+  const detail = !valid
+    ? "Check CSS syntax before copying this change."
+    : count === 0
+      ? "This selector will be skipped by the SDK."
+      : count === 1 && !brittle
+        ? "Good candidate for a page-local experiment."
+        : "Prefer id, data attributes, or tighter page targeting for production.";
+  quality.className = `visual-editor-quality ${stateName}`;
+  quality.innerHTML = `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span>`;
+}
+
+function renderEditorInventory(panel) {
+  const list = panel.querySelector("[data-editor-inventory]");
+  const count = panel.querySelector("[data-editor-count]");
+  if (!list || !count) return;
+  count.textContent = `${state.editor.modifications.length} queued`;
+  list.innerHTML = state.editor.modifications.length
+    ? state.editor.modifications.map((modification, index) => `
+      <li>
+        <button type="button" data-editor-focus="${index}">
+          <strong>${escapeHtml(modification.type)}</strong>
+          <span>${escapeHtml(modification.selector || "-")}</span>
+          <small>${escapeHtml(modificationSummary(modification))}</small>
+        </button>
+        <button type="button" data-editor-remove="${index}" aria-label="Remove change">Remove</button>
+      </li>
+    `).join("")
+    : `<li class="empty">No changes queued yet.</li>`;
 }
 
 function selectorForElement(element) {
@@ -272,6 +396,7 @@ function currentEditorModification(panel) {
 function previewEditorModification(modification) {
   const target = state.editor.selected || document.querySelector(modification.selector);
   if (!target) return;
+  rememberEditorSnapshot(target, modification.selector);
   if (modification.type === "change_text") target.textContent = modification.value || "";
   if (modification.type === "change_attribute") target.setAttribute(modification.attribute || "href", modification.value || "");
   if (modification.type === "change_style") target.style[modification.property || "color"] = modification.value || "";
@@ -279,14 +404,80 @@ function previewEditorModification(modification) {
   if (modification.type === "remove") target.hidden = true;
 }
 
-function editorOutput(modification) {
+function rememberEditorSnapshot(target, selector) {
+  const key = selector || selectorForElement(target);
+  if (!key || state.editor.snapshots.has(key)) return;
+  state.editor.snapshots.set(key, {
+    target,
+    text: target.textContent,
+    html: target.innerHTML,
+    hidden: target.hidden,
+    style: target.getAttribute("style"),
+    attributes: [...target.attributes].reduce((memo, attribute) => {
+      memo[attribute.name] = attribute.value;
+      return memo;
+    }, {})
+  });
+}
+
+function resetEditorPreview() {
+  for (const snapshot of state.editor.snapshots.values()) {
+    const target = snapshot.target;
+    if (!target?.isConnected) continue;
+    [...target.attributes].forEach((attribute) => {
+      if (!(attribute.name in snapshot.attributes)) target.removeAttribute(attribute.name);
+    });
+    Object.entries(snapshot.attributes).forEach(([name, value]) => target.setAttribute(name, value));
+    target.innerHTML = snapshot.html;
+    target.hidden = snapshot.hidden;
+    if (snapshot.style == null) target.removeAttribute("style");
+    else target.setAttribute("style", snapshot.style);
+  }
+  state.editor.snapshots.clear();
+}
+
+function applyQueuedEditorPreview() {
+  for (const modification of state.editor.modifications) {
+    const target = document.querySelector(modification.selector);
+    if (target) {
+      state.editor.selected = target;
+      previewEditorModification(modification);
+    }
+  }
+}
+
+function editorOutput(modification = null) {
+  const modifications = [...state.editor.modifications];
+  if (modification?.selector && !modifications.some((item) => item.id === modification.id)) {
+    modifications.push(modification);
+  }
   return {
     variant: state.editor.variant,
     outputs: {
       template: "dom_modifications",
-      modifications: [modification]
+      modifications
     }
   };
+}
+
+function uniqueModificationId(modification) {
+  const base = modification.id || `mod_${slugForEditor(modification.selector || modification.type)}`;
+  let id = base;
+  let index = 2;
+  while (state.editor.modifications.some((item) => item.id === id)) {
+    id = `${base}_${index}`;
+    index += 1;
+  }
+  return id;
+}
+
+function modificationSummary(modification) {
+  if (modification.type === "change_text") return String(modification.value || "").slice(0, 80);
+  if (modification.type === "change_attribute") return `${modification.attribute || "href"} = ${String(modification.value || "").slice(0, 70)}`;
+  if (modification.type === "change_style") return `${modification.property || "color"}: ${String(modification.value || "").slice(0, 70)}`;
+  if (modification.type === "insert_html") return String(modification.html || "").replace(/\s+/g, " ").slice(0, 80);
+  if (modification.type === "remove") return "Hide selected element";
+  return modification.type || "Change";
 }
 
 function slugForEditor(value) {
