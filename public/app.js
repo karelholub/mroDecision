@@ -3050,10 +3050,19 @@ function renderExperimentVariantBuilder(variants = []) {
             <strong>DOM modifications</strong>
             <span>Structured visual-editor output for the website SDK.</span>
           </div>
-          <button type="button" data-variant-action="add-dom-modification">Add Modification</button>
+          <div class="variant-dom-toolbar">
+            <select data-dom-preset>
+              ${domModificationPresets().map((preset) => `<option value="${escapeHtml(preset.id)}">${escapeHtml(preset.label)}</option>`).join("")}
+            </select>
+            <button type="button" data-variant-action="add-dom-preset">Add Preset</button>
+            <button type="button" data-variant-action="add-dom-modification">Blank</button>
+          </div>
         </div>
         <div data-role="variant-dom-modifications" class="variant-dom-list">
           ${domModificationFields(variant.outputs || {}).map((modification, modificationIndex) => domModificationRow(modification, modificationIndex)).join("")}
+        </div>
+        <div class="variant-dom-preview">
+          ${domModificationPreview(variant.outputs || {})}
         </div>
         <div class="variant-dom-guidance">
           ${domModificationWarnings(variant.outputs || {}).map((warning) => `<span>${escapeHtml(warning)}</span>`).join("") || "<span>No DOM modification warnings.</span>"}
@@ -3122,6 +3131,85 @@ function domModificationFields(outputs = {}) {
   return Array.isArray(modifications) ? modifications : [];
 }
 
+function domModificationPresets() {
+  return [
+    {
+      id: "hero_copy",
+      label: "Hero copy",
+      modification: {
+        type: "change_text",
+        selector: "[data-hero-title]",
+        value: "Personalized offer for your next visit",
+        scope: { url_rules: [{ mode: "include", operator: "contains", value: "/" }] },
+        max_matches: 1
+      }
+    },
+    {
+      id: "cta_link",
+      label: "CTA link",
+      modification: {
+        type: "change_attribute",
+        selector: "[data-primary-cta]",
+        attribute: "href",
+        value: "/offers",
+        scope: { url_rules: [{ mode: "include", operator: "contains", value: "/" }] },
+        max_matches: 1
+      }
+    },
+    {
+      id: "highlight_block",
+      label: "Highlight block",
+      modification: {
+        type: "change_style",
+        selector: "[data-promo-block]",
+        property: "backgroundColor",
+        value: "#effbf8",
+        scope: { url_rules: [{ mode: "include", operator: "contains", value: "/" }] },
+        max_matches: 1
+      }
+    },
+    {
+      id: "insert_proof",
+      label: "Insert proof",
+      modification: {
+        type: "insert_html",
+        selector: "[data-proof-slot]",
+        html: "<strong>Trusted by returning customers</strong><p>Personalized by DEE.</p>",
+        position: "replace",
+        scope: { url_rules: [{ mode: "include", operator: "contains", value: "/" }] },
+        max_matches: 1
+      }
+    },
+    {
+      id: "hide_section",
+      label: "Hide section",
+      modification: {
+        type: "remove",
+        selector: "[data-optional-section]",
+        mode: "hide",
+        scope: { url_rules: [{ mode: "include", operator: "contains", value: "/" }] },
+        max_matches: 1
+      }
+    },
+    {
+      id: "move_element",
+      label: "Move element",
+      modification: {
+        type: "move",
+        selector: "[data-secondary-cta]",
+        target_selector: "[data-primary-actions]",
+        position: "last_child",
+        scope: { url_rules: [{ mode: "include", operator: "contains", value: "/" }] },
+        max_matches: 1
+      }
+    }
+  ];
+}
+
+function domModificationPresetById(id) {
+  return domModificationPresets().find((preset) => preset.id === id) || domModificationPresets()[0];
+}
+
 function domModificationRow(modification = {}, index = 0) {
   const scope = modification.scope || {};
   return `
@@ -3170,6 +3258,39 @@ function domModificationRow(modification = {}, index = 0) {
       </div>
     </div>
   `;
+}
+
+function domModificationPreview(outputs = {}) {
+  const modifications = domModificationFields(outputs);
+  if (!modifications.length) return `<span>No visual modifications yet.</span>`;
+  return modifications.map((modification, index) => {
+    const selector = modification.selector || modification.source_selector || modification.sourceSelector || "selector";
+    const detail = domModificationSummary(modification);
+    return `
+      <article>
+        <strong>${escapeHtml(index + 1)}. ${escapeHtml(domModificationTypeLabel(modification.type || "change_text"))}</strong>
+        <span>${escapeHtml(selector)}</span>
+        <small>${escapeHtml(detail)}</small>
+      </article>
+    `;
+  }).join("");
+}
+
+function domModificationSummary(modification = {}) {
+  if (modification.type === "change_text") return `Set text to "${truncateForUi(modification.value || modification.text || "", 70)}"`;
+  if (modification.type === "change_attribute") return `Set ${modification.attribute || modification.name || "attribute"} to "${truncateForUi(modification.value || "", 70)}"`;
+  if (modification.type === "change_style") return modification.property
+    ? `Set ${modification.property} to "${truncateForUi(modification.value || "", 70)}"`
+    : `Apply ${Object.keys(modification.styles || {}).length} style value${Object.keys(modification.styles || {}).length === 1 ? "" : "s"}`;
+  if (modification.type === "insert_html") return `Insert HTML ${modification.position || "replace"} target`;
+  if (modification.type === "remove") return `${modification.mode || "collapse"} selected element`;
+  if (modification.type === "move") return `Move to ${modification.target_selector || modification.targetSelector || modification.target || "target"}`;
+  return "Modify selected element";
+}
+
+function truncateForUi(value, limit = 80) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > limit ? `${text.slice(0, limit - 1)}...` : text;
 }
 
 function domModificationTypeLabel(type) {
@@ -3367,6 +3488,12 @@ function handleExperimentVariantBuilderClick(event) {
   if (action === "add-dom-modification") {
     row.querySelector('[data-role="variant-dom-modifications"]').insertAdjacentHTML("beforeend", domModificationRow({ type: "change_text" }, row.querySelectorAll(".variant-dom-row").length));
     writeExperimentVariantsFromBuilder();
+  }
+  if (action === "add-dom-preset") {
+    const preset = domModificationPresetById(row.querySelector("[data-dom-preset]")?.value);
+    row.querySelector('[data-role="variant-dom-modifications"]').insertAdjacentHTML("beforeend", domModificationRow(preset.modification, row.querySelectorAll(".variant-dom-row").length));
+    writeExperimentVariantsFromBuilder();
+    syncExperimentVariantBuilderFromJson();
   }
   if (action === "remove-output") {
     button.closest(".variant-output-field")?.remove();

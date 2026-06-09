@@ -798,6 +798,14 @@ aside input {
   min-width: 0;
 }
 
+.variant-dom-toolbar {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto auto;
+  gap: 6px;
+  align-items: start;
+  min-width: 0;
+}
+
 .variant-dom-head span,
 .variant-dom-guidance span,
 .variant-dom-row-actions span {
@@ -811,6 +819,47 @@ aside input {
   display: grid;
   gap: 8px;
   min-width: 0;
+}
+
+.variant-dom-preview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.variant-dom-preview > span,
+.variant-dom-preview article {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px;
+  background: #ffffff;
+}
+
+.variant-dom-preview article {
+  display: grid;
+  gap: 4px;
+}
+
+.variant-dom-preview strong,
+.variant-dom-preview span,
+.variant-dom-preview small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.variant-dom-preview strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.variant-dom-preview span,
+.variant-dom-preview small,
+.variant-dom-preview > span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .variant-dom-row {
@@ -7242,6 +7291,8 @@ pre {
   .variant-builder-head,
   .variant-builder-row,
   .variant-dom-head,
+  .variant-dom-toolbar,
+  .variant-dom-preview,
   .variant-dom-row,
   .variant-dom-target-grid {
     grid-template-columns: 1fr;
