@@ -14,7 +14,8 @@ const state = {
     modifications: [],
     snapshots: new Map(),
     variant: new URLSearchParams(location.search).get("dee_editor_variant") || "treatment",
-    ruleKey: new URLSearchParams(location.search).get("dee_editor_rule") || ""
+    ruleKey: new URLSearchParams(location.search).get("dee_editor_rule") || "",
+    token: new URLSearchParams(location.search).get("dee_editor_token") || ""
   }
 };
 
@@ -172,6 +173,10 @@ function initializeVisualEditorOverlay() {
       <button type="button" data-editor-add>Add change</button>
       <button type="button" data-editor-reset>Reset preview</button>
       <button type="button" data-editor-copy>Copy JSON</button>
+      <button type="button" data-editor-save>Save draft</button>
+    </div>
+    <div class="visual-editor-status" data-editor-status>
+      ${state.editor.token && state.editor.ruleKey ? "Ready to save changes to DEE draft." : "Open from DEE to enable draft save."}
     </div>
     <div class="visual-editor-inventory">
       <div>
@@ -215,6 +220,9 @@ function initializeVisualEditorOverlay() {
     await navigator.clipboard?.writeText(JSON.stringify(payload, null, 2)).catch(() => {});
     logEvent("editor", "Copied visual editor modification JSON.");
   });
+  panel.querySelector("[data-editor-save]").addEventListener("click", async () => {
+    await saveEditorDraft(panel);
+  });
   panel.querySelector("[data-editor-inventory]").addEventListener("click", (event) => {
     const removeButton = event.target.closest?.("[data-editor-remove]");
     const focusButton = event.target.closest?.("[data-editor-focus]");
@@ -250,6 +258,47 @@ function initializeVisualEditorOverlay() {
   renderEditorPanel(panel);
   document.addEventListener("click", handleVisualEditorPick, true);
   logEvent("editor", "Visual editor mode active. Click a page element to build a DOM modification.");
+}
+
+async function saveEditorDraft(panel) {
+  const status = panel.querySelector("[data-editor-status]");
+  const button = panel.querySelector("[data-editor-save]");
+  const modification = currentEditorModification(panel);
+  const payload = editorOutput(modification.selector ? modification : null);
+  panel.querySelector("[data-editor-output]").textContent = JSON.stringify(payload, null, 2);
+  if (!state.editor.ruleKey || !state.editor.token) {
+    setEditorStatus(status, "Open this page from DEE Visual Editor to save directly to a draft.", "warn");
+    return;
+  }
+  button.disabled = true;
+  setEditorStatus(status, "Saving visual changes to DEE draft...", "");
+  try {
+    const baseUrl = elements.baseUrl.value.trim().replace(/\/$/, "");
+    const response = await fetch(`${baseUrl}/v1/experiments/${encodeURIComponent(state.editor.ruleKey)}/editor-draft`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        editor_token: state.editor.token,
+        variant_key: state.editor.variant,
+        outputs: payload.outputs
+      })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.message || `Save failed with ${response.status}`);
+    setEditorStatus(status, `Saved ${body.modifications_count || 0} changes to ${state.editor.variant} draft.`, "good");
+    logEvent("editor", `Saved ${body.modifications_count || 0} visual changes to DEE draft.`);
+  } catch (error) {
+    setEditorStatus(status, error.message || "Save failed.", "bad");
+    logEvent("editor", `Draft save failed: ${error.message || error}`);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function setEditorStatus(status, message, stateName = "") {
+  if (!status) return;
+  status.className = `visual-editor-status ${stateName}`.trim();
+  status.textContent = message;
 }
 
 function handleVisualEditorPick(event) {

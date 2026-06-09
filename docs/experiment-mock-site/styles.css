@@ -704,12 +704,46 @@ select {
 }
 
 .visual-editor-actions {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .visual-editor-actions button,
 .visual-editor-inventory button {
   min-width: 0;
+}
+
+.visual-editor-actions button {
+  padding-inline: 8px;
+}
+
+.visual-editor-status {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.visual-editor-status.good {
+  border-color: rgba(14, 154, 142, 0.35);
+  background: #eefbf8;
+  color: var(--teal-dark);
+}
+
+.visual-editor-status.warn {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: #fff8e8;
+  color: #92400e;
+}
+
+.visual-editor-status.bad {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: #fff1f2;
+  color: #991b1b;
 }
 
 .visual-editor-inventory > div {
