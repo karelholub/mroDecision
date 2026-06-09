@@ -3298,11 +3298,11 @@ function renderPrecomputeMetrics(metrics = {}) {
     ${precomputeErrorSummary(metrics)}
     <div class="precompute-recent">
       <div class="editor-title">Recent Runs</div>
-      <div class="traffic-call-list">${precomputeRunRows(metrics.recent_runs)}</div>
+      <div class="precompute-activity-list">${precomputeRunRows(metrics.recent_runs)}</div>
     </div>
     <div class="precompute-recent">
       <div class="editor-title">Recent Eligible Profiles</div>
-      <div class="traffic-call-list">${precomputeRecentRows(metrics.recent_profiles)}</div>
+      <div class="precompute-activity-list">${precomputeRecentRows(metrics.recent_profiles)}</div>
     </div>
   `;
 }
@@ -3384,23 +3384,26 @@ function precomputeGroup(title, items = []) {
 }
 
 function precomputeRecentRows(items = []) {
-  return items.length ? items.map((item) => `
-    <div class="traffic-call-row">
-      <strong>${escapeHtml(item.profile_key || "-")}</strong>
-      <span title="${escapeHtml((item.error_messages || []).join("; "))}">${escapeHtml(item.eligible ? "eligible" : item.errors ? "error" : "suppressed")}</span>
+  return items.length ? items.map((item) => {
+    const status = item.eligible ? "eligible" : item.errors ? "error" : "suppressed";
+    return `
+    <div class="precompute-activity-row profile">
+      <strong title="${escapeHtml(item.profile_key || "-")}">${escapeHtml(item.profile_key || "-")}</strong>
+      <span class="precompute-status ${escapeHtml(status)}" title="${escapeHtml((item.error_messages || []).join("; "))}">${escapeHtml(status)}</span>
       <em>${formatNumber(item.evaluations || 0)} evaluations</em>
-      <small>${item.last_seen_at ? escapeHtml(formatTime(item.last_seen_at)) : "-"}</small>
+      <time>${item.last_seen_at ? escapeHtml(clientEventClock(item.last_seen_at)) : "-"}</time>
     </div>
-  `).join("") : `<div class="status-line">No recent profiles</div>`;
+  `;
+  }).join("") : `<div class="status-line">No recent profiles</div>`;
 }
 
 function precomputeRunRows(items = []) {
   return items.length ? items.map((item) => `
-    <div class="traffic-call-row">
-      <strong>${escapeHtml(item.surface || "-")}</strong>
+    <div class="precompute-activity-row run">
+      <strong title="${escapeHtml(item.surface || "-")}">${escapeHtml(item.surface || "-")}</strong>
       <span>${formatNumber(item.profile_count || 0)} profiles</span>
       <em title="${escapeHtml(precomputeReasonLabel(item.diagnostics?.no_candidate_reason || ""))}">${formatNumber(item.candidate_evaluations || 0)} candidates</em>
-      <small>${item.received_at ? escapeHtml(formatTime(item.received_at)) : "-"}</small>
+      <time>${item.received_at ? escapeHtml(clientEventClock(item.received_at)) : "-"}</time>
     </div>
   `).join("") : `<div class="status-line">No recent runs</div>`;
 }
