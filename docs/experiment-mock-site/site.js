@@ -3,6 +3,7 @@ const storageKey = "dee_mock_site_settings";
 const state = {
   sdk: null,
   decisions: new Map(),
+  modifications: new Map(),
   lastPayload: null,
   eventCount: 0,
   evaluationRuns: 0
@@ -35,6 +36,8 @@ const elements = {
   clearLog: document.querySelector("#clear-log"),
   copyPayload: document.querySelector("#copy-payload"),
   decisionList: document.querySelector("#decision-list"),
+  modificationList: document.querySelector("#modification-list"),
+  modificationSummary: document.querySelector("#modification-summary"),
   rawOutput: document.querySelector("#raw-output"),
   eventLog: document.querySelector("#event-log"),
   metrics: {
@@ -64,6 +67,7 @@ function bindEvents() {
     createVisitor();
     saveSettings();
     state.decisions.clear();
+    state.modifications.clear();
     renderDiagnostics();
     logEvent("visitor", `New profile ${elements.profileKey.value}`);
   });
@@ -93,6 +97,10 @@ function bindEvents() {
     const placement = event.target?.dataset?.deePlacement || "unknown";
     rememberDecision(event.target, event.detail?.decision, { rendered: event.detail?.rendered, diagnostics: event.detail?.diagnostics || [] });
     logEvent("decision", `${placement} rendered=${event.detail?.rendered !== false}`);
+  }, true);
+
+  document.addEventListener("dee:modifications", (event) => {
+    rememberModifications(event.target, event.detail || {});
   }, true);
 
   document.addEventListener("dee:event", (event) => {
@@ -360,6 +368,23 @@ function rememberDecision(element, decision, meta = {}) {
   renderDiagnostics();
 }
 
+function rememberModifications(element, detail = {}) {
+  if (!element) return;
+  const selector = `#${element.id}`;
+  const diagnostics = Array.isArray(detail.diagnostics) ? detail.diagnostics : [];
+  const applied = diagnostics
+    .filter((item) => item.status === "applied")
+    .reduce((sum, item) => sum + Math.max(1, Number(item.count || 1)), 0);
+  state.modifications.set(selector, {
+    decision: detail.decision || null,
+    applied,
+    diagnostics,
+    at: new Date().toISOString()
+  });
+  renderModificationDiagnostics();
+  logEvent("modifications", `${element.dataset.deePlacement || selector}: ${applied} targets applied across ${diagnostics.length} operations`);
+}
+
 function renderDiagnostics() {
   const rows = [...state.decisions.entries()].map(([selector, record]) => {
     const decision = record.decision || {};
@@ -379,7 +404,44 @@ function renderDiagnostics() {
     `;
   }).join("");
   elements.decisionList.innerHTML = rows || `<p class="empty">No decisions yet. Apply runtime setup or evaluate a placement.</p>`;
+  renderModificationDiagnostics();
   renderMetrics();
+}
+
+function renderModificationDiagnostics() {
+  const records = [...state.modifications.entries()];
+  const totals = records.reduce((summary, [, record]) => {
+    summary.applied += record.applied || 0;
+    summary.operations += record.diagnostics.length;
+    summary.skipped += record.diagnostics.filter((item) => item.status !== "applied").length;
+    return summary;
+  }, { applied: 0, skipped: 0, operations: 0 });
+  if (elements.modificationSummary) {
+    elements.modificationSummary.textContent = totals.operations
+      ? `${totals.applied} targets applied, ${totals.skipped} operations skipped`
+      : "No modifications yet";
+  }
+  if (!elements.modificationList) return;
+  const rows = records.flatMap(([selector, record]) => {
+    const variant = record.decision?.experiment?.variant_key || "-";
+    return record.diagnostics.map((item) => `
+      <article data-status="${escapeAttribute(item.status || "unknown")}">
+        <div>
+          <span>${escapeHtml(selector)}</span>
+          <strong>${escapeHtml(item.id || item.type || "Modification")}</strong>
+        </div>
+        <dl>
+          <div><dt>Status</dt><dd>${escapeHtml(item.status || "-")}</dd></div>
+          <div><dt>Type</dt><dd>${escapeHtml(item.type || "-")}</dd></div>
+          <div><dt>Variant</dt><dd>${escapeHtml(variant)}</dd></div>
+          <div><dt>Targets</dt><dd>${Number.isFinite(item.count) ? item.count : "-"}</dd></div>
+          <div><dt>Selector</dt><dd>${escapeHtml(item.selector || "-")}</dd></div>
+          <div><dt>Reason</dt><dd>${escapeHtml(item.reason || item.message || "-")}</dd></div>
+        </dl>
+      </article>
+    `);
+  }).join("");
+  elements.modificationList.innerHTML = rows || `<p class="empty">Evaluate the DOM modification placement to inspect selector results.</p>`;
 }
 
 function renderDiagnosticSummary(diagnostics = []) {

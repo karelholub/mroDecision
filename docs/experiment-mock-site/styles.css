@@ -605,14 +605,26 @@ select {
   grid-column: 1 / -1;
 }
 
-.decision-list {
+.modification-panel {
+  grid-column: 1 / -1;
+}
+
+.card-head span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.decision-list,
+.modification-list {
   display: grid;
   gap: 10px;
   max-height: 480px;
   overflow: auto;
 }
 
-.decision-list article {
+.decision-list article,
+.modification-list article {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -620,7 +632,27 @@ select {
   background: var(--soft);
 }
 
-.decision-list strong {
+.modification-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.modification-list article[data-status="applied"] {
+  border-color: rgba(15, 143, 129, 0.38);
+  background: #f1fbf9;
+}
+
+.modification-list article[data-status="skipped"] {
+  border-color: rgba(217, 119, 6, 0.34);
+  background: #fff7ed;
+}
+
+.modification-list article > div {
+  min-width: 0;
+  margin-bottom: 8px;
+}
+
+.decision-list strong,
+.modification-list strong {
   display: block;
   margin: 4px 0 8px;
   overflow-wrap: anywhere;
@@ -712,7 +744,8 @@ pre {
   }
 
   .feature-toggle-grid,
-  .merchandising-demo {
+  .merchandising-demo,
+  .modification-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -731,6 +764,7 @@ pre {
   .kpi-strip,
   .feature-toggle-grid,
   .merchandising-demo,
+  .modification-list,
   dl,
   #event-log li {
     grid-template-columns: 1fr;
