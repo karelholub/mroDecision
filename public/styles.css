@@ -1595,6 +1595,90 @@ aside input {
   min-width: 0;
 }
 
+.experiment-readiness-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.experiment-readiness-panel.ok {
+  border-color: rgba(14, 154, 142, 0.28);
+  background: rgba(14, 154, 142, 0.04);
+}
+
+.experiment-readiness-panel.warn {
+  border-color: rgba(180, 83, 9, 0.3);
+  background: rgba(245, 158, 11, 0.07);
+}
+
+.experiment-readiness-panel.error {
+  border-color: rgba(180, 35, 24, 0.28);
+  background: rgba(180, 35, 24, 0.04);
+}
+
+.experiment-readiness-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.experiment-readiness-head strong,
+.experiment-readiness-head span {
+  display: block;
+}
+
+.experiment-readiness-head span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.experiment-readiness-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.experiment-readiness-list div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.experiment-readiness-list div.ok {
+  border-color: rgba(14, 154, 142, 0.22);
+}
+
+.experiment-readiness-list div.warn {
+  border-color: rgba(180, 83, 9, 0.28);
+}
+
+.experiment-readiness-list div.error {
+  border-color: rgba(180, 35, 24, 0.28);
+}
+
+.experiment-readiness-list strong {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.experiment-readiness-list span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .experiment-tab-intro {
   display: flex;
   justify-content: space-between;
@@ -7548,6 +7632,7 @@ pre {
   .experiment-design-grid,
   .experiment-settings-list,
   .experiment-evaluate-grid,
+  .experiment-readiness-list,
   .client-traffic-summary,
   .client-traffic-groups,
   .overview-service-footer {
@@ -7627,6 +7712,11 @@ pre {
     display: grid;
   }
 
+  .experiment-readiness-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .experiment-tab-intro {
     align-items: stretch;
     flex-direction: column;
@@ -7668,6 +7758,7 @@ pre {
     .experiment-design-grid,
     .experiment-settings-list,
     .experiment-evaluate-grid,
+    .experiment-readiness-list,
     .overview-service-footer,
     .client-event-subsections,
     .distribution-panel,

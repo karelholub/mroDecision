@@ -1885,6 +1885,7 @@ function renderExperimentDetail(experiment) {
       </div>
       <mark class="experiment-status ${escapeHtml(experiment.experiment_status || "draft")}">${escapeHtml(experiment.experiment_status || "draft")}</mark>
     </div>
+    ${experimentReadinessPanel(experiment)}
     <div class="experiment-workbench-tabs" role="tablist">
       ${tabs.map((tab) => `<button type="button" role="tab" class="${activeExperimentTab === tab.key ? "active" : ""}" data-experiment-tab="${tab.key}">${escapeHtml(tab.label)}</button>`).join("")}
     </div>
@@ -1957,6 +1958,7 @@ function experimentSettingsTab(experiment) {
   const trigger = delivery.trigger || experiment.trigger || metadataExperiment.trigger || {};
   const goal = delivery.goal || experiment.goal || metadataExperiment.goal || {};
   const consent = delivery.consent || experiment.consent || metadataExperiment.consent || {};
+  const schedule = experiment.schedule || metadataExperiment.schedule || {};
   return `
     <section class="experiment-tab-panel">
       <div class="experiment-tab-intro">
@@ -1969,7 +1971,7 @@ function experimentSettingsTab(experiment) {
       <div class="experiment-settings-list">
         ${experimentSettingRow("Trigger", trigger.type || "page_load", trigger.event ? `Event: ${trigger.event}` : "Default website SDK trigger")}
         ${experimentSettingRow("Conversion goal", goal.event || "conversion", goal.type ? `Type: ${goal.type}` : "Used for reporting and winner guidance")}
-        ${experimentSettingRow("Schedule", experiment.starts_at || experiment.ends_at ? `${experiment.starts_at || "Now"} - ${experiment.ends_at || "manual stop"}` : "Display immediately, stop manually", `${formatNumber(experiment.daily_eligible_profiles || 0)} daily eligible estimate`)}
+        ${experimentSettingRow("Schedule", schedule.starts_at || schedule.ends_at ? `${schedule.starts_at || "Now"} - ${schedule.ends_at || "manual stop"}` : "Display immediately, stop manually", `${formatNumber(schedule.daily_eligible_profiles || 0)} daily eligible estimate`)}
         ${experimentSettingRow("Show on", urlRulesLabel(targeting.url_rules), "URL targeting")}
         ${experimentSettingRow("Page variables", arrayLabel(targeting.page_variables), "Enhanced web targeting")}
         ${experimentSettingRow("JavaScript conditions", arrayLabel(targeting.sdk_conditions), "Named SDK conditions")}
@@ -2129,6 +2131,69 @@ function experimentSettingRow(label, value, detail = "") {
       <small>${escapeHtml(detail || "")}</small>
     </div>
   `;
+}
+
+function experimentReadinessPanel(experiment = {}) {
+  const checks = experimentReadinessChecks(experiment);
+  const blocking = checks.filter((item) => item.level === "error").length;
+  const warnings = checks.filter((item) => item.level === "warn").length;
+  const ready = blocking === 0 && warnings === 0;
+  return `
+    <section class="experiment-readiness-panel ${ready ? "ok" : blocking ? "error" : "warn"}">
+      <div class="experiment-readiness-head">
+        <div>
+          <strong>${ready ? "Ready to monitor" : blocking ? "Launch blockers" : "Review before launch"}</strong>
+          <span>${escapeHtml(blocking ? `${blocking} blocking issue${blocking === 1 ? "" : "s"}` : warnings ? `${warnings} warning${warnings === 1 ? "" : "s"}` : "No obvious readiness issues detected.")}</span>
+        </div>
+        <button type="button" data-experiment-action="open-editor" data-editor-section="${blocking || warnings ? "settings" : "operations"}" data-rule-key="${escapeHtml(experiment.decision_key || "")}">Review Setup</button>
+      </div>
+      <div class="experiment-readiness-list">
+        ${checks.map((item) => `
+          <div class="${escapeHtml(item.level)}">
+            <strong>${escapeHtml(item.title)}</strong>
+            <span>${escapeHtml(item.detail)}</span>
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function experimentReadinessChecks(experiment = {}) {
+  const variants = Array.isArray(experiment.variants) ? experiment.variants : [];
+  const allocationTotal = variants.reduce((sum, variant) => sum + Number(variant.weight || 0), 0);
+  const outputVariants = variants.filter((variant) => Object.keys(variant.outputs || {}).length > 0).length;
+  const goal = experiment.goal || {};
+  const schedule = experiment.schedule || {};
+  const targeting = experiment.targeting || {};
+  const trigger = experiment.trigger || {};
+  const consent = experiment.consent || {};
+  const exposureCount = Number(experiment.events?.exposure?.count || 0);
+  const impressionCount = Number(experiment.events?.impression?.count || 0);
+  const conversionCount = Number(experiment.events?.conversion?.count || 0);
+  const live = experiment.status === "published" && experiment.experiment_status === "running";
+  const checks = [
+    readinessCheck(experiment.status === "published", "Published version", experiment.status === "published" ? "Client traffic can use the published experiment." : "Publish the experiment before sending live web traffic.", "error"),
+    readinessCheck(experiment.experiment_status === "running", "Experiment status", experiment.experiment_status === "running" ? "Assignments are active." : `Current status is ${experiment.experiment_status || "draft"}. Launch when ready.`, "warn"),
+    readinessCheck(variants.length >= 2, "Variants", variants.length >= 2 ? `${variants.length} variants configured.` : "Configure at least control and one treatment variant.", "error"),
+    readinessCheck(Math.round(allocationTotal * 1000) === 100000, "Allocation", `Allocation total is ${formatNumber(allocationTotal)}%.`, "error"),
+    readinessCheck(outputVariants > 0, "Design payload", outputVariants ? `${outputVariants} variant${outputVariants === 1 ? "" : "s"} define outputs.` : "Add outputs or DOM modifications for at least one treatment.", "warn"),
+    readinessCheck(Boolean(goal.event), "Conversion goal", goal.event ? `Goal event: ${goal.event}.` : "Set the conversion goal used for reporting.", "warn"),
+    readinessCheck(Boolean(schedule.daily_eligible_profiles || exposureCount), "Traffic estimate", schedule.daily_eligible_profiles ? `${formatNumber(schedule.daily_eligible_profiles)} daily eligible profiles estimated.` : exposureCount ? `${formatNumber(exposureCount)} exposure events received.` : "Add daily traffic estimate or wait for exposure feedback.", "warn"),
+    readinessCheck(Boolean(targeting.url_rules?.length || experiment.surface), "Placement targeting", targeting.url_rules?.length ? `${targeting.url_rules.length} URL rule${targeting.url_rules.length === 1 ? "" : "s"} configured.` : experiment.surface ? `Surface: ${experiment.surface}.` : "Set surface or URL targeting before using the SDK.", "warn"),
+    readinessCheck(!["data_layer_event", "custom_event"].includes(trigger.type) || Boolean(trigger.event), "Trigger", trigger.event ? `${trigger.type}: ${trigger.event}.` : "Trigger can run without extra event configuration.", "warn"),
+    readinessCheck(!consent.required || Boolean(consent.category), "Consent", consent.required ? `Requires ${consent.category || "a consent category"}.` : "No consent gate required.", "warn"),
+    readinessCheck(!live || exposureCount > 0, "Feedback flow", exposureCount ? `${formatNumber(exposureCount)} exposures, ${formatNumber(impressionCount)} impressions, ${formatNumber(conversionCount)} conversions.` : "No feedback yet; verify SDK exposure/impression events after launch.", "warn")
+  ];
+  return checks.slice(0, 12);
+}
+
+function readinessCheck(passed, title, detail, failLevel = "warn") {
+  return {
+    level: passed ? "ok" : failLevel,
+    title,
+    detail
+  };
 }
 
 function arrayLabel(value) {
