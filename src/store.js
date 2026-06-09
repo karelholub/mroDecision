@@ -37,6 +37,8 @@ const portableSettingKeys = [
   "schema_sync_interval_minutes",
   "schema_sync_identifier_type",
   "schema_sync_identifier_value",
+  "web_page_variables",
+  "web_sdk_conditions",
   "assistant_llm_enabled",
   "assistant_llm_provider",
   "assistant_llm_base_url",

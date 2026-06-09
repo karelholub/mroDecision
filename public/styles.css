@@ -603,6 +603,60 @@ aside input {
   line-height: 1.35;
 }
 
+.web-targeting-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.web-targeting-catalog-grid label {
+  min-width: 0;
+}
+
+.web-targeting-catalog-grid textarea {
+  min-height: 120px;
+  max-height: 220px;
+  resize: vertical;
+}
+
+.web-targeting-catalog-grid small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.web-targeting-catalog-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.web-targeting-catalog-preview div {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel-soft);
+}
+
+.web-targeting-catalog-preview strong,
+.web-targeting-catalog-preview span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.web-targeting-catalog-preview span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .bandit-settings-panel,
 .experiment-bandit-detail {
   display: grid;
@@ -7883,7 +7937,9 @@ pre {
   }
 
   .experiment-url-preview-list,
-  .experiment-url-preview-list div {
+  .experiment-url-preview-list div,
+  .web-targeting-catalog-grid,
+  .web-targeting-catalog-preview {
     grid-template-columns: 1fr;
   }
 

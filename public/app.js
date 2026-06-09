@@ -443,6 +443,7 @@ document.querySelector("#rule-type").addEventListener("change", () => {
   "#experiment-target-devices",
   "#experiment-url-includes",
   "#experiment-url-excludes",
+  "#experiment-page-variables",
   "#experiment-url-preview-samples",
   "#experiment-sdk-conditions",
   "#experiment-trigger-type",
@@ -571,6 +572,13 @@ document.querySelector("#lookup-key-column").addEventListener("change", () => {
   document.querySelector(selector).addEventListener("input", renderLookupInspector);
 });
 document.querySelector("#settings-form").addEventListener("submit", saveSettings);
+["#setting-web-page-variables", "#setting-web-sdk-conditions"].forEach((selector) => {
+  document.querySelector(selector)?.addEventListener("input", () => {
+    renderWebTargetingCatalogPreview();
+    renderWebTargetingOptions();
+    renderRuleInspector();
+  });
+});
 document.querySelector("#token-form").addEventListener("submit", createToken);
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && ruleBuilderPanel && !ruleBuilderPanel.hidden) closeRuleBuilder();
@@ -3293,8 +3301,10 @@ function setExperimentMetadata(experiment = {}) {
   document.querySelector("#experiment-target-devices").value = Array.isArray(experiment.targeting?.devices) ? experiment.targeting.devices.join(", ") : "any";
   document.querySelector("#experiment-url-includes").value = urlRulesToText(experiment.targeting?.url_rules, "include");
   document.querySelector("#experiment-url-excludes").value = urlRulesToText(experiment.targeting?.url_rules, "exclude");
+  document.querySelector("#experiment-page-variables").value = Array.isArray(experiment.targeting?.page_variables) ? experiment.targeting.page_variables.join(", ") : "";
   document.querySelector("#experiment-url-preview-samples").value = defaultExperimentUrlSamples(experiment).join("\n");
   document.querySelector("#experiment-sdk-conditions").value = Array.isArray(experiment.targeting?.sdk_conditions) ? experiment.targeting.sdk_conditions.join(", ") : "";
+  renderWebTargetingOptions();
   document.querySelector("#experiment-trigger-type").value = experiment.trigger?.type || "page_load";
   document.querySelector("#experiment-trigger-event").value = experiment.trigger?.event || "";
   document.querySelector("#experiment-consent-category").value = experiment.consent?.category || "";
@@ -3986,9 +3996,11 @@ function readExperimentDeliverySettings() {
     ...textList(document.querySelector("#experiment-url-excludes").value).map((value) => ({ mode: "exclude", operator: "contains", value }))
   ];
   const sdkConditions = uniqueList(document.querySelector("#experiment-sdk-conditions").value);
+  const pageVariables = uniqueList(document.querySelector("#experiment-page-variables").value);
   const targeting = {};
   if (devices.length && !devices.includes("any")) targeting.devices = devices;
   if (urlRules.length) targeting.url_rules = urlRules;
+  if (pageVariables.length) targeting.page_variables = pageVariables;
   if (sdkConditions.length) targeting.sdk_conditions = sdkConditions;
   const triggerType = document.querySelector("#experiment-trigger-type").value || "page_load";
   const triggerEvent = document.querySelector("#experiment-trigger-event").value.trim();
@@ -4131,6 +4143,18 @@ function experimentMetadataWarnings(experiment = {}) {
   const targeting = experiment.targeting || {};
   if (Array.isArray(targeting.devices) && targeting.devices.some((device) => !["any", "desktop", "tablet", "mobile"].includes(device))) {
     warnings.push("Target devices must use any, desktop, tablet, or mobile.");
+  }
+  if (Array.isArray(targeting.page_variables)) {
+    const known = new Set(webTargetingCatalog().pageVariables.map((item) => item.key));
+    const unknown = targeting.page_variables
+      .map((item) => String(item || "").split("=")[0].trim())
+      .filter((key) => key && known.size && !known.has(key));
+    if (unknown.length) warnings.push(`Page variables are not in the Settings catalog: ${unknown.slice(0, 4).join(", ")}`);
+  }
+  if (Array.isArray(targeting.sdk_conditions)) {
+    const known = new Set(webTargetingCatalog().sdkConditions.map((item) => item.key));
+    const unknown = targeting.sdk_conditions.filter((key) => key && known.size && !known.has(key));
+    if (unknown.length) warnings.push(`SDK conditions are not in the Settings catalog: ${unknown.slice(0, 4).join(", ")}`);
   }
   for (const rule of targeting.url_rules || []) {
     if (!rule.value) warnings.push("URL targeting rule is missing a value.");
@@ -9957,6 +9981,8 @@ async function loadSettings() {
     document.querySelector("#setting-schema-sync-interval").value = settings.schema_sync_interval_minutes || 15;
     document.querySelector("#schema-sync-identifier-type").value = settings.schema_sync_identifier_type || "";
     document.querySelector("#schema-sync-identifier-value").value = settings.schema_sync_identifier_value || "";
+    document.querySelector("#setting-web-page-variables").value = catalogToText(settings.web_page_variables || defaultWebPageVariables());
+    document.querySelector("#setting-web-sdk-conditions").value = catalogToText(settings.web_sdk_conditions || defaultWebSdkConditions());
     document.querySelector("#setting-assistant-llm-enabled").value = settings.assistant_llm_enabled ? "true" : "false";
     document.querySelector("#setting-assistant-llm-provider").value = settings.assistant_llm_provider || "openai";
     document.querySelector("#setting-assistant-llm-base-url").value = settings.assistant_llm_base_url || "";
@@ -9971,6 +9997,8 @@ async function loadSettings() {
     renderApprovalWorkflowControls();
     renderAssistantProviderConfigHistory(body.runtime?.assistant_provider_config_events || []);
     renderAssistantProviderPlanHistory(body.runtime?.assistant_provider_plan_events || []);
+    renderWebTargetingCatalogPreview();
+    renderWebTargetingOptions();
     await loadMeiroDeliveries();
     settingsOutput.textContent = JSON.stringify(body, null, 2);
     renderIntegration();
@@ -10051,6 +10079,8 @@ async function saveSettings(event) {
       schema_sync_interval_minutes: Number(document.querySelector("#setting-schema-sync-interval").value || 15),
       schema_sync_identifier_type: document.querySelector("#schema-sync-identifier-type").value.trim(),
       schema_sync_identifier_value: document.querySelector("#schema-sync-identifier-value").value.trim(),
+      web_page_variables: parseCatalogText(document.querySelector("#setting-web-page-variables").value),
+      web_sdk_conditions: parseCatalogText(document.querySelector("#setting-web-sdk-conditions").value),
       assistant_llm_enabled: document.querySelector("#setting-assistant-llm-enabled").value === "true",
       assistant_llm_provider: document.querySelector("#setting-assistant-llm-provider").value,
       assistant_llm_base_url: document.querySelector("#setting-assistant-llm-base-url").value.trim(),
@@ -10075,6 +10105,8 @@ async function saveSettings(event) {
     renderApprovalWorkflowControls();
     renderAssistantProviderConfigHistory(body.runtime?.assistant_provider_config_events || []);
     renderAssistantProviderPlanHistory(body.runtime?.assistant_provider_plan_events || []);
+    renderWebTargetingCatalogPreview();
+    renderWebTargetingOptions();
     renderIntegration();
     settingsOutput.textContent = JSON.stringify(body, null, 2);
   } catch (error) {
@@ -10149,6 +10181,82 @@ function renderSchemaSyncStatus(settings, runtime) {
   const count = Number(settings.schema_last_sync_count || 0);
   const error = settings.schema_last_sync_error ? ` Error: ${settings.schema_last_sync_error}` : "";
   target.textContent = `Status: ${status}. Last sync: ${lastSync}. Imported: ${count}. Next sync: ${nextRun}.${error}`;
+}
+
+function defaultWebPageVariables() {
+  return [
+    { key: "page_type", label: "Page type", description: "product, category, search, cart, checkout, homepage" },
+    { key: "product_category", label: "Product category", description: "Current product or listing category" },
+    { key: "logged_in", label: "Logged in", description: "true when the visitor is authenticated" }
+  ];
+}
+
+function defaultWebSdkConditions() {
+  return [
+    { key: "cart_is_not_empty", label: "Cart is not empty", description: "true when the visitor has cart items" },
+    { key: "has_search_results", label: "Has search results", description: "true after a successful site search" },
+    { key: "recommendations_available", label: "Recommendations available", description: "true when the recommender has products to render" }
+  ];
+}
+
+function parseCatalogText(value) {
+  return String(value || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [key, label, ...detailParts] = line.split("|").map((part) => part.trim());
+      return {
+        key: slug(key || label || "item"),
+        label: label || key || "Catalog item",
+        description: detailParts.join(" | ")
+      };
+    })
+    .filter((item) => item.key);
+}
+
+function catalogToText(items = []) {
+  const catalog = Array.isArray(items) && items.length ? items : [];
+  return catalog.map((item) => [item.key, item.label, item.description].filter((value) => value != null && String(value).trim()).join(" | ")).join("\n");
+}
+
+function webTargetingCatalog() {
+  return {
+    pageVariables: parseCatalogText(document.querySelector("#setting-web-page-variables")?.value || catalogToText(cachedSettings.settings?.web_page_variables || defaultWebPageVariables())),
+    sdkConditions: parseCatalogText(document.querySelector("#setting-web-sdk-conditions")?.value || catalogToText(cachedSettings.settings?.web_sdk_conditions || defaultWebSdkConditions()))
+  };
+}
+
+function renderWebTargetingCatalogPreview() {
+  const target = document.querySelector("#web-targeting-catalog-preview");
+  if (!target) return;
+  const catalog = webTargetingCatalog();
+  target.innerHTML = `
+    <div>
+      <strong>Page variables</strong>
+      <span>${escapeHtml(catalog.pageVariables.length ? catalog.pageVariables.map((item) => item.key).join(", ") : "No page variables documented.")}</span>
+    </div>
+    <div>
+      <strong>SDK conditions</strong>
+      <span>${escapeHtml(catalog.sdkConditions.length ? catalog.sdkConditions.map((item) => item.key).join(", ") : "No SDK conditions documented.")}</span>
+    </div>
+  `;
+}
+
+function renderWebTargetingOptions() {
+  const catalog = webTargetingCatalog();
+  const pageVariableOptions = document.querySelector("#web-page-variable-options");
+  if (pageVariableOptions) {
+    pageVariableOptions.innerHTML = catalog.pageVariables
+      .map((item) => `<option value="${escapeHtml(item.key)}">${escapeHtml([item.label, item.description].filter(Boolean).join(" - "))}</option>`)
+      .join("");
+  }
+  const conditionOptions = document.querySelector("#web-sdk-condition-options");
+  if (conditionOptions) {
+    conditionOptions.innerHTML = catalog.sdkConditions
+      .map((item) => `<option value="${escapeHtml(item.key)}">${escapeHtml([item.label, item.description].filter(Boolean).join(" - "))}</option>`)
+      .join("");
+  }
 }
 
 async function loadMeiroDeliveries() {

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Meiro DEE</title>
-    <link rel="stylesheet" href="/styles.css?v=20260609-url-preview" />
+    <link rel="stylesheet" href="/styles.css?v=20260609-web-targeting-catalog" />
   </head>
   <body>
     <aside>
@@ -431,13 +431,19 @@
                         URL excludes
                         <input id="experiment-url-excludes" placeholder="preview=true, /admin" />
                       </label>
+                      <label>
+                        Page variables
+                        <input id="experiment-page-variables" list="web-page-variable-options" placeholder="page_type=product, logged_in=true" />
+                        <datalist id="web-page-variable-options"></datalist>
+                      </label>
                       <label class="experiment-url-preview-field">
                         Test URLs
                         <textarea id="experiment-url-preview-samples" placeholder="https://example.com/offers&#10;https://example.com/admin"></textarea>
                       </label>
                       <label>
                         SDK conditions
-                        <input id="experiment-sdk-conditions" placeholder="cart_is_not_empty, has_search_results" />
+                        <input id="experiment-sdk-conditions" list="web-sdk-condition-options" placeholder="cart_is_not_empty, has_search_results" />
+                        <datalist id="web-sdk-condition-options"></datalist>
                       </label>
                       <label>
                         Trigger type
@@ -1797,6 +1803,30 @@
                     </div>
                   </div>
                 </div>
+                <div class="settings-card wide">
+                  <div class="settings-section-head compact-section-head">
+                    <div>
+                      <div class="editor-title compact-title">Web Targeting Catalog</div>
+                      <p>Document page variables and named SDK conditions that website experiments can target.</p>
+                    </div>
+                  </div>
+                  <div class="web-targeting-catalog-grid">
+                    <label>
+                      Page variables
+                      <textarea id="setting-web-page-variables" spellcheck="false" placeholder="page_type | Page type | product, category, checkout&#10;logged_in | Logged in customer | true/false"></textarea>
+                      <small>One per line: key | label | description.</small>
+                    </label>
+                    <label>
+                      SDK conditions
+                      <textarea id="setting-web-sdk-conditions" spellcheck="false" placeholder="cart_is_not_empty | Cart is not empty | true when cart has items&#10;has_search_results | Search returned results | true after site search"></textarea>
+                      <small>Named predicates provided by the website SDK configuration.</small>
+                    </label>
+                  </div>
+                  <div id="web-targeting-catalog-preview" class="web-targeting-catalog-preview"></div>
+                  <div class="actions left">
+                    <button type="submit">Save Settings</button>
+                  </div>
+                </div>
               </div>
             </section>
             </form>
@@ -2089,7 +2119,7 @@
       </div>
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
-  <script src="/app-utils.js?v=20260609-url-preview"></script>
-  <script src="/app.js?v=20260609-url-preview"></script>
+  <script src="/app-utils.js?v=20260609-web-targeting-catalog"></script>
+  <script src="/app.js?v=20260609-web-targeting-catalog"></script>
 </body>
 </html>
