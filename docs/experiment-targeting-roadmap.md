@@ -335,7 +335,6 @@ Implemented first pass:
 - The Web SDK exposes `trackConversion(name, placementOrDecision, event)` and keeps automatic link-click conversion tracking.
 
 Remaining product/UI work:
-- Add URL-rule preview and validation against sample URLs.
 - Add a Settings catalog for page variables and named SDK conditions.
 - Add conversion-goal reporting by attribution window and value field.
 - Add richer schedule enforcement and calendar visibility.
@@ -343,6 +342,7 @@ Remaining product/UI work:
 
 Implemented UI follow-up:
 - The rule-set experiment workbench now has form controls for display frequency, display reset behavior, target devices, URL include/exclude rules, named SDK conditions, trigger type/event, consent requirement/category, goal type, attribution window, and value field.
+- URL include/exclude rules now have an in-editor preview against sample URLs, showing whether each page would show or suppress the experiment before publish.
 - Publish and inspector warnings include delivery, targeting, trigger, and consent issues, plus active-experiment freeze warnings when those settings change while running.
 
 These SDK additions should remain backward compatible. Existing placements that only use `data-dee-placement` and `data-dee-decision-key` should continue evaluating on page load and rendering with fallback behavior unchanged.

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Meiro DEE</title>
-    <link rel="stylesheet" href="/styles.css?v=20260609-experiment-readiness" />
+    <link rel="stylesheet" href="/styles.css?v=20260609-url-preview" />
   </head>
   <body>
     <aside>
@@ -431,6 +431,10 @@
                         URL excludes
                         <input id="experiment-url-excludes" placeholder="preview=true, /admin" />
                       </label>
+                      <label class="experiment-url-preview-field">
+                        Test URLs
+                        <textarea id="experiment-url-preview-samples" placeholder="https://example.com/offers&#10;https://example.com/admin"></textarea>
+                      </label>
                       <label>
                         SDK conditions
                         <input id="experiment-sdk-conditions" placeholder="cart_is_not_empty, has_search_results" />
@@ -477,6 +481,7 @@
                         <input id="experiment-goal-value-field" placeholder="event.revenue" />
                       </label>
                     </div>
+                    <div id="experiment-url-preview" class="experiment-url-preview"></div>
                   </div>
                   <div class="variant-builder-panel" data-experiment-editor-section="design">
                     <div class="variant-builder-head">
@@ -2084,7 +2089,7 @@
       </div>
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
-  <script src="/app-utils.js?v=20260609-experiment-readiness"></script>
-  <script src="/app.js?v=20260609-experiment-readiness"></script>
+  <script src="/app-utils.js?v=20260609-url-preview"></script>
+  <script src="/app.js?v=20260609-url-preview"></script>
 </body>
 </html>

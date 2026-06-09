@@ -524,6 +524,85 @@ aside input {
   grid-template-columns: repeat(3, minmax(160px, 1fr));
 }
 
+.experiment-url-preview-field {
+  grid-column: span 2;
+}
+
+.experiment-url-preview-field textarea {
+  min-height: 86px;
+  max-height: 150px;
+  resize: vertical;
+}
+
+.experiment-url-preview {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.experiment-url-preview-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.experiment-url-preview-head strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.experiment-url-preview-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.experiment-url-preview-list div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  align-items: start;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: var(--panel-soft);
+}
+
+.experiment-url-preview-list div.ok {
+  border-color: rgba(14, 154, 142, 0.24);
+  background: rgba(14, 154, 142, 0.05);
+}
+
+.experiment-url-preview-list div.warn {
+  border-color: rgba(180, 83, 9, 0.28);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.experiment-url-preview-list strong {
+  font-size: 12px;
+}
+
+.experiment-url-preview-list span,
+.experiment-url-preview-list small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.experiment-url-preview-list span {
+  font-weight: 800;
+}
+
+.experiment-url-preview-list small {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .bandit-settings-panel,
 .experiment-bandit-detail {
   display: grid;
@@ -7795,6 +7874,16 @@ pre {
   }
 
   .variant-output-field {
+    grid-template-columns: 1fr;
+  }
+
+  .experiment-url-preview-field,
+  .experiment-url-preview-list small {
+    grid-column: auto;
+  }
+
+  .experiment-url-preview-list,
+  .experiment-url-preview-list div {
     grid-template-columns: 1fr;
   }
 

@@ -443,6 +443,7 @@ document.querySelector("#rule-type").addEventListener("change", () => {
   "#experiment-target-devices",
   "#experiment-url-includes",
   "#experiment-url-excludes",
+  "#experiment-url-preview-samples",
   "#experiment-sdk-conditions",
   "#experiment-trigger-type",
   "#experiment-trigger-event",
@@ -3246,6 +3247,7 @@ function renderExperimentPanel() {
   ];
   const planning = experimentPlanningSummary(experiment);
   if (!document.querySelector("#experiment-variant-builder")?.innerHTML.trim()) renderExperimentVariantBuilder(variants);
+  renderExperimentUrlPreview(experiment);
   experimentSummary.innerHTML = [
     statusItem("Status", status),
     statusItem("Assignment", experiment.unit || "profile"),
@@ -3291,6 +3293,7 @@ function setExperimentMetadata(experiment = {}) {
   document.querySelector("#experiment-target-devices").value = Array.isArray(experiment.targeting?.devices) ? experiment.targeting.devices.join(", ") : "any";
   document.querySelector("#experiment-url-includes").value = urlRulesToText(experiment.targeting?.url_rules, "include");
   document.querySelector("#experiment-url-excludes").value = urlRulesToText(experiment.targeting?.url_rules, "exclude");
+  document.querySelector("#experiment-url-preview-samples").value = defaultExperimentUrlSamples(experiment).join("\n");
   document.querySelector("#experiment-sdk-conditions").value = Array.isArray(experiment.targeting?.sdk_conditions) ? experiment.targeting.sdk_conditions.join(", ") : "";
   document.querySelector("#experiment-trigger-type").value = experiment.trigger?.type || "page_load";
   document.querySelector("#experiment-trigger-event").value = experiment.trigger?.event || "";
@@ -4021,6 +4024,83 @@ function urlRulesToText(rules = [], mode) {
     .map((rule) => rule.value || "")
     .filter(Boolean)
     .join(", ");
+}
+
+function defaultExperimentUrlSamples(experiment = {}) {
+  const rules = Array.isArray(experiment.targeting?.url_rules) ? experiment.targeting.url_rules : [];
+  const includeValues = rules.filter((rule) => (rule.mode || "include") === "include").map((rule) => rule.value).filter(Boolean);
+  const excludeValues = rules.filter((rule) => rule.mode === "exclude").map((rule) => rule.value).filter(Boolean);
+  const surface = experiment.surface || document.querySelector("#rule-surface")?.value || "";
+  return [
+    includeValues[0] ? sampleUrlFromRuleValue(includeValues[0]) : surface ? `https://example.com/${surface}` : "https://example.com/",
+    excludeValues[0] ? sampleUrlFromRuleValue(excludeValues[0]) : "https://example.com/admin"
+  ];
+}
+
+function sampleUrlFromRuleValue(value) {
+  const text = String(value || "").trim();
+  if (/^https?:\/\//i.test(text)) return text;
+  if (text.startsWith("/")) return `https://example.com${text}`;
+  return `https://example.com/${text.replace(/^\/+/, "")}`;
+}
+
+function renderExperimentUrlPreview(experiment = readExperimentMetadata({ tolerateInvalid: true })) {
+  const target = document.querySelector("#experiment-url-preview");
+  if (!target) return;
+  const samples = textList(document.querySelector("#experiment-url-preview-samples")?.value || "");
+  const rules = experiment.targeting?.url_rules || [];
+  if (!rules.length && !samples.length) {
+    target.innerHTML = `<div class="status-line">Add URL include/exclude rules to preview where this experiment will show.</div>`;
+    return;
+  }
+  const previewSamples = samples.length ? samples : defaultExperimentUrlSamples(experiment);
+  target.innerHTML = `
+    <div class="experiment-url-preview-head">
+      <strong>URL targeting preview</strong>
+      <span>${escapeHtml(rules.length ? `${rules.length} rule${rules.length === 1 ? "" : "s"}` : "No URL rules; all URLs pass.")}</span>
+    </div>
+    <div class="experiment-url-preview-list">
+      ${previewSamples.map((url) => experimentUrlPreviewRow(url, rules)).join("")}
+    </div>
+  `;
+}
+
+function experimentUrlPreviewRow(url, rules = []) {
+  const result = evaluateExperimentUrlRules(url, rules);
+  return `
+    <div class="${result.ok ? "ok" : "warn"}">
+      <strong>${escapeHtml(result.ok ? "Show" : "Suppress")}</strong>
+      <span>${escapeHtml(url)}</span>
+      <small>${escapeHtml(result.reason)}</small>
+    </div>
+  `;
+}
+
+function evaluateExperimentUrlRules(url, rules = []) {
+  const normalizedRules = Array.isArray(rules) ? rules : [];
+  const includeRules = normalizedRules.filter((rule) => (rule.mode || "include") === "include");
+  const excludeRules = normalizedRules.filter((rule) => rule.mode === "exclude");
+  const includeMatch = includeRules.length === 0 || includeRules.some((rule) => experimentUrlRuleMatches(url, rule));
+  if (!includeMatch) return { ok: false, reason: "No include rule matched." };
+  const excludeMatch = excludeRules.find((rule) => experimentUrlRuleMatches(url, rule));
+  if (excludeMatch) return { ok: false, reason: `Excluded by ${excludeMatch.operator || "contains"} "${excludeMatch.value}".` };
+  return { ok: true, reason: includeRules.length ? "Matched include rules and no excludes." : "No include rules; not excluded." };
+}
+
+function experimentUrlRuleMatches(url, rule = {}) {
+  const value = String(rule.value || "");
+  const operator = rule.operator || "contains";
+  if (!value) return false;
+  if (operator === "exact") return url === value;
+  if (operator === "starts_with") return url.startsWith(value);
+  if (operator === "regex") {
+    try {
+      return new RegExp(value).test(url);
+    } catch {
+      return false;
+    }
+  }
+  return url.includes(value);
 }
 
 function experimentMetadataWarnings(experiment = {}) {
