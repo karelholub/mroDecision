@@ -333,6 +333,7 @@ document.querySelector("#message-filter-template")?.addEventListener("change", r
 document.querySelector("#message-filter-application")?.addEventListener("input", renderMessageList);
 document.querySelector("#message-filter-surface")?.addEventListener("input", renderMessageList);
 document.querySelector("#message-filter-campaign")?.addEventListener("input", renderMessageList);
+document.querySelector("#message-list")?.addEventListener("click", handleMessageListClick);
 document.querySelector("#export-lookup-csv").addEventListener("click", exportLookupCsv);
 document.querySelector("#refresh-settings").addEventListener("click", loadSettings);
 document.querySelector("#test-meiro-profile").addEventListener("click", () => testMeiroConnection("profile"));
@@ -6422,15 +6423,17 @@ function renderMessageList() {
   target.innerHTML += filtered.length
     ? filtered.map((item) => messageCatalogRow(item)).join("")
     : row(["No messages match the current filters", "", "", "", "", "", "", "", ""]);
-  target.querySelectorAll("[data-message-action]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      runMessageListAction(button.dataset.messageAction, button.dataset.messageActionId);
-    });
-  });
-  target.querySelectorAll(".row[data-message-id]").forEach((element) => {
-    element.addEventListener("click", () => loadMessage(element.dataset.messageId, cachedMessages));
-  });
+}
+
+function handleMessageListClick(event) {
+  const action = event.target.closest("[data-message-action]");
+  if (action) {
+    event.stopPropagation();
+    runMessageListAction(action.dataset.messageAction, action.dataset.messageActionId);
+    return;
+  }
+  const rowElement = event.target.closest(".row[data-message-id]");
+  if (rowElement) loadMessage(rowElement.dataset.messageId, cachedMessages);
 }
 
 function messageCatalogRow(item) {
@@ -6753,14 +6756,19 @@ async function loadMessagePerformance(id) {
   if (!id || !messagePerformanceSummary) return;
   messagePerformanceSummary.innerHTML = `<div class="status-line">Loading message performance...</div>`;
   try {
-    const metrics = await api(`/v1/metrics/client-events?message_id=${encodeURIComponent(id)}&recent_limit=8&limit=8`);
-    renderMessagePerformance(metrics);
+    const [metrics, experimentBody] = await Promise.all([
+      api(`/v1/metrics/client-events?message_id=${encodeURIComponent(id)}&recent_limit=8&limit=8`),
+      api("/v1/experiments").catch(() => ({ experiments: [] }))
+    ]);
+    cachedExperiments = experimentBody.experiments || cachedExperiments || [];
+    cachedExperimentSummary = experimentBody.summary || cachedExperimentSummary || {};
+    renderMessagePerformance(metrics, { messageId: id, experiments: cachedExperiments });
   } catch (error) {
     messagePerformanceSummary.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
   }
 }
 
-function renderMessagePerformance(metrics) {
+function renderMessagePerformance(metrics, options = {}) {
   if (!messagePerformanceSummary) return;
   if (!metrics) {
     messagePerformanceSummary.innerHTML = `
@@ -6779,6 +6787,7 @@ function renderMessagePerformance(metrics) {
   const surfaces = (metrics.by_surface || []).filter((item) => item.key && item.key !== "(empty)").slice(0, 4);
   const profiles = (metrics.by_profile || []).filter((item) => item.key && item.key !== "(empty)").slice(0, 4);
   const recent = (metrics.recent_events || []).slice(0, 5);
+  const linkedExperiments = messageLinkedExperiments(options.messageId, options.experiments || cachedExperiments || []);
   messagePerformanceSummary.innerHTML = `
     <div class="message-performance-head">
       <div>
@@ -6800,6 +6809,7 @@ function renderMessagePerformance(metrics) {
       <strong>Recent events</strong>
       ${recent.length ? recent.map(messagePerformanceEventRow).join("") : `<span>No client feedback events yet.</span>`}
     </div>
+    ${messageExperimentAnalyticsPanel(linkedExperiments)}
   `;
 }
 
@@ -6838,6 +6848,74 @@ function messagePerformanceEventRow(event = {}) {
       <b>${escapeHtml(event.event_type || event.type || "-")}</b>
       <em>${escapeHtml([event.surface, event.profile_key, event.occurred_at ? formatTime(event.occurred_at) : ""].filter(Boolean).join(" · ") || "-")}</em>
     </span>
+  `;
+}
+
+function messageLinkedExperiments(messageId, experiments = []) {
+  if (!messageId) return [];
+  return (experiments || [])
+    .map((experiment) => {
+      const variants = (experiment.variants || []).filter((variant) => variant.outputs?.message_id === messageId);
+      return variants.length ? { ...experiment, variants } : null;
+    })
+    .filter(Boolean)
+    .sort((left, right) => String(right.updated_at || "").localeCompare(String(left.updated_at || "")))
+    .slice(0, 4);
+}
+
+function messageExperimentAnalyticsPanel(experiments = []) {
+  return `
+    <div class="message-experiment-analytics">
+      <div class="message-performance-head">
+        <strong>Message experiments</strong>
+        <span>${experiments.length ? "Variant performance for experiments using this message." : "Create a message experiment draft to compare content variants."}</span>
+      </div>
+      ${experiments.length ? experiments.map(messageExperimentAnalyticsCard).join("") : `<div class="status-line">No linked message experiments yet.</div>`}
+    </div>
+  `;
+}
+
+function messageExperimentAnalyticsCard(experiment = {}) {
+  const totalExposure = (experiment.variants || []).reduce((sum, variant) => sum + Number(variant.events?.exposure?.count || 0), 0);
+  const totalConversion = (experiment.variants || []).reduce((sum, variant) => sum + Number(variant.events?.conversion?.count || 0), 0);
+  const winner = experiment.significant_winner_variant || experiment.winner_variant || "";
+  return `
+    <section class="message-experiment-analytics-card">
+      <div class="message-experiment-analytics-head">
+        <div>
+          <strong>${escapeHtml(experiment.name || experiment.decision_key || "Experiment")}</strong>
+          <span>${escapeHtml([experiment.decision_key, experiment.surface, experiment.experiment_status || experiment.status].filter(Boolean).join(" · "))}</span>
+        </div>
+        <mark>${escapeHtml(winner ? `Winner: ${winner}` : "Monitoring")}</mark>
+      </div>
+      <div class="message-experiment-analytics-kpis">
+        ${statusItem("Exposures", formatNumber(totalExposure))}
+        ${statusItem("Conversions", formatNumber(totalConversion))}
+        ${statusItem("Conv. rate", formatPercent(totalExposure ? totalConversion / totalExposure : 0))}
+        ${statusItem("Confidence", formatPercent(experiment.significant_winner_confidence || 0))}
+      </div>
+      <div class="message-experiment-variant-list">
+        ${(experiment.variants || []).map(messageExperimentVariantAnalyticsRow).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function messageExperimentVariantAnalyticsRow(variant = {}) {
+  const exposure = variant.events?.exposure || {};
+  const conversion = variant.events?.conversion || {};
+  const impression = variant.events?.impression || {};
+  return `
+    <div class="message-experiment-variant-row">
+      <strong>${escapeHtml(variant.key || "(empty)")}${variant.baseline ? " · baseline" : ""}</strong>
+      <span>${formatNumber(variant.weight || 0)}%</span>
+      <span>${formatNumber(exposure.count || 0)} exp</span>
+      <span>${formatNumber(conversion.count || 0)} conv</span>
+      <span>${formatPercent(variant.conversion_rate || 0)}</span>
+      <span>${formatLift(variant.lift_vs_baseline)}</span>
+      <span>${experimentSignificanceLabel(variant.significance)}</span>
+      <span>${formatNumber(impression.count || 0)} imp</span>
+    </div>
   `;
 }
 
