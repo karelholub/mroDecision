@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildClientEventCollectorPayload,
   buildDecisionCollectorEventPayload,
   buildDecisionFeedbackPayload,
   meiroCollectorEndpoint,
@@ -96,4 +97,46 @@ test("decision collector payload wraps decisions as Meiro event envelopes", () =
   assert.equal(payload.event_payload.outputs.offer_id, "solar");
   assert.equal(payload.event_payload.context.surface, "homepage");
   assert.equal(payload.event_payload.delivery.endpoint, "https://example.test/collect/decision-engine-feedback");
+});
+
+test("client survey response payload is profile-friendly for Meiro collector", () => {
+  const payload = buildClientEventCollectorPayload(
+    {
+      event_id: "evt-survey-1",
+      event_type: "conversion",
+      occurred_at: "2026-06-10T10:00:00.000Z",
+      decision_key: "homepage_survey",
+      profile_key: "profile-1",
+      rule_version: 4,
+      variant_key: "treatment",
+      message_id: "survey_message",
+      surface: "homepage_hero",
+      context: { page_url: "https://example.test", request_source: "dee_web_sdk" },
+      event: {
+        type: "survey_response",
+        name: "survey_usefulness",
+        survey_question: "q1",
+        survey_question_label: "How useful is this offer?",
+        survey_value: "high",
+        label: "High"
+      }
+    },
+    {
+      endpoint: "https://example.test/collect/decision-engine-feedback",
+      source: "client_event",
+      request_id: "req-2",
+      identifiers: [{ typeId: "email", value: "karel.holub@meiro.io" }]
+    }
+  );
+
+  assert.equal(payload.event_type, "inapp_survey_response");
+  assert.equal(payload.event_time, "2026-06-10T10:00:00.000Z");
+  assert.equal(payload.identifiers[0].value, "karel.holub@meiro.io");
+  assert.equal(payload.event_payload.message_id, "survey_message");
+  assert.equal(payload.event_payload.survey.question, "q1");
+  assert.equal(payload.event_payload.survey.question_label, "How useful is this offer?");
+  assert.equal(payload.event_payload.survey.value, "high");
+  assert.equal(payload.event_payload.delivery.source, "client_event");
+  assert.equal(payload.event_payload.delivery.endpoint, "https://example.test/collect/decision-engine-feedback");
+  assert.equal(payload.event_payload.delivery.request_id, "req-2");
 });

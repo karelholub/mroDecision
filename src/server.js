@@ -12,6 +12,7 @@ import { createClientTrafficMetrics } from "./clientTrafficMetrics.js";
 import { evaluateDecision, evaluateDecisionAsync } from "./evaluator.js";
 import { notFound, readJson, sendBuffer, sendError, sendJson, sendText, serveStatic } from "./http.js";
 import {
+  buildClientEventCollectorPayload,
   buildDecisionCollectorEventPayload,
   buildDecisionFeedbackPayload,
   meiroCollectorEndpoint,
@@ -244,6 +245,12 @@ async function routeApi(req, res, url) {
     if (event.accepted) {
       await saveStore();
       clientResultCache.clear();
+      if (isMeiroForwardableSurveyEvent(event)) {
+        queueClientEventFeedbackDelivery(event, {
+          source: body.context?.request_source || "client_event",
+          request_id: res.requestId
+        });
+      }
     }
     sendJson(res, event.accepted ? 202 : 200, {
       event,
@@ -1240,6 +1247,14 @@ function queueSurfaceDecisionFeedbackDelivery(surfaceResult, request, options = 
   });
 }
 
+function queueClientEventFeedbackDelivery(event, options = {}) {
+  setImmediate(() => {
+    deliverClientEventFeedback(event, options).catch((error) => {
+      console.warn(`Meiro client event delivery failed: ${error.message}`);
+    });
+  });
+}
+
 async function deliverDecisionFeedback(decision, request, options = {}) {
   const settings = await storeCall("getSettings");
   const feedbackEndpoint = meiroFeedbackEndpoint(settings);
@@ -1255,6 +1270,29 @@ async function deliverDecisionFeedback(decision, request, options = {}) {
   }
   await saveStore();
   return results;
+}
+
+async function deliverClientEventFeedback(event, options = {}) {
+  const settings = await storeCall("getSettings");
+  const collectorEndpoint = meiroCollectorEndpoint(settings);
+  const fallbackEndpoint = meiroFeedbackEndpoint(settings);
+  const endpoint = collectorEndpoint || fallbackEndpoint;
+  if (!endpoint) return [];
+  const target = collectorEndpoint ? "collector" : "feedback";
+  const payload = buildClientEventCollectorPayload(event, {
+    ...options,
+    endpoint,
+    event_type: "inapp_survey_response"
+  });
+  const result = await deliverMeiroPayload(target, endpoint, payload, "client survey event");
+  await saveStore();
+  return [result];
+}
+
+function isMeiroForwardableSurveyEvent(event = {}) {
+  const details = event.event || {};
+  return event.event_type === "conversion" &&
+    (details.type === "survey_response" || Boolean(details.survey_question) || Object.prototype.hasOwnProperty.call(details, "survey_value"));
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {

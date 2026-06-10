@@ -74,3 +74,41 @@ export function buildDecisionCollectorEventPayload(decision = {}, request = {}, 
     }
   };
 }
+
+export function buildClientEventCollectorPayload(event = {}, options = {}) {
+  const details = event.event && typeof event.event === "object" ? event.event : {};
+  const context = event.context && typeof event.context === "object" ? event.context : {};
+  const eventTime = event.occurred_at || options.event_time || new Date().toISOString();
+  const survey = {
+    question: details.survey_question || "",
+    question_label: details.survey_question_label || "",
+    value: details.survey_value ?? details.value ?? "",
+    label: details.label || "",
+    tracking_name: details.name || details.action || ""
+  };
+  return {
+    event_type: options.event_type || (details.type === "survey_response" ? "inapp_survey_response" : "dee_client_event"),
+    event_time: eventTime,
+    identifiers: Array.isArray(options.identifiers) ? options.identifiers : [],
+    event_payload: {
+      event_id: event.event_id || "",
+      event_type: event.event_type || "",
+      occurred_at: eventTime,
+      decision_key: event.decision_key || "",
+      profile_key: event.profile_key || "",
+      rule_version: event.rule_version ?? null,
+      variant_key: event.variant_key || "",
+      message_id: event.message_id || "",
+      surface: event.surface || "",
+      context,
+      event: details,
+      survey,
+      delivery: {
+        source: options.source || context.request_source || "dee_client_event",
+        endpoint: options.endpoint || "",
+        request_id: options.request_id || "",
+        delivered_at: new Date().toISOString()
+      }
+    }
+  };
+}
