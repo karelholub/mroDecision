@@ -46,10 +46,12 @@
           const decision = state.decisions.get(element);
           const name = action.dataset.deeConversion || "interaction";
           if (decision) {
+            const surveyEvent = surveyEventDetails(action);
             trackConversion(name, element, {
               action: name,
-              value: action.dataset.deeValue || action.dataset.deeSurveyValue || action.value || action.textContent?.trim() || "",
-              label: action.dataset.deeLabel || action.getAttribute("aria-label") || action.textContent?.trim() || ""
+              value: action.dataset.deeValue || surveyEvent.value || action.value || action.textContent?.trim() || "",
+              label: action.dataset.deeLabel || surveyEvent.label || action.getAttribute("aria-label") || action.textContent?.trim() || "",
+              ...surveyEvent
             }).catch(() => {});
           }
           return;
@@ -395,6 +397,7 @@
     if (!content || typeof content !== "object") return false;
     if (content.title || content.body || content.html || content.fragment || content.markup || content.image_url) return true;
     if (Array.isArray(content.questions) && content.questions.length) return true;
+    if (content.survey && typeof content.survey === "object" && Array.isArray(content.survey.questions) && content.survey.questions.length) return true;
     if (content.question) return true;
     if (Array.isArray(content.items) && content.items.length) return true;
     if (Array.isArray(content.products) && content.products.length) return true;
@@ -447,7 +450,7 @@
       return `<div class="dee-message-survey">${questions.slice(0, 6).map((question, index) => `
         <fieldset>
           <legend>${escapeHtml(question.label || question.title || `Question ${index + 1}`)}</legend>
-          <div>${(Array.isArray(question.options) ? question.options : []).slice(0, 8).map((option) => surveyOptionButton(option, question)).join("") || `<textarea aria-label="${escapeHtml(question.label || "Survey response")}"></textarea>`}</div>
+          <div>${(Array.isArray(question.options) ? question.options : []).slice(0, 8).map((option) => surveyOptionButton(option, question)).join("") || surveyTextInput(question, index)}</div>
         </fieldset>
       `).join("")}</div>`;
     }
@@ -462,7 +465,33 @@
     const label = optionObject.label || optionObject.title || optionObject.value || option;
     const value = optionObject.value || optionObject.id || label;
     const trackingName = optionObject.tracking_name || question.tracking_name || question.id || "survey_response";
-    return `<button type="button" data-dee-conversion="${escapeHtml(trackingName)}" data-dee-survey-value="${escapeHtml(value)}">${escapeHtml(label)}</button>`;
+    return `<button type="button" data-dee-conversion="${escapeHtml(trackingName)}" data-dee-survey-question="${escapeHtml(question.id || question.tracking_name || question.label || question.title || "survey_question")}" data-dee-survey-question-label="${escapeHtml(question.label || question.title || "Survey question")}" data-dee-survey-value="${escapeHtml(value)}">${escapeHtml(label)}</button>`;
+  }
+
+  function surveyTextInput(question = {}, index = 0) {
+    const questionId = question.id || question.tracking_name || `survey_question_${index + 1}`;
+    const trackingName = question.tracking_name || question.id || "survey_response";
+    return `
+      <textarea data-dee-survey-input="${escapeHtml(questionId)}" aria-label="${escapeHtml(question.label || "Survey response")}"></textarea>
+      <button type="button" data-dee-conversion="${escapeHtml(trackingName)}" data-dee-survey-question="${escapeHtml(questionId)}" data-dee-survey-question-label="${escapeHtml(question.label || question.title || "Survey question")}" data-dee-survey-text="true">Submit</button>
+    `;
+  }
+
+  function surveyEventDetails(action) {
+    if (!action?.dataset?.deeSurveyQuestion && !action?.dataset?.deeSurveyValue && action?.dataset?.deeSurveyText !== "true") return {};
+    const question = action.dataset.deeSurveyQuestion || "";
+    const textInput = action.dataset.deeSurveyText === "true"
+      ? action.closest("fieldset")?.querySelector(`[data-dee-survey-input="${cssEscape(question)}"]`)
+      : null;
+    const value = action.dataset.deeSurveyValue || textInput?.value?.trim() || "";
+    return {
+      type: "survey_response",
+      survey_question: question,
+      survey_question_label: action.dataset.deeSurveyQuestionLabel || action.closest("fieldset")?.querySelector("legend")?.textContent?.trim() || "",
+      survey_value: value,
+      value,
+      label: action.textContent?.trim() || value
+    };
   }
 
   function messageCss(template) {

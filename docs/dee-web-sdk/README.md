@@ -285,7 +285,7 @@ When a rule returns `message_id`, DEE attaches the message content and normalize
 
 The SDK includes a default `message` renderer for banner, alert, modal, inline, and toast-style content. If `outputs.message` is present and no explicit template is returned, the SDK uses the message renderer automatically. Message delivery policies share the same post-decision checks as experiments, including consent, device targeting, and browser-side display frequency.
 
-Survey messages can be question-first. A `survey` payload does not need title or body text as long as it contains `questions` or `question`:
+Survey messages can be question-first. A `survey` payload does not need title or body text as long as it contains `questions`, nested `survey.questions`, or `question`:
 
 ```json
 {
@@ -304,7 +304,7 @@ Survey messages can be question-first. A `survey` payload does not need title or
 }
 ```
 
-Survey option clicks are sent as conversion events with the option in `event.value`.
+Survey option clicks are sent as conversion events with `event.type: "survey_response"`, `event.survey_question`, `event.survey_question_label`, `event.survey_value`, and `event.value`. Free-text survey questions render a textarea plus a submit button and send the entered response through the same event fields.
 
 Message experiments can return inline variant content without creating a separate message record for every variant. The SDK treats `message_content`, `message_id`, and `message_variant` as a message render target even when `outputs.template` is a concrete message template such as `banner`, `modal`, or `card`:
 

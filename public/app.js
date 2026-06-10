@@ -6765,7 +6765,7 @@ async function loadMessagePerformance(id) {
   messagePerformanceSummary.innerHTML = `<div class="status-line">Loading message performance...</div>`;
   try {
     const [metrics, experimentBody] = await Promise.all([
-      api(`/v1/metrics/client-events?message_id=${encodeURIComponent(id)}&recent_limit=8&limit=8`),
+      api(`/v1/metrics/client-events?message_id=${encodeURIComponent(id)}&recent_limit=100&limit=8`),
       api("/v1/experiments").catch(() => ({ experiments: [] }))
     ]);
     cachedExperiments = experimentBody.experiments || cachedExperiments || [];
@@ -6795,6 +6795,7 @@ function renderMessagePerformance(metrics, options = {}) {
   const surfaces = (metrics.by_surface || []).filter((item) => item.key && item.key !== "(empty)").slice(0, 4);
   const profiles = (metrics.by_profile || []).filter((item) => item.key && item.key !== "(empty)").slice(0, 4);
   const recent = (metrics.recent_events || []).slice(0, 5);
+  const surveyResponses = messageSurveyResponseSummary(metrics.recent_events || []);
   const linkedExperiments = messageLinkedExperiments(options.messageId, options.experiments || cachedExperiments || []);
   messagePerformanceSummary.innerHTML = `
     <div class="message-performance-head">
@@ -6817,6 +6818,7 @@ function renderMessagePerformance(metrics, options = {}) {
       <strong>Recent events</strong>
       ${recent.length ? recent.map(messagePerformanceEventRow).join("") : `<span>No client feedback events yet.</span>`}
     </div>
+    ${messageSurveyAnalyticsPanel(surveyResponses)}
     ${messageExperimentAnalyticsPanel(linkedExperiments)}
   `;
 }
@@ -6851,11 +6853,82 @@ function messagePerformanceList(title, items, fallbackLabel) {
 }
 
 function messagePerformanceEventRow(event = {}) {
+  const surveyValue = event.event?.survey_value || "";
   return `
     <span>
       <b>${escapeHtml(event.event_type || event.type || "-")}</b>
-      <em>${escapeHtml([event.surface, event.profile_key, event.occurred_at ? formatTime(event.occurred_at) : ""].filter(Boolean).join(" · ") || "-")}</em>
+      <em>${escapeHtml([surveyValue ? `Survey: ${surveyValue}` : "", event.surface, event.profile_key, event.occurred_at ? formatTime(event.occurred_at) : ""].filter(Boolean).join(" · ") || "-")}</em>
     </span>
+  `;
+}
+
+function messageSurveyResponseSummary(events = []) {
+  const questions = new Map();
+  for (const event of events || []) {
+    const details = event.event || {};
+    if (details.type !== "survey_response" && !details.survey_question && !details.survey_value) continue;
+    const questionKey = details.survey_question || details.survey_question_label || "survey_question";
+    const question = questions.get(questionKey) || {
+      key: questionKey,
+      label: details.survey_question_label || questionKey,
+      total: 0,
+      values: new Map(),
+      latest_at: ""
+    };
+    const value = String(details.survey_value || details.value || "(empty)");
+    const current = question.values.get(value) || { value, count: 0, profiles: new Set() };
+    current.count += 1;
+    if (event.profile_key) current.profiles.add(event.profile_key);
+    question.values.set(value, current);
+    question.total += 1;
+    if (event.occurred_at && (!question.latest_at || event.occurred_at > question.latest_at)) question.latest_at = event.occurred_at;
+    questions.set(questionKey, question);
+  }
+  return [...questions.values()].map((question) => ({
+    ...question,
+    values: [...question.values.values()]
+      .map((item) => ({ ...item, profiles: item.profiles.size }))
+      .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value))
+      .slice(0, 8)
+  })).sort((left, right) => right.total - left.total || left.label.localeCompare(right.label));
+}
+
+function messageSurveyAnalyticsPanel(questions = []) {
+  if (!questions.length) return "";
+  return `
+    <div class="message-survey-analytics">
+      <div class="message-performance-head">
+        <strong>Survey responses</strong>
+        <span>Recent response distribution from SDK conversion events.</span>
+      </div>
+      <div class="message-survey-analytics-list">
+        ${questions.map(messageSurveyAnalyticsQuestion).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function messageSurveyAnalyticsQuestion(question = {}) {
+  return `
+    <section class="message-survey-analytics-question">
+      <div class="message-survey-analytics-head">
+        <strong>${escapeHtml(question.label || question.key || "Survey question")}</strong>
+        <span>${escapeHtml(`${formatNumber(question.total || 0)} response${Number(question.total || 0) === 1 ? "" : "s"}${question.latest_at ? ` · latest ${formatTime(question.latest_at)}` : ""}`)}</span>
+      </div>
+      <div class="message-survey-analytics-values">
+        ${question.values.map((item) => {
+          const share = question.total ? Number(item.count || 0) / question.total : 0;
+          return `
+            <div>
+              <span>${escapeHtml(item.value || "(empty)")}</span>
+              <b>${escapeHtml(formatNumber(item.count || 0))}</b>
+              <em>${escapeHtml(`${formatPercent(share)} · ${formatNumber(item.profiles || 0)} profiles`)}</em>
+              <i style="--share:${Math.max(2, Math.round(share * 100))}%"></i>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </section>
   `;
 }
 

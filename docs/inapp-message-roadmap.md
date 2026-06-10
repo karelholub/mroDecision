@@ -61,7 +61,7 @@ Status: started. Message editor now suggests fixed-split experiment variants fro
 - Add message performance panels for eligibility, rendered impressions, views, clicks, dismissals, conversions, CTR, conversion rate, suppression, caps, and recent eligible profiles.
 - Break down by campaign, surface, template, device, and variant.
 
-Status: started. Message detail now includes a compact performance panel backed by client feedback metrics, with impressions, exposures, conversions, conversion rate, top surfaces, recent profiles, and recent events for the selected message.
+Status: started. Message detail now includes a compact performance panel backed by client feedback metrics, with impressions, exposures, conversions, conversion rate, top surfaces, recent profiles, recent events, linked message experiment performance, and survey response distribution for SDK survey conversions.
 
 ### 8. Campaign Integration
 

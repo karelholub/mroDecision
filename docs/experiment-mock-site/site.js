@@ -714,8 +714,8 @@ function renderSurveyContent(content = {}) {
           <legend>${escapeHtml(question.label || question.title || `Question ${index + 1}`)}</legend>
           <div>
             ${surveyOptions(question).length
-              ? surveyOptions(question).map((option) => `<button type="button" data-dee-conversion="${escapeAttribute(option.tracking)}" data-dee-survey-value="${escapeAttribute(option.value)}">${escapeHtml(option.label)}</button>`).join("")
-              : `<textarea aria-label="${escapeAttribute(question.label || "Survey response")}"></textarea>`}
+              ? surveyOptions(question).map((option) => `<button type="button" data-dee-conversion="${escapeAttribute(option.tracking)}" data-dee-survey-question="${escapeAttribute(question.id || question.tracking_name || question.label || question.title || "survey_question")}" data-dee-survey-question-label="${escapeAttribute(question.label || question.title || "Survey question")}" data-dee-survey-value="${escapeAttribute(option.value)}">${escapeHtml(option.label)}</button>`).join("")
+              : `<textarea data-dee-survey-input="${escapeAttribute(question.id || question.tracking_name || `survey_question_${index + 1}`)}" aria-label="${escapeAttribute(question.label || "Survey response")}"></textarea><button type="button" data-dee-conversion="${escapeAttribute(question.tracking_name || question.id || "survey_response")}" data-dee-survey-question="${escapeAttribute(question.id || question.tracking_name || `survey_question_${index + 1}`)}" data-dee-survey-question-label="${escapeAttribute(question.label || question.title || "Survey question")}" data-dee-survey-text="true">Submit</button>`}
           </div>
         </fieldset>
       `).join("")}
