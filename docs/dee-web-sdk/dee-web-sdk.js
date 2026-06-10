@@ -191,7 +191,7 @@
 
     async function renderDecision(element, decision) {
       if (decision.result !== "eligible") return { rendered: false, diagnostics: [] };
-      const template = decision.outputs?.template || element.dataset.deeTemplate || "cards";
+      const template = decision.outputs?.template || (decision.outputs?.message ? "message" : "") || element.dataset.deeTemplate || "cards";
       const renderer = config.renderers[template] || defaultRenderers[template] || defaultRenderers.cards;
       const result = await renderer(element, decision, config);
       if (result && typeof result === "object" && "rendered" in result) {
@@ -259,6 +259,8 @@
     web_layer: renderHtmlFragment,
     weblayer: renderHtmlFragment,
     inpage: renderHtmlFragment,
+    message: renderMessage,
+    inapp_message: renderMessage,
 
     async cards(element, decision, config) {
       const cards = Array.isArray(decision.outputs?.cards) ? decision.outputs.cards.slice(0, config.maxItems) : [];
@@ -320,6 +322,59 @@
     target.replaceChildren(fragment);
     wireHtmlFragmentBehavior(target);
     return true;
+  }
+
+  async function renderMessage(element, decision, config) {
+    const message = decision?.outputs?.message || {};
+    const content = message.content || decision?.outputs?.message_content || {};
+    if (!content || typeof content !== "object" || (!content.title && !content.body && !content.html)) {
+      logWithConfig(config, "Message renderer received no renderable content");
+      return false;
+    }
+    const template = String(content.template_type || content.type || element.dataset.deeMessageTemplate || "banner");
+    installFragmentStyle(element, {
+      outputs: {
+        css: messageCss(template)
+      }
+    }, config);
+    const wrapper = document.createElement("article");
+    wrapper.className = `dee-message dee-message-${modeSafe(template)}`;
+    wrapper.dataset.deeMessageId = message.id || decision?.outputs?.message_id || "";
+    wrapper.innerHTML = messageHtml(content);
+    element.replaceChildren(wrapper);
+    return true;
+  }
+
+  function messageHtml(content = {}) {
+    const ctas = Array.isArray(content.ctas) ? content.ctas : [{ label: content.cta_label, url: content.cta_url, style: "primary" }].filter((cta) => cta.label || cta.url);
+    return [
+      content.image_url ? `<img class="dee-message-image" src="${escapeHtml(safeUrl(content.image_url))}" alt="${escapeHtml(content.image_alt || content.title || "Message")}" loading="lazy" />` : "",
+      `<div class="dee-message-body">`,
+      content.title ? `<strong>${escapeHtml(content.title)}</strong>` : "",
+      content.body ? `<p>${escapeHtml(content.body)}</p>` : "",
+      ctas.length ? `<div class="dee-message-actions">${ctas.map((cta) => `<a class="dee-message-cta ${cta.style === "secondary" ? "secondary" : "primary"}" href="${escapeHtml(safeUrl(cta.url || "#"))}" data-dee-conversion="${escapeHtml(cta.tracking_name || cta.label || "message_click")}">${escapeHtml(cta.label || cta.url || "Open")}</a>`).join("")}</div>` : "",
+      content.footer ? `<small>${escapeHtml(content.footer)}</small>` : "",
+      `</div>`
+    ].join("");
+  }
+
+  function messageCss(template) {
+    return `
+      .dee-message{box-sizing:border-box;width:100%;border:1px solid #d8dee8;border-radius:10px;background:#fff;color:#182230;box-shadow:0 10px 30px rgba(16,24,40,.08);overflow:hidden;font-family:inherit}
+      .dee-message-body{display:grid;gap:8px;padding:14px}
+      .dee-message-body strong{font-size:18px;line-height:1.2}
+      .dee-message-body p{margin:0;color:#475467;line-height:1.45}
+      .dee-message-body small{color:#667085;line-height:1.35}
+      .dee-message-image{display:block;width:100%;max-height:220px;object-fit:cover}
+      .dee-message-actions{display:flex;flex-wrap:wrap;gap:8px}
+      .dee-message-cta{border-radius:8px;padding:8px 12px;text-decoration:none;font-weight:700}
+      .dee-message-cta.primary{background:#0f766e;color:#fff}
+      .dee-message-cta.secondary{border:1px solid #d0d5dd;color:#344054;background:#fff}
+      .dee-message-toast{max-width:360px;margin-left:auto}
+      .dee-message-modal{max-width:520px;margin:24px auto}
+      .dee-message-alert{border-left:4px solid #0f766e}
+      ${template === "inline" ? ".dee-message{box-shadow:none}" : ""}
+    `;
   }
 
   async function renderDomModifications(element, decision, config) {
@@ -725,10 +780,11 @@
   }
 
   function decisionPrecheck(element, decision, config) {
-    const targeting = decision?.delivery?.targeting || {};
+    const delivery = decisionDeliverySettings(decision);
+    const targeting = delivery.targeting || {};
     const targetingResult = targetingPrecheck(targeting, config, { decision });
     if (!targetingResult.ok) return targetingResult;
-    const consentResult = consentPrecheck(decision?.delivery?.consent, config);
+    const consentResult = consentPrecheck(delivery.consent, config);
     if (!consentResult.ok) return consentResult;
     const displayResult = displayPrecheck(element, decision);
     if (!displayResult.ok) return displayResult;
@@ -737,8 +793,9 @@
 
   function targetingPrecheck(targeting, config) {
     if (!targeting) return { ok: true };
-    if (Array.isArray(targeting.devices) && targeting.devices.length && !targeting.devices.includes("any") && !targeting.devices.includes(deviceType())) {
-      return { ok: false, reason: "device_targeting", detail: { device_type: deviceType(), allowed: targeting.devices } };
+    const devices = Array.isArray(targeting.devices) ? targeting.devices : String(targeting.devices || targeting.device || "").split(",").map((item) => item.trim()).filter(Boolean);
+    if (devices.length && !devices.includes("any") && !devices.includes(deviceType())) {
+      return { ok: false, reason: "device_targeting", detail: { device_type: deviceType(), allowed: devices } };
     }
     if (Array.isArray(targeting.url_rules) && !urlRulesMatch(targeting.url_rules, location.href)) {
       return { ok: false, reason: "url_targeting", detail: { page_url: location.href } };
@@ -760,22 +817,37 @@
   }
 
   function displayPrecheck(element, decision) {
-    const mode = decision?.delivery?.display?.mode || decision?.outputs?.display_mode || "always";
+    const delivery = decisionDeliverySettings(decision);
+    const mode = delivery.display?.mode || decision?.outputs?.display_mode || "always";
     if (mode === "always") return { ok: true };
     const storage = safeStorage(mode === "once_per_session" ? "session" : "local");
     if (!storage) return { ok: true };
-    const key = displayKey(element, decision, decision?.delivery?.display || {});
-    return storage.getItem(key)
+    const key = displayKey(element, decision, delivery.display || {});
+    const existing = Number(storage.getItem(key) || 0);
+    return existing && !displayWindowExpired(mode, existing)
       ? { ok: false, reason: "display_policy", detail: { mode } }
       : { ok: true };
   }
 
   function recordDisplay(element, decision) {
-    const mode = decision?.delivery?.display?.mode || decision?.outputs?.display_mode || "always";
+    const delivery = decisionDeliverySettings(decision);
+    const mode = delivery.display?.mode || decision?.outputs?.display_mode || "always";
     if (mode === "always") return;
     const storage = safeStorage(mode === "once_per_session" ? "session" : "local");
     if (!storage) return;
-    storage.setItem(displayKey(element, decision, decision?.delivery?.display || {}), String(Date.now()));
+    storage.setItem(displayKey(element, decision, delivery.display || {}), String(Date.now()));
+  }
+
+  function decisionDeliverySettings(decision) {
+    return decision?.outputs?.delivery?.message || decision?.outputs?.message?.delivery || decision?.delivery || {};
+  }
+
+  function displayWindowExpired(mode, timestamp) {
+    if (!timestamp) return true;
+    const age = Date.now() - timestamp;
+    if (mode === "once_per_day") return age >= 24 * 60 * 60 * 1000;
+    if (mode === "once_per_week") return age >= 7 * 24 * 60 * 60 * 1000;
+    return false;
   }
 
   function displayKey(element, decision, display) {
@@ -887,6 +959,14 @@
 
   function modeSafe(value) {
     return String(value || "").replace(/[^a-z0-9_-]/gi, "_");
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   function cssEscape(value) {

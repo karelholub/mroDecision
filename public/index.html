@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Meiro DEE</title>
-    <link rel="stylesheet" href="/styles.css?v=20260610-preview-links" />
+    <link rel="stylesheet" href="/styles.css?v=20260610-inapp-delivery" />
   </head>
   <body>
     <aside>
@@ -1344,6 +1344,27 @@
                     <div class="editor-title">Delivery & TTL</div>
                     <div class="message-field-grid">
                       <label>
+                        Display mode
+                        <select id="message-display-mode">
+                          <option value="always">Always</option>
+                          <option value="once">Once</option>
+                          <option value="once_per_session">Once per session</option>
+                          <option value="once_per_day">Once per day</option>
+                          <option value="once_per_week">Once per week</option>
+                        </select>
+                      </label>
+                      <label>
+                        Trigger
+                        <select id="message-trigger-type">
+                          <option value="page_load">Page load</option>
+                          <option value="manual">Manual</option>
+                          <option value="custom_event">Custom event</option>
+                          <option value="data_layer_event">Data layer event</option>
+                          <option value="exit_intent">Exit intent</option>
+                          <option value="scroll_depth">Scroll depth</option>
+                        </select>
+                      </label>
+                      <label>
                         Starts at
                         <input id="message-starts-at" type="datetime-local" />
                       </label>
@@ -1356,8 +1377,33 @@
                         <input id="message-priority" type="number" value="0" />
                       </label>
                       <label>
-                        Recheck TTL seconds
+                        Cooldown TTL seconds
                         <input id="message-frequency-ttl" type="number" min="0" placeholder="300" />
+                      </label>
+                      <label>
+                        Max impressions
+                        <input id="message-max-impressions" type="number" min="0" placeholder="3" />
+                      </label>
+                      <label>
+                        Target devices
+                        <select id="message-target-devices">
+                          <option value="any">Any device</option>
+                          <option value="desktop">Desktop only</option>
+                          <option value="mobile">Mobile only</option>
+                          <option value="tablet">Tablet only</option>
+                        </select>
+                      </label>
+                      <label>
+                        Consent category
+                        <input id="message-consent-category" placeholder="marketing" />
+                      </label>
+                      <label>
+                        Dismiss behavior
+                        <select id="message-dismiss-behavior">
+                          <option value="suppress">Suppress after dismiss</option>
+                          <option value="cooldown">Cooldown after dismiss</option>
+                          <option value="ignore">Ignore dismiss</option>
+                        </select>
                       </label>
                     </div>
                   </div>
@@ -2157,6 +2203,6 @@
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
   <script src="/app-utils.js?v=20260609-visual-editor-overlay"></script>
-  <script src="/app.js?v=20260610-preview-links"></script>
+  <script src="/app.js?v=20260610-inapp-delivery"></script>
 </body>
 </html>

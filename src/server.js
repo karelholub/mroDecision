@@ -2989,6 +2989,7 @@ async function resolveMessageOutputs(outputs, ruleSet, request, evaluatedAt) {
 }
 
 function attachMessage(outputs, message, availability) {
+  const delivery = messageDeliverySettings(message);
   return {
     ...outputs,
     message: {
@@ -3000,7 +3001,12 @@ function attachMessage(outputs, message, availability) {
         ...(outputs.message_content && typeof outputs.message_content === "object" ? outputs.message_content : {})
       },
       metadata: message.metadata,
+      delivery,
       availability
+    },
+    delivery: {
+      ...(outputs.delivery && typeof outputs.delivery === "object" ? outputs.delivery : {}),
+      message: delivery
     }
   };
 }
@@ -3024,6 +3030,7 @@ function unavailableMessage(outputs, reason, message, messageRecord = null) {
 
 async function messageAvailability(message, ruleSet, request, evaluatedAt) {
   const lifecycle = message.metadata?.lifecycle || message.metadata?.delivery || {};
+  const delivery = messageDeliverySettings(message);
   const nowMs = Date.parse(evaluatedAt || createdAtIso());
   if (message.status !== "active") {
     return { available: false, reason: "message_inactive", message: `Message ${message.id} is ${message.status}` };
@@ -3047,7 +3054,8 @@ async function messageAvailability(message, ruleSet, request, evaluatedAt) {
   if (expiresAt && expiresAtMs <= nowMs) {
     return { available: false, reason: "message_expired", message: `Message ${message.id} expired at ${expiresAt}` };
   }
-  const ttlSeconds = Number(lifecycle.ttl_seconds || message.metadata?.ttl_seconds || 0);
+  const ttlSeconds = Number(delivery.frequency.cooldown_seconds || lifecycle.ttl_seconds || message.metadata?.ttl_seconds || 0);
+  const maxImpressions = Number(delivery.frequency.max_impressions || 0);
   if (Number.isFinite(ttlSeconds) && ttlSeconds > 0) {
     const since = new Date(nowMs - ttlSeconds * 1000).toISOString();
     const impressions = await storeCall("countClientEvents", {
@@ -3068,14 +3076,83 @@ async function messageAvailability(message, ruleSet, request, evaluatedAt) {
       };
     }
   }
+  if (Number.isFinite(maxImpressions) && maxImpressions > 0) {
+    const impressions = await storeCall("countClientEvents", {
+      event_type: "impression",
+      decision_key: ruleSet.decision_key,
+      profile_key: request.profile_key,
+      message_id: message.id,
+      surface: message.surface || ruleSet.surface || ""
+    });
+    if (impressions >= maxImpressions) {
+      return {
+        available: false,
+        reason: "message_max_impressions",
+        message: `Message ${message.id} reached max impressions for this profile`,
+        max_impressions: maxImpressions,
+        impressions
+      };
+    }
+  }
   return {
     available: true,
     reason: "available",
     starts_at: startsAt || "",
     expires_at: expiresAt || "",
     ttl_seconds: Number.isFinite(ttlSeconds) && ttlSeconds > 0 ? ttlSeconds : 0,
-    priority: Number(message.metadata?.priority ?? lifecycle.priority ?? 0) || 0
+    max_impressions: Number.isFinite(maxImpressions) && maxImpressions > 0 ? maxImpressions : 0,
+    priority: Number(message.metadata?.priority ?? lifecycle.priority ?? 0) || 0,
+    delivery
   };
+}
+
+function messageDeliverySettings(message = {}) {
+  const metadata = message.metadata || {};
+  const lifecycle = metadata.lifecycle || {};
+  const delivery = metadata.delivery || {};
+  const displayMode = normalizedMessageDisplayMode(delivery.display?.mode || lifecycle.display_mode || metadata.display_mode || "always");
+  const cooldownSeconds = Number(delivery.frequency?.cooldown_seconds ?? lifecycle.ttl_seconds ?? metadata.ttl_seconds ?? 0);
+  const maxImpressions = Number(delivery.frequency?.max_impressions ?? lifecycle.max_impressions ?? metadata.max_impressions ?? 0);
+  const device = normalizedMessageDevice(delivery.targeting?.devices || delivery.targeting?.device || metadata.target_devices || "any");
+  const triggerType = normalizedMessageTrigger(delivery.trigger?.type || lifecycle.trigger_type || "page_load");
+  const consentCategory = String(delivery.consent?.category || metadata.consent_category || "").trim();
+  const dismissBehavior = normalizedMessageDismiss(delivery.dismiss?.behavior || lifecycle.dismiss_behavior || "suppress");
+  return {
+    display: {
+      mode: displayMode
+    },
+    frequency: {
+      cooldown_seconds: Number.isFinite(cooldownSeconds) && cooldownSeconds > 0 ? cooldownSeconds : 0,
+      max_impressions: Number.isFinite(maxImpressions) && maxImpressions > 0 ? maxImpressions : 0
+    },
+    targeting: {
+      devices: device
+    },
+    trigger: {
+      type: triggerType
+    },
+    consent: consentCategory ? { category: consentCategory, required: delivery.consent?.required !== false } : null,
+    dismiss: {
+      behavior: dismissBehavior
+    }
+  };
+}
+
+function normalizedMessageDisplayMode(value) {
+  return ["always", "once", "once_per_session", "once_per_day", "once_per_week"].includes(value) ? value : "always";
+}
+
+function normalizedMessageDevice(value) {
+  if (Array.isArray(value)) return normalizedMessageDevice(value[0] || "any");
+  return ["any", "desktop", "mobile", "tablet"].includes(value) ? value : "any";
+}
+
+function normalizedMessageTrigger(value) {
+  return ["page_load", "manual", "custom_event", "data_layer_event", "exit_intent", "scroll_depth"].includes(value) ? value : "page_load";
+}
+
+function normalizedMessageDismiss(value) {
+  return ["suppress", "cooldown", "ignore"].includes(value) ? value : "suppress";
 }
 
 function messageSurfaceCompatible(messageSurface, ruleSurface) {

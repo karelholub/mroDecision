@@ -252,7 +252,38 @@ Placements can also define local prechecks before calling DEE:
 ></div>
 ```
 
-Server responses can include `delivery.display`, `delivery.targeting`, `delivery.trigger`, `delivery.consent`, and `delivery.goal`. The SDK applies those hints after the decision returns, keeps fallback content when a postcheck fails, and dispatches `dee:skipped` with the reason.
+Server responses can include `delivery.display`, `delivery.targeting`, `delivery.trigger`, `delivery.consent`, and `delivery.goal`. Message decisions can also return `outputs.delivery.message` and `outputs.message.delivery`; the SDK applies those hints after the decision returns, keeps fallback content when a postcheck fails, and dispatches `dee:skipped` with the reason.
+
+## In-App Messages
+
+When a rule returns `message_id`, DEE attaches the message content and normalized delivery policy:
+
+```json
+{
+  "outputs": {
+    "message_id": "homepage_banner",
+    "message": {
+      "id": "homepage_banner",
+      "content": {
+        "template_type": "banner",
+        "title": "Welcome back",
+        "body": "Your personalized offer is ready.",
+        "ctas": [{ "label": "View offer", "url": "/offers", "style": "primary" }]
+      },
+      "delivery": {
+        "display": { "mode": "once_per_day" },
+        "frequency": { "cooldown_seconds": 86400, "max_impressions": 3 },
+        "targeting": { "devices": "desktop" },
+        "trigger": { "type": "page_load" },
+        "consent": { "category": "marketing", "required": true },
+        "dismiss": { "behavior": "suppress" }
+      }
+    }
+  }
+}
+```
+
+The SDK includes a default `message` renderer for banner, alert, modal, inline, and toast-style content. If `outputs.message` is present and no explicit template is returned, the SDK uses the message renderer automatically. Message delivery policies share the same post-decision checks as experiments, including consent, device targeting, and browser-side display frequency.
 
 ## Triggers
 
@@ -284,6 +315,8 @@ DEE can return display policies in experiment metadata:
 - `always`: render whenever the placement evaluates
 - `once_per_session`: render once per browser session
 - `once`: render once per profile, decision key, placement, variant, and version
+- `once_per_day`: render once per local 24-hour window
+- `once_per_week`: render once per local 7-day window
 
 The SDK uses browser storage when available. If storage is blocked, rendering still works and only the frequency ledger is skipped.
 

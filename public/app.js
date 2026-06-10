@@ -518,7 +518,13 @@ document.querySelector("#message-image-dropzone")?.addEventListener("drop", hand
   "#message-starts-at",
   "#message-expires-at",
   "#message-priority",
-  "#message-frequency-ttl"
+  "#message-frequency-ttl",
+  "#message-display-mode",
+  "#message-trigger-type",
+  "#message-max-impressions",
+  "#message-target-devices",
+  "#message-consent-category",
+  "#message-dismiss-behavior"
 ].forEach((selector) => {
   document.querySelector(selector).addEventListener("input", renderMessagePreview);
   document.querySelector(selector).addEventListener("change", renderMessagePreview);
@@ -6989,11 +6995,24 @@ function syncMessageJsonFromPreviewLive() {
 
 function syncMessageDeliveryFromMetadata(metadata = {}) {
   const lifecycle = metadata.lifecycle || metadata.delivery || {};
+  const delivery = metadata.delivery || metadata.lifecycle || {};
+  const display = delivery.display || {};
+  const frequency = delivery.frequency || {};
+  const targeting = delivery.targeting || {};
+  const trigger = delivery.trigger || {};
+  const consent = delivery.consent || {};
+  const dismiss = delivery.dismiss || {};
   document.querySelector("#message-application").value = applicationValue(metadata);
   document.querySelector("#message-starts-at").value = dateTimeLocalValue(lifecycle.starts_at || metadata.starts_at || "");
   document.querySelector("#message-expires-at").value = dateTimeLocalValue(lifecycle.expires_at || metadata.expires_at || "");
   document.querySelector("#message-priority").value = Number(metadata.priority ?? lifecycle.priority ?? 0);
-  document.querySelector("#message-frequency-ttl").value = Number(lifecycle.ttl_seconds ?? metadata.ttl_seconds ?? 0) || "";
+  document.querySelector("#message-frequency-ttl").value = Number(frequency.cooldown_seconds ?? lifecycle.ttl_seconds ?? metadata.ttl_seconds ?? 0) || "";
+  document.querySelector("#message-display-mode").value = messageDisplayMode(display.mode || lifecycle.display_mode || metadata.display_mode || "always");
+  document.querySelector("#message-trigger-type").value = messageTriggerType(trigger.type || lifecycle.trigger_type || "page_load");
+  document.querySelector("#message-max-impressions").value = Number(frequency.max_impressions ?? lifecycle.max_impressions ?? metadata.max_impressions ?? 0) || "";
+  document.querySelector("#message-target-devices").value = messageTargetDevice(targeting.devices || targeting.device || metadata.target_devices || "any");
+  document.querySelector("#message-consent-category").value = consent.category || metadata.consent_category || "";
+  document.querySelector("#message-dismiss-behavior").value = messageDismissBehavior(dismiss.behavior || lifecycle.dismiss_behavior || "suppress");
   document.querySelector("#message-campaign").value = campaignValue(metadata);
   document.querySelector("#message-folder").value = folderValue(metadata);
 }
@@ -7003,6 +7022,12 @@ function syncMessageMetadataFromDelivery() {
   const startsAt = isoFromDateTimeLocal(document.querySelector("#message-starts-at").value);
   const expiresAt = isoFromDateTimeLocal(document.querySelector("#message-expires-at").value);
   const ttl = Number(document.querySelector("#message-frequency-ttl").value || 0);
+  const maxImpressions = Number(document.querySelector("#message-max-impressions").value || 0);
+  const displayMode = messageDisplayMode(document.querySelector("#message-display-mode").value);
+  const triggerType = messageTriggerType(document.querySelector("#message-trigger-type").value);
+  const targetDevices = messageTargetDevice(document.querySelector("#message-target-devices").value);
+  const consentCategory = document.querySelector("#message-consent-category").value.trim();
+  const dismissBehavior = messageDismissBehavior(document.querySelector("#message-dismiss-behavior").value);
   metadata.priority = Number(document.querySelector("#message-priority").value || 0);
   metadata.lifecycle = {
     ...(metadata.lifecycle || {}),
@@ -7010,6 +7035,32 @@ function syncMessageMetadataFromDelivery() {
     expires_at: expiresAt,
     ttl_seconds: Number.isFinite(ttl) && ttl > 0 ? ttl : 0
   };
+  metadata.delivery = {
+    ...(metadata.delivery || {}),
+    display: {
+      ...(metadata.delivery?.display || {}),
+      mode: displayMode
+    },
+    frequency: {
+      ...(metadata.delivery?.frequency || {}),
+      cooldown_seconds: Number.isFinite(ttl) && ttl > 0 ? ttl : 0,
+      max_impressions: Number.isFinite(maxImpressions) && maxImpressions > 0 ? maxImpressions : 0
+    },
+    targeting: {
+      ...(metadata.delivery?.targeting || {}),
+      devices: targetDevices
+    },
+    trigger: {
+      ...(metadata.delivery?.trigger || {}),
+      type: triggerType
+    },
+    dismiss: {
+      ...(metadata.delivery?.dismiss || {}),
+      behavior: dismissBehavior
+    }
+  };
+  if (consentCategory) metadata.delivery.consent = { ...(metadata.delivery.consent || {}), category: consentCategory, required: true };
+  else delete metadata.delivery.consent;
   metadata.campaign = campaignMetadata(
     document.querySelector("#message-campaign")?.value.trim(),
     document.querySelector("#message-folder")?.value.trim()
@@ -7025,6 +7076,23 @@ function syncMessageMetadataFromDelivery() {
   if (sample && Object.keys(sample).length) metadata.personalization_sample = sample;
   else delete metadata.personalization_sample;
   document.querySelector("#message-metadata").value = JSON.stringify(metadata, null, 2);
+}
+
+function messageDisplayMode(value) {
+  return ["always", "once", "once_per_session", "once_per_day", "once_per_week"].includes(value) ? value : "always";
+}
+
+function messageTriggerType(value) {
+  return ["page_load", "manual", "custom_event", "data_layer_event", "exit_intent", "scroll_depth"].includes(value) ? value : "page_load";
+}
+
+function messageTargetDevice(value) {
+  if (Array.isArray(value)) return messageTargetDevice(value[0] || "any");
+  return ["any", "desktop", "mobile", "tablet"].includes(value) ? value : "any";
+}
+
+function messageDismissBehavior(value) {
+  return ["suppress", "cooldown", "ignore"].includes(value) ? value : "suppress";
 }
 
 function formatActiveMessageJson() {
@@ -7195,6 +7263,12 @@ function renderMessagePreview() {
   const surface = document.querySelector("#message-surface").value.trim() || "-";
   const status = document.querySelector("#message-status").value || "active";
   const ttl = Number(document.querySelector("#message-frequency-ttl").value || 0);
+  const displayMode = messageDisplayMode(document.querySelector("#message-display-mode").value);
+  const triggerType = messageTriggerType(document.querySelector("#message-trigger-type").value);
+  const maxImpressions = Number(document.querySelector("#message-max-impressions").value || 0);
+  const targetDevices = messageTargetDevice(document.querySelector("#message-target-devices").value);
+  const consentCategory = document.querySelector("#message-consent-category").value.trim();
+  const dismissBehavior = messageDismissBehavior(document.querySelector("#message-dismiss-behavior").value);
   const expiresAt = document.querySelector("#message-expires-at").value;
   const startsAt = document.querySelector("#message-starts-at").value;
   const ctas = [
@@ -7223,6 +7297,12 @@ function renderMessagePreview() {
     footer,
     imageUrl,
     ctas,
+    displayMode,
+    triggerType,
+    maxImpressions,
+    targetDevices,
+    consentCategory,
+    dismissBehavior,
     tokens: messageTokenStats()
   });
   messagePreview.dataset.health = health.level;
@@ -7237,7 +7317,13 @@ function renderMessagePreview() {
     statusItem("Application", application),
     statusItem("Placement", placement || "-"),
     statusItem("Surface", surface),
-    statusItem("TTL", ttl > 0 ? `${ttl}s` : "No recheck hint"),
+    statusItem("Display", messageDeliveryLabel(displayMode)),
+    statusItem("Trigger", messageDeliveryLabel(triggerType)),
+    statusItem("Cooldown", ttl > 0 ? `${ttl}s` : "None"),
+    statusItem("Max impressions", maxImpressions > 0 ? formatNumber(maxImpressions) : "No cap"),
+    statusItem("Devices", messageDeliveryLabel(targetDevices)),
+    statusItem("Consent", consentCategory || "-"),
+    statusItem("Dismiss", messageDeliveryLabel(dismissBehavior)),
     statusItem("Starts", startsAt ? formatTime(new Date(startsAt).toISOString()) : "Now"),
     statusItem("Expires", expiresAt ? formatTime(new Date(expiresAt).toISOString()) : "-"),
     statusItem("Message ID", document.querySelector("#message-id").value.trim() || "-"),
@@ -7248,6 +7334,12 @@ function renderMessagePreview() {
   renderMessageAudienceComparison({ templateType, placement, surface, raw });
   renderMessageRuleLinks();
   renderMessageAssetList();
+}
+
+function messageDeliveryLabel(value) {
+  return String(value || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function messagePreviewRawContent() {
@@ -7457,7 +7549,7 @@ async function cleanupMessageAssets() {
   }
 }
 
-function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, placement, surface, title, body, footer, imageUrl, ctas, tokens }) {
+function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, placement, surface, title, body, footer, imageUrl, ctas, displayMode, triggerType, maxImpressions, targetDevices, consentCategory, dismissBehavior, tokens }) {
   const checks = [];
   const now = Date.now();
   const starts = startsAt ? new Date(startsAt).getTime() : 0;
@@ -7473,7 +7565,14 @@ function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, 
     if (cta.label && !cta.url) checks.push({ level: "warn", title: `${index === 0 ? "Primary" : "Secondary"} CTA URL missing`, detail: "Add a URL or remove the CTA label." });
     if (!cta.label && cta.url) checks.push({ level: "warn", title: `${index === 0 ? "Primary" : "Secondary"} CTA label missing`, detail: "Add a short CTA label." });
   });
-  if (ttl <= 0) checks.push({ level: "info", title: "No recheck TTL", detail: "Clients will not receive a message-specific recheck hint." });
+  if (ttl <= 0 && !["always", "once"].includes(displayMode)) checks.push({ level: "warn", title: "Cooldown missing", detail: `${messageDeliveryLabel(displayMode)} should usually have a cooldown or max-impression cap.` });
+  if (ttl <= 0) checks.push({ level: "info", title: "No cooldown TTL", detail: "Clients will not receive a message-specific cooldown hint." });
+  if (maxImpressions <= 0 && ["modal", "toast"].includes(templateType)) checks.push({ level: "warn", title: "No impression cap", detail: "Interruptive formats should usually define a maximum impression count." });
+  if (triggerType === "manual" && !placement) checks.push({ level: "info", title: "Manual trigger", detail: "Make sure the app calls the SDK manually for this placement." });
+  if (triggerType !== "page_load" && triggerType !== "manual") checks.push({ level: "info", title: "Custom trigger", detail: `${messageDeliveryLabel(triggerType)} requires client SDK trigger wiring.` });
+  if (!consentCategory) checks.push({ level: "info", title: "No consent category", detail: "Add one when this message is marketing or personalization-related." });
+  if (targetDevices !== "any" && !placement) checks.push({ level: "info", title: "Device-specific delivery", detail: "Pair device targeting with a clear placement contract." });
+  if (dismissBehavior === "ignore" && ["modal", "toast"].includes(templateType)) checks.push({ level: "warn", title: "Dismiss ignored", detail: "Ignoring dismissals on interruptive formats can feel repetitive." });
   if (["modal", "toast"].includes(templateType) && body.length > 220) checks.push({ level: "warn", title: "Long compact copy", detail: "This may feel crowded in modal or toast placements." });
   if (body.length > 320 || footer.length > 180 || title.length > 70) checks.push({ level: "warn", title: "Mobile clipping risk", detail: "Preview on mobile and shorten content if it pushes below the fold." });
   if (templateType === "banner" && !imageUrl) checks.push({ level: "info", title: "No image", detail: "Banners can work without media, but a visual may improve recognition." });

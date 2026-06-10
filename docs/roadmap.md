@@ -218,6 +218,18 @@ Accepted from UX review because it fits DEE's campaign-oriented decisioning mode
 
 Status: quick wins implemented for the current Campaigns page: status rollups now act as filters, list search/status/sort controls are available above the experiment list, draft cards use setup-focused summaries, running cards prioritize winner/significance/feedback, the duplicate in-panel Evaluate tab is removed in favor of "Open in Evaluate", breadcrumbs/status placement are cleaner, raw design payloads are collapsed behind developer drawers, and top action hierarchy is clearer. A first campaign master/detail panel is also implemented in Campaigns, with campaign cards, campaign-scoped experiment filtering, compact linked Experiments/Rules/Messages sections, surface/recent-event context, and direct navigation to assets. Remaining deeper work: richer campaign creation/move flows and multi-select asset management inside the Campaigns workbench.
 
+## Phase 9: Enterprise In-App Messaging Workbench
+
+Goal: bring in-app messages to the same product level as advanced experiments with marketer-friendly authoring, delivery policy, SDK rendering, analytics, precompute diagnostics, campaign integration, and governance. See `docs/inapp-message-roadmap.md`.
+
+- Add message-level delivery policy for display mode, frequency caps, cooldown, max impressions, consent, devices, trigger, dismiss behavior, schedule, and priority.
+- Return client-safe message delivery hints in decision payloads.
+- Extend message preview health from content checks to launch readiness checks.
+- Add SDK render/event support for message-specific display policies and future dismiss/view events.
+- Add message analytics, conflict detection, message experiments, preview links, and campaign readiness.
+
+Status: started. Message editor now captures structured delivery policy in `metadata.delivery`, preview health checks delivery risks, and message decisions return normalized delivery hints while server-side availability enforces cooldown and max-impression suppression.
+
 Deferred or not adopted:
 
 - Removing the global Evaluate page is not adopted. DEE needs a shared QA workspace for rules, messages, and experiments; Campaigns should deep-link into it instead.
