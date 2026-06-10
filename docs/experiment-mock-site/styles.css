@@ -607,6 +607,16 @@ select {
   background: #f8fafc;
 }
 
+.message-survey fieldset[data-dee-survey-state="error"] {
+  border-color: #f04438;
+  background: #fff8f7;
+}
+
+.message-survey fieldset[data-dee-survey-state="submitted"] {
+  border-color: #12b76a;
+  background: #f6fef9;
+}
+
 .message-survey legend {
   padding: 0 4px;
   color: var(--ink);
@@ -628,6 +638,13 @@ select {
   line-height: 1.2;
 }
 
+.message-survey button.is-selected {
+  border-color: var(--teal);
+  background: #e6fffb;
+  color: var(--teal);
+  font-weight: 800;
+}
+
 .message-survey textarea {
   width: 100%;
   min-height: 72px;
@@ -635,6 +652,22 @@ select {
   border-radius: 8px;
   padding: 8px;
   font: inherit;
+}
+
+.message-survey-feedback {
+  min-height: 16px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.message-survey fieldset[data-dee-survey-state="error"] .message-survey-feedback {
+  color: #b42318;
+}
+
+.message-survey fieldset[data-dee-survey-state="submitted"] .message-survey-feedback {
+  color: #027a48;
 }
 
 .message-items {

@@ -24,7 +24,7 @@ Status: started. The message editor and SDK now recognize the full template voca
 - Keep JSON tabs for advanced users, but make business fields the primary editing surface.
 - Add mobile/tablet/desktop previews, personalization token previews, and audience comparison cards.
 
-Status: started. Survey messages render from structured JSON and now have a visual Survey Builder for question text, type, required flag, tracking name, answer option labels/values, add/remove, and reorder controls. The builder syncs to `questions` and `survey.questions` so SDK and external payloads can use either structure. Next: add richer survey response analytics, branching questions, and reusable survey blocks.
+Status: started. Survey messages render from structured JSON and now have a visual Survey Builder for question text, type, required flag, tracking name, answer option labels/values, add/remove, and reorder controls. The builder syncs to `questions` and `survey.questions` so SDK and external payloads can use either structure. The SDK and mock site now enforce required free-text answers, mark selected choice answers, and show response acknowledgement states. Next: add richer survey response analytics, branching questions, and reusable survey blocks.
 
 ### 3. Delivery Policy
 
@@ -48,7 +48,7 @@ Status: started. Message editor now captures display mode, cooldown TTL, max imp
 - Enforce display policy in browser storage when available, while keeping server-side suppression as the source of truth.
 - Add accessibility defaults for close buttons, focus management, ARIA labels, and keyboard dismissal.
 
-Status: started. The SDK renders the full message template set, sends automatic impression events after successful render, keeps experiment exposure events, adds accessible dismiss controls for modal/toast/alert messages, sends dismissals as conversion events, and enforces browser-side display and dismiss suppression/cooldown policies.
+Status: started. The SDK renders the full message template set, sends automatic impression events after successful render, keeps experiment exposure events, adds accessible dismiss controls for modal/toast/alert messages, sends dismissals as conversion events, enforces survey response validation/acknowledgement states, and enforces browser-side display and dismiss suppression/cooldown policies.
 
 ### 6. Message Experiments
 

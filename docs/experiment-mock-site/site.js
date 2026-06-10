@@ -710,13 +710,14 @@ function renderSurveyContent(content = {}) {
   return `
     <div class="message-survey">
       ${questions.slice(0, 6).map((question, index) => `
-        <fieldset>
+        <fieldset data-dee-survey-fieldset data-dee-survey-required="${question.required ? "true" : "false"}">
           <legend>${escapeHtml(question.label || question.title || `Question ${index + 1}`)}</legend>
           <div>
             ${surveyOptions(question).length
-              ? surveyOptions(question).map((option) => `<button type="button" data-dee-conversion="${escapeAttribute(option.tracking)}" data-dee-survey-question="${escapeAttribute(question.id || question.tracking_name || question.label || question.title || "survey_question")}" data-dee-survey-question-label="${escapeAttribute(question.label || question.title || "Survey question")}" data-dee-survey-value="${escapeAttribute(option.value)}">${escapeHtml(option.label)}</button>`).join("")
-              : `<textarea data-dee-survey-input="${escapeAttribute(question.id || question.tracking_name || `survey_question_${index + 1}`)}" aria-label="${escapeAttribute(question.label || "Survey response")}"></textarea><button type="button" data-dee-conversion="${escapeAttribute(question.tracking_name || question.id || "survey_response")}" data-dee-survey-question="${escapeAttribute(question.id || question.tracking_name || `survey_question_${index + 1}`)}" data-dee-survey-question-label="${escapeAttribute(question.label || question.title || "Survey question")}" data-dee-survey-text="true">Submit</button>`}
+              ? surveyOptions(question).map((option) => `<button type="button" data-dee-conversion="${escapeAttribute(option.tracking)}" data-dee-survey-question="${escapeAttribute(question.id || question.tracking_name || question.label || question.title || "survey_question")}" data-dee-survey-question-label="${escapeAttribute(question.label || question.title || "Survey question")}" data-dee-survey-value="${escapeAttribute(option.value)}" data-dee-survey-required="${question.required ? "true" : "false"}" aria-pressed="false">${escapeHtml(option.label)}</button>`).join("")
+              : `<textarea data-dee-survey-input="${escapeAttribute(question.id || question.tracking_name || `survey_question_${index + 1}`)}" aria-label="${escapeAttribute(question.label || "Survey response")}" ${question.required ? "required" : ""}></textarea><button type="button" data-dee-conversion="${escapeAttribute(question.tracking_name || question.id || "survey_response")}" data-dee-survey-question="${escapeAttribute(question.id || question.tracking_name || `survey_question_${index + 1}`)}" data-dee-survey-question-label="${escapeAttribute(question.label || question.title || "Survey question")}" data-dee-survey-text="true" data-dee-survey-required="${question.required ? "true" : "false"}">Submit</button>`}
           </div>
+          <p class="message-survey-feedback" data-dee-survey-feedback aria-live="polite"></p>
         </fieldset>
       `).join("")}
     </div>

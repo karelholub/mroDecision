@@ -54,12 +54,21 @@
           const name = action.dataset.deeConversion || "interaction";
           if (decision) {
             const surveyEvent = surveyEventDetails(action);
+            const surveyValidation = validateSurveyAction(action, surveyEvent);
+            if (!surveyValidation.ok) {
+              markSurveyError(action, surveyValidation.message);
+              element.dispatchEvent(new CustomEvent("dee:survey-invalid", {
+                detail: { decision, reason: surveyValidation.reason, message: surveyValidation.message, event: surveyEvent }
+              }));
+              return;
+            }
+            clearSurveyError(action);
             trackConversion(name, element, {
               action: name,
               value: action.dataset.deeValue || surveyEvent.value || action.value || action.textContent?.trim() || "",
               label: action.dataset.deeLabel || surveyEvent.label || action.getAttribute("aria-label") || action.textContent?.trim() || "",
               ...surveyEvent
-            }).catch(() => {});
+            }).then(() => markSurveySubmitted(action, surveyEvent)).catch(() => {});
           }
           return;
         }
@@ -514,9 +523,10 @@
           ? survey.questions
           : [{ label: content.question || survey.question || "", options: content.options || survey.options || [] }].filter((question) => question.label);
       return `<div class="dee-message-survey">${questions.slice(0, 6).map((question, index) => `
-        <fieldset>
+        <fieldset data-dee-survey-fieldset data-dee-survey-required="${question.required ? "true" : "false"}">
           <legend>${escapeHtml(question.label || question.title || `Question ${index + 1}`)}</legend>
           <div>${(Array.isArray(question.options) ? question.options : []).slice(0, 8).map((option) => surveyOptionButton(option, question)).join("") || surveyTextInput(question, index)}</div>
+          <p class="dee-message-survey-feedback" data-dee-survey-feedback aria-live="polite"></p>
         </fieldset>
       `).join("")}</div>`;
     }
@@ -531,15 +541,15 @@
     const label = optionObject.label || optionObject.title || optionObject.value || option;
     const value = optionObject.value || optionObject.id || label;
     const trackingName = optionObject.tracking_name || question.tracking_name || question.id || "survey_response";
-    return `<button type="button" data-dee-conversion="${escapeHtml(trackingName)}" data-dee-survey-question="${escapeHtml(question.id || question.tracking_name || question.label || question.title || "survey_question")}" data-dee-survey-question-label="${escapeHtml(question.label || question.title || "Survey question")}" data-dee-survey-value="${escapeHtml(value)}">${escapeHtml(label)}</button>`;
+    return `<button type="button" data-dee-conversion="${escapeHtml(trackingName)}" data-dee-survey-question="${escapeHtml(question.id || question.tracking_name || question.label || question.title || "survey_question")}" data-dee-survey-question-label="${escapeHtml(question.label || question.title || "Survey question")}" data-dee-survey-value="${escapeHtml(value)}" data-dee-survey-required="${question.required ? "true" : "false"}" aria-pressed="false">${escapeHtml(label)}</button>`;
   }
 
   function surveyTextInput(question = {}, index = 0) {
     const questionId = question.id || question.tracking_name || `survey_question_${index + 1}`;
     const trackingName = question.tracking_name || question.id || "survey_response";
     return `
-      <textarea data-dee-survey-input="${escapeHtml(questionId)}" aria-label="${escapeHtml(question.label || "Survey response")}"></textarea>
-      <button type="button" data-dee-conversion="${escapeHtml(trackingName)}" data-dee-survey-question="${escapeHtml(questionId)}" data-dee-survey-question-label="${escapeHtml(question.label || question.title || "Survey question")}" data-dee-survey-text="true">Submit</button>
+      <textarea data-dee-survey-input="${escapeHtml(questionId)}" aria-label="${escapeHtml(question.label || "Survey response")}" ${question.required ? "required" : ""}></textarea>
+      <button type="button" data-dee-conversion="${escapeHtml(trackingName)}" data-dee-survey-question="${escapeHtml(questionId)}" data-dee-survey-question-label="${escapeHtml(question.label || question.title || "Survey question")}" data-dee-survey-text="true" data-dee-survey-required="${question.required ? "true" : "false"}">Submit</button>
     `;
   }
 
@@ -558,6 +568,43 @@
       value,
       label: action.textContent?.trim() || value
     };
+  }
+
+  function validateSurveyAction(action, event = surveyEventDetails(action)) {
+    if (event.type !== "survey_response") return { ok: true };
+    const required = action.dataset.deeSurveyRequired === "true" || action.closest("[data-dee-survey-fieldset]")?.dataset.deeSurveyRequired === "true";
+    if (action.dataset.deeSurveyText === "true" && required && !String(event.value || "").trim()) {
+      return { ok: false, reason: "required_empty", message: "Please answer this question before submitting." };
+    }
+    return { ok: true };
+  }
+
+  function markSurveyError(action, message) {
+    const fieldset = action.closest("fieldset");
+    const feedback = fieldset?.querySelector("[data-dee-survey-feedback]");
+    if (fieldset) fieldset.dataset.deeSurveyState = "error";
+    if (feedback) feedback.textContent = message || "Please check your answer.";
+  }
+
+  function clearSurveyError(action) {
+    const fieldset = action.closest("fieldset");
+    const feedback = fieldset?.querySelector("[data-dee-survey-feedback]");
+    if (fieldset?.dataset.deeSurveyState === "error") fieldset.dataset.deeSurveyState = "";
+    if (feedback) feedback.textContent = "";
+  }
+
+  function markSurveySubmitted(action, event = surveyEventDetails(action)) {
+    if (event.type !== "survey_response") return;
+    const fieldset = action.closest("fieldset");
+    const feedback = fieldset?.querySelector("[data-dee-survey-feedback]");
+    if (fieldset) fieldset.dataset.deeSurveyState = "submitted";
+    if (action.dataset.deeSurveyValue) {
+      fieldset?.querySelectorAll("[data-dee-survey-value]").forEach((button) => {
+        button.classList.toggle("is-selected", button === action);
+        button.setAttribute("aria-pressed", button === action ? "true" : "false");
+      });
+    }
+    if (feedback) feedback.textContent = "Thanks, your answer was recorded.";
   }
 
   function messageCss(template) {
@@ -585,10 +632,16 @@
       .dee-message-item em{color:#667085;font-size:12px;font-style:normal;line-height:1.35}
       .dee-message-survey{display:grid;gap:10px}
       .dee-message-survey fieldset{display:grid;gap:8px;margin:0;border:1px solid #eaecf0;border-radius:8px;padding:10px}
+      .dee-message-survey fieldset[data-dee-survey-state="error"]{border-color:#f04438;background:#fff8f7}
+      .dee-message-survey fieldset[data-dee-survey-state="submitted"]{border-color:#12b76a;background:#f6fef9}
       .dee-message-survey legend{font-weight:700}
       .dee-message-survey fieldset div{display:flex;flex-wrap:wrap;gap:6px}
       .dee-message-survey button{border:1px solid #d0d5dd;border-radius:999px;background:#fff;padding:7px 10px;cursor:pointer}
+      .dee-message-survey button.is-selected{border-color:#0f766e;background:#e6fffb;color:#0f766e;font-weight:700}
       .dee-message-survey textarea{width:100%;min-height:72px;border:1px solid #d0d5dd;border-radius:8px;padding:8px;font:inherit}
+      .dee-message-survey-feedback{min-height:18px;margin:0;color:#667085;font-size:12px;line-height:1.35}
+      .dee-message-survey fieldset[data-dee-survey-state="error"] .dee-message-survey-feedback{color:#b42318}
+      .dee-message-survey fieldset[data-dee-survey-state="submitted"] .dee-message-survey-feedback{color:#027a48}
       .dee-message-fragment{min-width:0}
       .dee-message-toast{max-width:360px;margin-left:auto}
       .dee-message-modal{max-width:520px;margin:24px auto}

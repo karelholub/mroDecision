@@ -306,7 +306,7 @@ Survey messages can be question-first. A `survey` payload does not need title or
 }
 ```
 
-Survey option clicks are sent as conversion events with `event.type: "survey_response"`, `event.survey_question`, `event.survey_question_label`, `event.survey_value`, and `event.value`. Free-text survey questions render a textarea plus a submit button and send the entered response through the same event fields. When DEE accepts the conversion, it also forwards an `inapp_survey_response` event to the configured Meiro collector or feedback endpoint so Pipes can store the answer in profile attributes.
+Survey option clicks are sent as conversion events with `event.type: "survey_response"`, `event.survey_question`, `event.survey_question_label`, `event.survey_value`, and `event.value`. Free-text survey questions render a textarea plus a submit button and send the entered response through the same event fields. Required free-text questions are blocked client-side until the visitor enters an answer. After a successful response, the SDK marks the selected answer and shows a compact acknowledgement. When DEE accepts the conversion, it also forwards an `inapp_survey_response` event to the configured Meiro collector or feedback endpoint so Pipes can store the answer in profile attributes.
 
 Message experiments can return inline variant content without creating a separate message record for every variant. The SDK treats `message_content`, `message_id`, and `message_variant` as a message render target even when `outputs.template` is a concrete message template such as `banner`, `modal`, or `card`:
 
