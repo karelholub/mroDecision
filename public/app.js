@@ -46,6 +46,7 @@ const messageOutput = document.querySelector("#message-output");
 const messagePreview = document.querySelector("#message-preview");
 const messageDetailPanel = document.querySelector("#message-editor");
 const messageInspectorSummary = document.querySelector("#message-inspector-summary");
+const messageReadinessPanel = document.querySelector("#message-readiness-panel");
 const messagePerformanceSummary = document.querySelector("#message-performance-summary");
 const messageRuleLinks = document.querySelector("#message-rule-links");
 const messagePreviewHealth = document.querySelector("#message-preview-health");
@@ -7439,6 +7440,26 @@ function renderMessagePreview() {
     statusItem("Tokens", messageTokenStats().tokens.length ? `${messageTokenStats().tokens.length} used` : "None")
   ].join("");
   renderMessagePreviewHealth(health);
+  renderMessageReadiness({
+    id: document.querySelector("#message-id").value.trim(),
+    status,
+    templateType,
+    placement,
+    surface,
+    application,
+    campaign: document.querySelector("#message-campaign")?.value.trim() || "",
+    folder: document.querySelector("#message-folder")?.value.trim() || "",
+    startsAt,
+    expiresAt,
+    ttl,
+    displayMode,
+    triggerType,
+    maxImpressions,
+    targetDevices,
+    consentCategory,
+    ctas,
+    imageUrl
+  }, health);
   renderMessageAudienceComparison({ templateType, placement, surface, raw });
   renderMessageRuleLinks();
   renderMessageAssetList();
@@ -7712,6 +7733,177 @@ function renderMessagePreviewHealth(health) {
   `;
 }
 
+function renderMessageReadiness(context, health) {
+  if (!messageReadinessPanel) return;
+  const report = messageReadinessReport(context, health);
+  messageReadinessPanel.innerHTML = `
+    <div class="message-readiness-head ${escapeHtml(report.level)}">
+      <div>
+        <strong>Launch Readiness</strong>
+        <span>${escapeHtml(report.summary)}</span>
+      </div>
+      <span>${escapeHtml(messageReadinessLabel(report.level))}</span>
+    </div>
+    <div class="message-readiness-metrics">
+      ${messageReadinessMetric("Rules", report.ruleLinks.length ? formatNumber(report.ruleLinks.length) : "0")}
+      ${messageReadinessMetric("Campaign", report.campaignLabel || "Unassigned")}
+      ${messageReadinessMetric("Conflicts", report.conflicts.length ? formatNumber(report.conflicts.length) : "0")}
+    </div>
+    <div class="message-readiness-list">
+      ${report.items.map(messageReadinessItemRow).join("")}
+    </div>
+  `;
+}
+
+function messageReadinessReport(context, health) {
+  const ruleLinks = messageBacklinks(context.id);
+  const conflicts = messagePlacementConflicts(context);
+  const campaignLabel = [context.campaign, context.folder].filter(Boolean).join(" / ");
+  const items = [
+    ...messageHealthReadinessItems(health),
+    ...messageRuleReadinessItems(context, ruleLinks),
+    ...messageConflictReadinessItems(conflicts),
+    ...messagePolicyReadinessItems(context)
+  ];
+  if (!items.length) {
+    items.push({ level: "ok", title: "Ready to launch", detail: "Content, placement, rules, campaign, and delivery policy look aligned." });
+  }
+  const level = items.some((item) => item.level === "error") ? "error" : items.some((item) => item.level === "warn") ? "warn" : "ok";
+  return {
+    level,
+    ruleLinks,
+    conflicts,
+    campaignLabel,
+    items: items.slice(0, 8),
+    summary: messageReadinessSummary({ level, items, ruleLinks, conflicts, campaignLabel })
+  };
+}
+
+function messageHealthReadinessItems(health) {
+  return (health?.checks || [])
+    .filter((item) => item.level === "error" || item.level === "warn")
+    .map((item) => ({
+      level: item.level,
+      title: item.title,
+      detail: item.detail
+    }));
+}
+
+function messageRuleReadinessItems(context, ruleLinks = []) {
+  const items = [];
+  if (!context.id) return [{ level: "warn", title: "Message ID missing", detail: "Save with a stable ID before linking this message to rules." }];
+  if (!ruleLinks.length) {
+    items.push({ level: "warn", title: "Not linked to a rule", detail: "No draft or published rule branch currently returns this message_id." });
+  }
+  const surfaceMismatches = ruleLinks.filter((link) => {
+    const rule = cachedRuleSets.find((candidate) => candidate.decision_key === link.rule_key);
+    return rule?.surface && context.surface && !messageSurfaceAligned(context.surface, rule.surface);
+  });
+  if (surfaceMismatches.length) {
+    items.push({
+      level: "error",
+      title: "Rule surface mismatch",
+      detail: `${surfaceMismatches.length} linked branch${surfaceMismatches.length === 1 ? "" : "es"} use a different surface.`
+    });
+  }
+  const campaignMismatches = ruleLinks.filter((link) => {
+    const rule = cachedRuleSets.find((candidate) => candidate.decision_key === link.rule_key);
+    const ruleCampaign = campaignValue(rule?.metadata || {});
+    return context.campaign && ruleCampaign && ruleCampaign !== context.campaign;
+  });
+  if (campaignMismatches.length) {
+    items.push({
+      level: "warn",
+      title: "Campaign differs from rule",
+      detail: `${campaignMismatches.length} linked branch${campaignMismatches.length === 1 ? "" : "es"} belong to another campaign.`
+    });
+  }
+  return items;
+}
+
+function messageConflictReadinessItems(conflicts = []) {
+  return conflicts.map((conflict) => ({
+    level: conflict.level,
+    title: conflict.title,
+    detail: conflict.detail
+  }));
+}
+
+function messagePolicyReadinessItems(context) {
+  const items = [];
+  if (context.status !== "active") items.push({ level: "warn", title: "Not active", detail: "Only active messages should be used for live delivery." });
+  if (["modal", "toast", "alert"].includes(context.templateType) && context.displayMode === "always" && !context.maxImpressions && !context.ttl) {
+    items.push({ level: "warn", title: "Interruptive policy", detail: "Add a cap or cooldown before running this on high-traffic pages." });
+  }
+  if (context.targetDevices !== "any" && !context.placement) {
+    items.push({ level: "warn", title: "Device targeting needs placement", detail: "Specify the placement where this device-specific message can render." });
+  }
+  return items;
+}
+
+function messagePlacementConflicts(context) {
+  const currentId = context.id;
+  const placement = String(context.placement || "").trim();
+  const surface = String(context.surface || "").trim();
+  const templateType = messageTemplateType(context.templateType);
+  const interruptive = ["modal", "toast", "alert"].includes(templateType);
+  if (!currentId || !surface || !placement || !interruptive) return [];
+  const peers = cachedMessages.filter((message) => {
+    if (message.id === currentId || (message.status || "active") !== "active") return false;
+    const content = message.default_content || {};
+    const peerTemplate = messageTemplateType(content.template_type || message.metadata?.template_type || "banner");
+    if (!["modal", "toast", "alert"].includes(peerTemplate)) return false;
+    const peerPlacement = String(content.placement || message.metadata?.placement || "").trim();
+    return messageSurfaceAligned(surface, message.surface) && peerPlacement === placement;
+  });
+  if (!peers.length) return [];
+  return [{
+    level: "warn",
+    title: "Competing interruptive messages",
+    detail: `${peers.length} active modal/toast/alert message${peers.length === 1 ? "" : "s"} share ${placement}.`
+  }];
+}
+
+function messageSurfaceAligned(left, right) {
+  const normalize = (value) => String(value || "").trim().toLowerCase().replace(/[.\s-]+/g, "_");
+  const a = normalize(left);
+  const b = normalize(right);
+  return !a || !b || a === b || a.includes(b) || b.includes(a);
+}
+
+function messageReadinessSummary({ level, items, ruleLinks, conflicts, campaignLabel }) {
+  if (level === "error") return `${items.filter((item) => item.level === "error").length} blocker${items.filter((item) => item.level === "error").length === 1 ? "" : "s"} before launch.`;
+  if (level === "warn") return `${items.filter((item) => item.level === "warn").length} review item${items.filter((item) => item.level === "warn").length === 1 ? "" : "s"} before publish.`;
+  return `${ruleLinks.length || 0} linked rule${ruleLinks.length === 1 ? "" : "s"} · ${conflicts.length || 0} conflicts · ${campaignLabel || "no campaign"}.`;
+}
+
+function messageReadinessLabel(level) {
+  if (level === "error") return "Blocked";
+  if (level === "warn") return "Review";
+  return "Ready";
+}
+
+function messageReadinessMetric(label, value) {
+  return `
+    <div>
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `;
+}
+
+function messageReadinessItemRow(item) {
+  return `
+    <div class="message-readiness-item ${escapeHtml(item.level)}">
+      <span>${escapeHtml(messageReadinessLabel(item.level))}</span>
+      <div>
+        <strong>${escapeHtml(item.title)}</strong>
+        <em>${escapeHtml(item.detail)}</em>
+      </div>
+    </div>
+  `;
+}
+
 function messagePreviewHealthLabel(health) {
   if (health.level === "error") return "Needs fixes";
   if (health.level === "warn") return "Review recommended";
@@ -7770,13 +7962,19 @@ function renderMessageRuleLinks() {
 function messageBacklinks(messageId) {
   return cachedRuleSets.flatMap((rule) => {
     const links = [];
-    collectMessageBacklinks(rule.draft, messageId, {
-      rule_key: rule.decision_key,
-      rule_name: rule.name,
-      rule_type: rule.type || "decision",
-      rule_status: rule.status || "draft",
-      definition: "draft"
-    }, links);
+    const definitions = [
+      { label: "draft", definition: rule.draft || rule.definition || rule.current_draft },
+      { label: "published", definition: rule.published || rule.published_definition || rule.version?.definition || rule.active_version?.definition }
+    ].filter((item, index, items) => item.definition && items.findIndex((candidate) => candidate.definition === item.definition) === index);
+    for (const item of definitions) {
+      collectMessageBacklinks(item.definition, messageId, {
+        rule_key: rule.decision_key,
+        rule_name: rule.name,
+        rule_type: rule.type || "decision",
+        rule_status: rule.status || "draft",
+        definition: item.label
+      }, links);
+    }
     return links;
   });
 }
@@ -7821,7 +8019,7 @@ function messageRuleLinkRow(link) {
     <button type="button" class="message-rule-link-row" data-message-rule-key="${escapeHtml(link.rule_key)}">
       <span>${escapeHtml(link.rule_type)}</span>
       <strong>${escapeHtml(link.rule_name || link.rule_key)}</strong>
-      <small>${escapeHtml(`${link.branch_id} · ${link.result} · ${link.rule_status}`)}</small>
+      <small>${escapeHtml(`${link.definition} · ${link.branch_id} · ${link.result} · ${link.rule_status}`)}</small>
     </button>
   `;
 }

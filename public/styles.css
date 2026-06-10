@@ -7670,6 +7670,123 @@ header {
   background: #ffffff;
 }
 
+.message-readiness-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0 20px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.message-readiness-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.message-readiness-head > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.message-readiness-head strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.message-readiness-head div span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.message-readiness-head > span,
+.message-readiness-item > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: #e8f7f4;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.message-readiness-head.warn > span,
+.message-readiness-item.warn > span {
+  background: #fff4d6;
+  color: #9a6700;
+}
+
+.message-readiness-head.error > span,
+.message-readiness-item.error > span {
+  background: #fee4e2;
+  color: var(--danger);
+}
+
+.message-readiness-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.message-readiness-metrics > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px;
+  background: var(--panel-soft);
+}
+
+.message-readiness-metrics span,
+.message-readiness-item em {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.message-readiness-metrics strong,
+.message-readiness-item strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.message-readiness-list {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.message-readiness-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+  border-radius: 7px;
+  padding: 8px;
+  background: #f8fafc;
+}
+
+.message-readiness-item > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
 .message-performance-head {
   display: grid;
   gap: 3px;

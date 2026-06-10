@@ -61,6 +61,8 @@ Status: started. Message detail now includes a compact performance panel backed 
 - Campaign detail should group Messages alongside Experiments, Rules, Surfaces, Recent Events, Review Status, and Dependencies.
 - Add campaign readiness checks for message schedule, consent, conflicts, missing assets, inactive references, and frequency caps.
 
+Status: started. Message detail now has a launch readiness panel that summarizes rule links, campaign assignment, same-placement interruptive message conflicts, surface/campaign drift, and delivery/content blockers.
+
 ### 9. Governance
 
 - Add draft/review/published/paused/archived lifecycle where needed.
@@ -70,3 +72,5 @@ Status: started. Message detail now includes a compact performance panel backed 
 
 - Detect multiple modals on one surface, campaign priority conflicts, expired/inactive message references, missing consent, and message/experiment placement collisions.
 - Show exact conflicts in campaign review and message readiness.
+
+Status: started. Message readiness detects competing active modal/toast/alert messages on the same surface and placement, plus linked-rule surface and campaign mismatches.
