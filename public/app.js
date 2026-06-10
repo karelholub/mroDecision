@@ -567,6 +567,7 @@ messageRenderTokens?.addEventListener("change", renderMessagePreview);
 messageTokenSample?.addEventListener("input", renderMessagePreview);
 messageTokenSuggestions?.addEventListener("click", handleMessageTokenClick);
 messageExperimentIdeas?.addEventListener("click", handleMessageExperimentIdeaClick);
+messageOutput?.addEventListener("click", handleMessageOutputActionClick);
 document.querySelectorAll("[data-message-preview-device]").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll("[data-message-preview-device]").forEach((item) => item.classList.remove("active"));
@@ -7671,10 +7672,48 @@ async function createMessageExperimentDraft(variantIndex) {
       body: JSON.stringify(payload)
     });
     await Promise.all([loadRules(), loadExperiments()]);
-    messageOutput.textContent = `Created draft experiment ${body.rule_set.decision_key}. Open Campaigns or Rule Sets to review allocation, targeting, and publish readiness.`;
+    renderMessageExperimentDraftSuccess(body.rule_set);
   } catch (error) {
     messageOutput.textContent = error.message;
   }
+}
+
+async function handleMessageOutputActionClick(event) {
+  const button = event.target.closest("[data-message-output-action]");
+  if (!button) return;
+  const decisionKey = button.dataset.decisionKey || "";
+  if (!decisionKey) return;
+  if (button.dataset.messageOutputAction === "open-campaigns") {
+    switchView("experiments");
+    await loadExperiments();
+    selectedExperimentKey = decisionKey;
+    activeExperimentTab = "design";
+    renderExperiments();
+    experimentDetail?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  if (button.dataset.messageOutputAction === "open-rules") {
+    switchView("rules");
+    await loadRule(decisionKey);
+    openRuleDetail();
+  }
+}
+
+function renderMessageExperimentDraftSuccess(ruleSet = {}) {
+  const decisionKey = ruleSet.decision_key || "";
+  messageOutput.innerHTML = `
+    <div class="message-output-success">
+      <div>
+        <strong>Draft experiment created</strong>
+        <span>${escapeHtml(decisionKey)}</span>
+      </div>
+      <p>Review allocation, targeting, goal, and publish readiness before launching.</p>
+      <div class="message-output-actions">
+        <button type="button" data-message-output-action="open-campaigns" data-decision-key="${escapeHtml(decisionKey)}">Open in Campaigns</button>
+        <button type="button" data-message-output-action="open-rules" data-decision-key="${escapeHtml(decisionKey)}">Open in Rule Sets</button>
+      </div>
+    </div>
+  `;
+  document.querySelector('[data-message-drawer-tab="output"]')?.click();
 }
 
 function buildMessageExperimentDraftPayload({ control, treatment }) {

@@ -9714,6 +9714,48 @@ button.graph-node:hover {
   white-space: nowrap;
 }
 
+.message-output-success {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  border: 1px solid #a7e0d7;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f0faf8;
+  color: var(--ink);
+  white-space: normal;
+}
+
+.message-output-success > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.message-output-success strong {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.message-output-success span,
+.message-output-success p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.message-output-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.message-output-actions button {
+  min-height: 32px;
+}
+
 .publish-review-body {
   display: grid;
   gap: 12px;
