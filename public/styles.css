@@ -2902,6 +2902,72 @@ aside input {
   overflow-wrap: anywhere;
 }
 
+.experiment-preview-link-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid rgba(14, 154, 142, 0.24);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fbfffe;
+}
+
+.experiment-preview-link-panel.loading {
+  opacity: 0.78;
+}
+
+.experiment-preview-link-panel > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.experiment-preview-link-panel strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.experiment-preview-link-panel span,
+.experiment-preview-link-panel code {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.experiment-preview-link-panel code {
+  grid-column: 1 / -1;
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: var(--panel-soft);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.experiment-preview-link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.experiment-preview-link-actions a,
+.experiment-preview-link-actions button {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 6px 10px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-decoration: none;
+}
+
 .experiment-visual-diff {
   display: grid;
   gap: 10px;

@@ -2224,6 +2224,7 @@ function experimentDesignTab(experiment) {
         </div>
         <div class="experiment-tab-actions">
           <button type="button" data-experiment-action="open-visual-editor" data-rule-key="${escapeHtml(experiment.decision_key)}">Open Visual Editor</button>
+          <button type="button" data-experiment-action="create-preview-link" data-rule-key="${escapeHtml(experiment.decision_key)}">Create Preview Link</button>
           <button type="button" data-experiment-action="focus-visual-import" data-rule-key="${escapeHtml(experiment.decision_key)}">Import Visual Payload</button>
           <button type="button" data-experiment-action="open-editor" data-editor-section="design" data-rule-key="${escapeHtml(experiment.decision_key)}">Edit Design</button>
         </div>
@@ -2252,6 +2253,10 @@ function experimentDesignTab(experiment) {
       <div class="experiment-visual-session-note">
         <strong>Visual editor session</strong>
         <span>Open Visual Editor launches the website with a short-lived editor token. The overlay can save DOM changes directly to the selected draft treatment variant; publish and review still happen here in DEE.</span>
+      </div>
+      <div class="experiment-preview-link-panel" data-experiment-preview-link>
+        <strong>Reviewer preview</strong>
+        <span>Create a short-lived read-only link that opens the website with a forced draft treatment variant. It does not publish, save draft changes, or alter live allocation.</span>
       </div>
       <div class="experiment-visual-diff" data-experiment-visual-diff="${escapeHtml(experiment.decision_key)}">
         <div class="status-line">Loading draft visual change summary...</div>
@@ -2571,6 +2576,7 @@ function bindExperimentDetailActions(experiment) {
   });
   experimentDetail.querySelector('[data-experiment-action="open-evaluate"]')?.addEventListener("click", () => openExperimentInEvaluate(experiment));
   experimentDetail.querySelector('[data-experiment-action="open-visual-editor"]')?.addEventListener("click", () => openExperimentVisualEditor(experiment));
+  experimentDetail.querySelector('[data-experiment-action="create-preview-link"]')?.addEventListener("click", () => createExperimentPreviewLink(experiment));
   experimentDetail.querySelector('[data-experiment-action="focus-readiness"]')?.addEventListener("click", (event) => {
     activeExperimentTab = event.currentTarget.dataset.targetTab || "settings";
     renderExperimentDetail(experiment);
@@ -2779,6 +2785,54 @@ async function openExperimentVisualEditor(experiment) {
       "afterbegin",
       `<div class="experiment-warning-list"><div>${escapeHtml(error.message)}</div></div>`
     );
+  }
+}
+
+async function createExperimentPreviewLink(experiment) {
+  const panel = experimentDetail.querySelector("[data-experiment-preview-link]");
+  const variantKey = experiment.variants?.find((variant) => !variant.baseline && variant.key !== "control")?.key || "";
+  if (panel) {
+    panel.classList.add("loading");
+    panel.innerHTML = `
+      <strong>Reviewer preview</strong>
+      <span>Creating a read-only preview link...</span>
+    `;
+  }
+  try {
+    const body = await api(`/v1/experiments/${encodeURIComponent(experiment.decision_key)}/preview-link`, {
+      method: "POST",
+      body: JSON.stringify({
+        website_url: "http://localhost:8092/experiment-mock-site/",
+        variant_key: variantKey,
+        ttl_seconds: 3600
+      })
+    });
+    await navigator.clipboard?.writeText(body.preview_url).catch(() => {});
+    if (panel) {
+      panel.classList.remove("loading");
+      panel.innerHTML = `
+        <div>
+          <strong>Reviewer preview ready</strong>
+          <span>${escapeHtml(body.variant_key ? `Forced variant ${body.variant_key}` : "No variant forced")} · expires ${escapeHtml(body.expires_at ? formatTime(body.expires_at) : "-")}</span>
+        </div>
+        <div class="experiment-preview-link-actions">
+          <a href="${escapeHtml(body.preview_url)}" target="_blank" rel="noopener noreferrer">Open</a>
+          <button type="button" data-copy-preview-link>Copy Link</button>
+        </div>
+        <code>${escapeHtml(body.preview_url)}</code>
+      `;
+      panel.querySelector("[data-copy-preview-link]")?.addEventListener("click", async () => {
+        await navigator.clipboard?.writeText(body.preview_url).catch(() => {});
+      });
+    }
+  } catch (error) {
+    if (panel) {
+      panel.classList.remove("loading");
+      panel.innerHTML = `
+        <strong>Reviewer preview</strong>
+        <span>${escapeHtml(error.message)}</span>
+      `;
+    }
   }
 }
 

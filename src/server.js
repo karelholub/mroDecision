@@ -43,6 +43,7 @@ const clientRateLimiter = createRateLimiter({
 const requestMetrics = createRequestMetrics();
 const clientTrafficMetrics = createClientTrafficMetrics();
 const experimentEditorSessions = new Map();
+const experimentPreviewSessions = new Map();
 setAuthStore(store);
 let schemaSyncTimer = null;
 let schemaSyncNextRunAt = "";
@@ -361,6 +362,26 @@ async function routeApi(req, res, url) {
       return;
     }
     sendJson(res, 200, createExperimentEditorSession(ruleSet, body));
+    return;
+  }
+
+  const experimentPreviewLinkMatch = pathname.match(/^\/v1\/experiments\/([^/]+)\/preview-link$/);
+  if (req.method === "POST" && experimentPreviewLinkMatch) {
+    requireScope(req, "editor");
+    const key = decodeURIComponent(experimentPreviewLinkMatch[1]);
+    const body = await readJson(req, config.requestBodyLimitBytes);
+    const ruleSet = await storeCall("getRuleSet", key);
+    if (!ruleSet || ruleSet.type !== "experiment") {
+      sendJson(res, 404, { error: "not_found", message: `Experiment not found: ${key}` });
+      return;
+    }
+    sendJson(res, 200, createExperimentPreviewLink(ruleSet, body));
+    return;
+  }
+
+  const experimentPreviewTokenMatch = pathname.match(/^\/v1\/preview\/([^/]+)$/);
+  if (req.method === "GET" && experimentPreviewTokenMatch) {
+    sendJson(res, 200, requireExperimentPreviewSession(decodeURIComponent(experimentPreviewTokenMatch[1])));
     return;
   }
 
@@ -2157,6 +2178,58 @@ function createExperimentEditorSession(ruleSet, body = {}) {
   };
 }
 
+function createExperimentPreviewLink(ruleSet, body = {}) {
+  const now = Date.now();
+  const ttlSeconds = Math.max(60, Math.min(Number(body.ttl_seconds || 900), 86400));
+  const expiresAt = new Date(now + ttlSeconds * 1000).toISOString();
+  const variantKey = String(body.variant_key || body.variant || "").trim();
+  const variants = Array.isArray(ruleSet.metadata?.experiment?.variants) ? ruleSet.metadata.experiment.variants : [];
+  if (variantKey && !variants.some((variant) => variant.key === variantKey)) {
+    badRequest(`Variant not found: ${variantKey}`);
+  }
+  const tokenPayload = [
+    "preview",
+    ruleSet.decision_key,
+    ruleSet.version || 0,
+    variantKey,
+    expiresAt,
+    randomUUID()
+  ].join(":");
+  const token = createHash("sha256").update(tokenPayload).digest("hex");
+  cleanupExperimentPreviewSessions(now);
+  experimentPreviewSessions.set(token, {
+    decision_key: ruleSet.decision_key,
+    rule_version: ruleSet.version || null,
+    variant_key: variantKey,
+    expires_at: expiresAt,
+    expires_at_ms: now + ttlSeconds * 1000,
+    created_at: new Date(now).toISOString(),
+    mode: "preview"
+  });
+  const websiteUrl = body.website_url || body.url || "http://localhost:8092/experiment-mock-site/";
+  const previewUrl = new URL(websiteUrl);
+  previewUrl.searchParams.set("dee_preview", "1");
+  previewUrl.searchParams.set("dee_preview_rule", ruleSet.decision_key);
+  previewUrl.searchParams.set("dee_preview_token", token);
+  if (variantKey) previewUrl.searchParams.set("dee_force_variant", variantKey);
+  if (variantKey) previewUrl.searchParams.set("dee_preview_variant", variantKey);
+  return {
+    decision_key: ruleSet.decision_key,
+    rule_version: ruleSet.version || null,
+    preview_token: token,
+    expires_at: expiresAt,
+    ttl_seconds: ttlSeconds,
+    variant_key: variantKey,
+    preview_url: previewUrl.toString(),
+    api_url: `/v1/preview/${token}`,
+    permissions: {
+      can_publish: false,
+      can_save_draft: false,
+      can_force_variant: true
+    }
+  };
+}
+
 async function saveExperimentEditorDraft(key, body = {}) {
   const token = String(body.editor_token || body.token || "").trim();
   const session = requireExperimentEditorSession(key, token);
@@ -2215,6 +2288,36 @@ function cleanupExperimentEditorSessions(now = Date.now()) {
   for (const [token, session] of experimentEditorSessions.entries()) {
     if (!session.expires_at_ms || session.expires_at_ms <= now) {
       experimentEditorSessions.delete(token);
+    }
+  }
+}
+
+function requireExperimentPreviewSession(token) {
+  if (!token) badRequest("preview token is required");
+  cleanupExperimentPreviewSessions(Date.now());
+  const session = experimentPreviewSessions.get(token);
+  if (!session) {
+    forbidden("Preview token is invalid or expired");
+  }
+  return {
+    decision_key: session.decision_key,
+    rule_version: session.rule_version,
+    variant_key: session.variant_key,
+    expires_at: session.expires_at,
+    created_at: session.created_at,
+    mode: session.mode || "preview",
+    permissions: {
+      can_publish: false,
+      can_save_draft: false,
+      can_force_variant: true
+    }
+  };
+}
+
+function cleanupExperimentPreviewSessions(now = Date.now()) {
+  for (const [token, session] of experimentPreviewSessions.entries()) {
+    if (!session.expires_at_ms || session.expires_at_ms <= now) {
+      experimentPreviewSessions.delete(token);
     }
   }
 }
