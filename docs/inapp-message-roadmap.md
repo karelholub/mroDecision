@@ -54,6 +54,8 @@ Status: started. Message editor now captures display mode, cooldown TTL, max imp
 - Add message performance panels for eligibility, rendered impressions, views, clicks, dismissals, conversions, CTR, conversion rate, suppression, caps, and recent eligible profiles.
 - Break down by campaign, surface, template, device, and variant.
 
+Status: started. Message detail now includes a compact performance panel backed by client feedback metrics, with impressions, exposures, conversions, conversion rate, top surfaces, recent profiles, and recent events for the selected message.
+
 ### 8. Campaign Integration
 
 - Campaign detail should group Messages alongside Experiments, Rules, Surfaces, Recent Events, Review Status, and Dependencies.
@@ -68,4 +70,3 @@ Status: started. Message editor now captures display mode, cooldown TTL, max imp
 
 - Detect multiple modals on one surface, campaign priority conflicts, expired/inactive message references, missing consent, and message/experiment placement collisions.
 - Show exact conflicts in campaign review and message readiness.
-

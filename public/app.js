@@ -46,6 +46,7 @@ const messageOutput = document.querySelector("#message-output");
 const messagePreview = document.querySelector("#message-preview");
 const messageDetailPanel = document.querySelector("#message-editor");
 const messageInspectorSummary = document.querySelector("#message-inspector-summary");
+const messagePerformanceSummary = document.querySelector("#message-performance-summary");
 const messageRuleLinks = document.querySelector("#message-rule-links");
 const messagePreviewHealth = document.querySelector("#message-preview-health");
 const messageVersionList = document.querySelector("#message-version-list");
@@ -6655,6 +6656,12 @@ function newMessage(options = {}) {
   document.querySelector("#message-expires-at").value = "";
   document.querySelector("#message-priority").value = "0";
   document.querySelector("#message-frequency-ttl").value = "";
+  document.querySelector("#message-display-mode").value = "always";
+  document.querySelector("#message-trigger-type").value = "page_load";
+  document.querySelector("#message-max-impressions").value = "";
+  document.querySelector("#message-target-devices").value = "any";
+  document.querySelector("#message-consent-category").value = "";
+  document.querySelector("#message-dismiss-behavior").value = "suppress";
   document.querySelector("#message-content").value = JSON.stringify({
     template_type: "banner",
     placement: "homepage.hero.top",
@@ -6686,12 +6693,20 @@ function newMessage(options = {}) {
       expires_at: "",
       ttl_seconds: 0
     },
+    delivery: {
+      display: { mode: "always" },
+      frequency: { cooldown_seconds: 0, max_impressions: 0 },
+      targeting: { devices: "any" },
+      trigger: { type: "page_load" },
+      dismiss: { behavior: "suppress" }
+    },
     priority: 0
   }, null, 2);
   resetMessageTokenSample();
   syncMessagePreviewFromJson();
   renderMessageAssetList();
   messageOutput.textContent = "Ready for a new message";
+  renderMessagePerformance(null);
   if (messageVersionList) messageVersionList.innerHTML = row(["Save the message to start version history", "", "", ""]);
   if (messageVersionPreview) messageVersionPreview.innerHTML = "";
   if (!options.silent) openMessageDetail();
@@ -6722,7 +6737,100 @@ function loadMessage(id, messages) {
   messageOutput.textContent = `Loaded ${id}`;
   if (messageVersionPreview) messageVersionPreview.innerHTML = "";
   loadMessageVersions(id);
+  loadMessagePerformance(id);
   openMessageDetail();
+}
+
+async function loadMessagePerformance(id) {
+  if (!id || !messagePerformanceSummary) return;
+  messagePerformanceSummary.innerHTML = `<div class="status-line">Loading message performance...</div>`;
+  try {
+    const metrics = await api(`/v1/metrics/client-events?message_id=${encodeURIComponent(id)}&recent_limit=8&limit=8`);
+    renderMessagePerformance(metrics);
+  } catch (error) {
+    messagePerformanceSummary.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderMessagePerformance(metrics) {
+  if (!messagePerformanceSummary) return;
+  if (!metrics) {
+    messagePerformanceSummary.innerHTML = `
+      <div class="message-performance-head">
+        <strong>Performance</strong>
+        <span>Save and reference this message from a rule to collect impressions, exposures, and conversions.</span>
+      </div>
+    `;
+    return;
+  }
+  const byType = messageEventCounts(metrics.recent_events || [], metrics.by_message || []);
+  const impressions = byType.impression || 0;
+  const exposures = byType.exposure || 0;
+  const conversions = byType.conversion || 0;
+  const conversionRate = exposures > 0 ? conversions / exposures : 0;
+  const surfaces = (metrics.by_surface || []).filter((item) => item.key && item.key !== "(empty)").slice(0, 4);
+  const profiles = (metrics.by_profile || []).filter((item) => item.key && item.key !== "(empty)").slice(0, 4);
+  const recent = (metrics.recent_events || []).slice(0, 5);
+  messagePerformanceSummary.innerHTML = `
+    <div class="message-performance-head">
+      <div>
+        <strong>Performance</strong>
+        <span>${escapeHtml(metrics.generated_at ? `Updated ${formatTime(metrics.generated_at)}` : "Client feedback events")}</span>
+      </div>
+    </div>
+    <div class="message-performance-kpis">
+      ${statusItem("Impressions", formatNumber(impressions))}
+      ${statusItem("Exposures", formatNumber(exposures))}
+      ${statusItem("Conversions", formatNumber(conversions))}
+      ${statusItem("Conv. rate", formatPercent(conversionRate))}
+    </div>
+    <div class="message-performance-grid">
+      ${messagePerformanceList("Top surfaces", surfaces, "surface")}
+      ${messagePerformanceList("Recent profiles", profiles, "profile")}
+    </div>
+    <div class="message-performance-events">
+      <strong>Recent events</strong>
+      ${recent.length ? recent.map(messagePerformanceEventRow).join("") : `<span>No client feedback events yet.</span>`}
+    </div>
+  `;
+}
+
+function messageEventCounts(recentEvents = [], groupedMessages = []) {
+  const counts = {};
+  for (const item of groupedMessages || []) {
+    if (item.event_type) counts[item.event_type] = (counts[item.event_type] || 0) + Number(item.count || 0);
+  }
+  if (Object.keys(counts).length) return counts;
+  for (const event of recentEvents || []) {
+    const type = event.event_type || event.type || "";
+    if (type) counts[type] = (counts[type] || 0) + 1;
+  }
+  return counts;
+}
+
+function messagePerformanceList(title, items, fallbackLabel) {
+  return `
+    <section>
+      <strong>${escapeHtml(title)}</strong>
+      <div>
+        ${items.length ? items.map((item) => `
+          <span>
+            <b>${escapeHtml(item.key || fallbackLabel)}</b>
+            <em>${escapeHtml(`${formatNumber(item.count || 0)} ${item.event_type || "events"} · ${formatNumber(item.unique_profiles || 0)} profiles`)}</em>
+          </span>
+        `).join("") : `<span><b>No data</b><em>Waiting for client events</em></span>`}
+      </div>
+    </section>
+  `;
+}
+
+function messagePerformanceEventRow(event = {}) {
+  return `
+    <span>
+      <b>${escapeHtml(event.event_type || event.type || "-")}</b>
+      <em>${escapeHtml([event.surface, event.profile_key, event.occurred_at ? formatTime(event.occurred_at) : ""].filter(Boolean).join(" · ") || "-")}</em>
+    </span>
+  `;
 }
 
 function duplicateSelectedMessage() {

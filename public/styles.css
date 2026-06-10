@@ -7659,6 +7659,98 @@ header {
   line-height: 1.35;
 }
 
+.message-performance-summary {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0 20px 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.message-performance-head {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.message-performance-head strong,
+.message-performance-events > strong,
+.message-performance-grid section > strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.message-performance-head span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.message-performance-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.message-performance-kpis .status-item {
+  padding: 8px;
+}
+
+.message-performance-kpis .status-item span {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+
+.message-performance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.message-performance-grid section,
+.message-performance-events {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.message-performance-grid span,
+.message-performance-events span {
+  display: grid;
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  border-radius: 7px;
+  padding: 7px 8px;
+  background: #f8fafc;
+}
+
+.message-performance-grid b,
+.message-performance-events b {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.message-performance-grid em,
+.message-performance-events em {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .message-preview-card {
   align-self: start;
   width: 100%;
