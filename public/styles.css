@@ -6759,7 +6759,7 @@ header {
 }
 
 .eval-profile-builder {
-  overflow: hidden;
+  max-width: 100%;
 }
 
 .eval-profile-builder .builder-section-head {
