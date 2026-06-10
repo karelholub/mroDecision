@@ -8550,6 +8550,18 @@ header {
   padding: 0 9px;
 }
 
+.message-experiment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.message-experiment-actions button {
+  white-space: nowrap;
+}
+
 .message-experiment-card p {
   min-width: 0;
   overflow-wrap: anywhere;

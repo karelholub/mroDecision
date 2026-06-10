@@ -7511,7 +7511,7 @@ function renderMessageAudienceComparison({ templateType, placement, surface, raw
 function renderMessageExperimentIdeas({ templateType, placement, surface, raw, ctas }) {
   if (!messageExperimentIdeas) return;
   const baseContent = parseJsonSafe(document.querySelector("#message-content").value || "{}");
-  const variants = messageExperimentVariants({ templateType, placement, surface, raw, ctas, baseContent });
+  const variants = messageExperimentVariants({ templateType, placement, raw, ctas, baseContent });
   messageExperimentIdeas.innerHTML = `
     <div class="message-experiment-head">
       <div>
@@ -7592,6 +7592,9 @@ function messageExperimentIdeaCard(variant, index) {
     variant: variant.key,
     message_content: variant.content
   };
+  const draftButton = variant.key === "control"
+    ? ""
+    : `<button type="button" data-message-variant-draft="${index}">Create draft</button>`;
   return `
     <section class="message-experiment-card">
       <div class="message-experiment-card-head">
@@ -7599,7 +7602,10 @@ function messageExperimentIdeaCard(variant, index) {
           <strong>${escapeHtml(variant.label)}</strong>
           <span>${escapeHtml(`${variant.key} · ${variant.weight}%`)}</span>
         </div>
-        <button type="button" data-message-variant-apply="${index}">Apply</button>
+        <div class="message-experiment-actions">
+          <button type="button" data-message-variant-apply="${index}">Apply</button>
+          ${draftButton}
+        </div>
       </div>
       <p>${escapeHtml(variant.hypothesis)}</p>
       <div class="message-experiment-preview message-preview-card compact" data-template="${escapeHtml(messageTemplateType(variant.content.template_type))}" data-has-cta="${normalizeMessageCtas(variant.content).length ? "true" : "false"}">
@@ -7623,25 +7629,177 @@ function messageExperimentIdeaCard(variant, index) {
   `;
 }
 
-function handleMessageExperimentIdeaClick(event) {
+async function handleMessageExperimentIdeaClick(event) {
+  const draftButton = event.target.closest("[data-message-variant-draft]");
+  if (draftButton) {
+    await createMessageExperimentDraft(Number(draftButton.dataset.messageVariantDraft || 0));
+    return;
+  }
   const button = event.target.closest("[data-message-variant-apply]");
   if (!button) return;
-  const raw = messagePreviewRawContent();
-  const templateType = messageTemplateType(document.querySelector("#message-template-type").value);
-  const ctas = normalizeMessageCtas(parseJsonSafe(document.querySelector("#message-content").value || "{}"));
-  const variants = messageExperimentVariants({
-    templateType,
-    placement: document.querySelector("#message-placement").value.trim(),
-    surface: document.querySelector("#message-surface").value.trim(),
-    raw,
-    ctas,
-    baseContent: parseJsonSafe(document.querySelector("#message-content").value || "{}")
-  });
+  const variants = currentMessageExperimentVariants();
   const variant = variants[Number(button.dataset.messageVariantApply || 0)];
   if (!variant) return;
   document.querySelector("#message-content").value = JSON.stringify(variant.content, null, 2);
   syncMessagePreviewFromJson();
   messageOutput.textContent = `Applied ${variant.label} variant to Content JSON. Save the message or copy the variant output into an experiment branch.`;
+}
+
+function currentMessageExperimentVariants() {
+  const raw = messagePreviewRawContent();
+  const templateType = messageTemplateType(document.querySelector("#message-template-type").value);
+  const baseContent = parseJsonSafe(document.querySelector("#message-content").value || "{}");
+  const ctas = normalizeMessageCtas(baseContent);
+  return messageExperimentVariants({
+    templateType,
+    placement: document.querySelector("#message-placement").value.trim(),
+    raw,
+    ctas,
+    baseContent
+  });
+}
+
+async function createMessageExperimentDraft(variantIndex) {
+  try {
+    const variants = currentMessageExperimentVariants();
+    const control = variants.find((variant) => variant.key === "control") || variants[0];
+    const treatment = variants[variantIndex];
+    if (!control || !treatment || treatment.key === "control") throw new Error("Choose a non-control variant before creating an experiment draft.");
+    const payload = buildMessageExperimentDraftPayload({ control, treatment });
+    const body = await api("/v1/rule-sets", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    await Promise.all([loadRules(), loadExperiments()]);
+    messageOutput.textContent = `Created draft experiment ${body.rule_set.decision_key}. Open Campaigns or Rule Sets to review allocation, targeting, and publish readiness.`;
+  } catch (error) {
+    messageOutput.textContent = error.message;
+  }
+}
+
+function buildMessageExperimentDraftPayload({ control, treatment }) {
+  const messageId = document.querySelector("#message-id")?.value.trim() || "message";
+  const messageName = document.querySelector("#message-name")?.value.trim() || messageId;
+  const surface = document.querySelector("#message-surface")?.value.trim() || "";
+  const placement = document.querySelector("#message-placement")?.value.trim() || "";
+  const application = document.querySelector("#message-application")?.value.trim() || "";
+  const campaign = document.querySelector("#message-campaign")?.value.trim() || "";
+  const folder = document.querySelector("#message-folder")?.value.trim() || "";
+  const decisionKey = uniqueMessageExperimentDecisionKey(`${messageId}_${treatment.key}_experiment`);
+  const displayMode = normalizedExperimentDisplayMode(document.querySelector("#message-display-mode")?.value || "always");
+  const triggerType = normalizedExperimentTriggerType(document.querySelector("#message-trigger-type")?.value || "page_load");
+  const targetDevice = document.querySelector("#message-target-devices")?.value || "any";
+  const variantOutput = (variant) => ({
+    message_id: messageId,
+    message_variant: variant.key,
+    message_content: variant.content,
+    template: variant.content.template_type || document.querySelector("#message-template-type")?.value || "banner",
+    placement,
+    surface,
+    application
+  });
+  return {
+    name: `${messageName} Experiment`,
+    decision_key: decisionKey,
+    description: `Draft in-app message experiment generated from ${messageName}. Control keeps the current content; treatment applies ${treatment.label}.`,
+    type: "experiment",
+    priority: 50,
+    surface,
+    cache_policy: { client_ttl: Number(document.querySelector("#message-frequency-ttl")?.value || 300), scope: "profile" },
+    input_schema: {},
+    output_schema: {
+      result_type: "message_experiment",
+      fields: ["message_id", "message_variant", "message_content", "template", "placement", "surface", "application"]
+    },
+    metadata: {
+      campaign: campaign ? { name: campaign, folder } : undefined,
+      folder,
+      application,
+      template_type: document.querySelector("#message-template-type")?.value || "",
+      placement,
+      source_message_id: messageId,
+      experiment: {
+        status: "draft",
+        unit: "profile",
+        mode: "fixed",
+        goal: {
+          type: "conversion",
+          event: "message_click",
+          attribution_window_hours: 24
+        },
+        display: {
+          mode: displayMode,
+          reset_on_version_change: true
+        },
+        targeting: {
+          devices: [targetDevice].filter(Boolean),
+          url_rules: []
+        },
+        trigger: {
+          type: triggerType
+        },
+        variants: [
+          {
+            key: "control",
+            label: "Control",
+            weight: 50,
+            baseline: true,
+            outputs: variantOutput(control)
+          },
+          {
+            key: treatment.key,
+            label: treatment.label,
+            weight: 50,
+            hypothesis: treatment.hypothesis,
+            outputs: variantOutput(treatment)
+          }
+        ]
+      }
+    },
+    tags: ["message_experiment", "generated_from_message"],
+    draft: {
+      branches: [
+        {
+          id: "eligible_message_experiment",
+          label: "Eligible for message experiment",
+          result: "eligible",
+          outputs: {
+            message_id: messageId,
+            placement,
+            surface,
+            application
+          }
+        }
+      ],
+      fallback: {
+        result: "ineligible",
+        outputs: {
+          reason: "not_eligible_for_message_experiment"
+        }
+      }
+    }
+  };
+}
+
+function uniqueMessageExperimentDecisionKey(base) {
+  const existing = new Set((cachedRuleSets || []).map((rule) => rule.decision_key));
+  const cleanBase = slug(base || "message_experiment");
+  if (!existing.has(cleanBase)) return cleanBase;
+  for (let index = 2; index < 100; index += 1) {
+    const candidate = `${cleanBase}_${index}`;
+    if (!existing.has(candidate)) return candidate;
+  }
+  return `${cleanBase}_${Date.now()}`;
+}
+
+function normalizedExperimentDisplayMode(value) {
+  if (["once", "once_per_session", "always"].includes(value)) return value;
+  return "always";
+}
+
+function normalizedExperimentTriggerType(value) {
+  if (["page_load", "dom_ready", "data_layer_event", "custom_event", "manual"].includes(value)) return value;
+  return "custom_event";
 }
 
 function messageAudienceCard({ sample, templateType, placement, surface, raw }) {

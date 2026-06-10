@@ -51,7 +51,7 @@ Status: started. Message editor now captures display mode, cooldown TTL, max imp
 - Report CTR, conversion rate, lift, significance, winner recommendation, and winner rollout.
 - Support short-lived preview links for each message variant.
 
-Status: started. Message editor now suggests fixed-split experiment variants from the current content, renders variant previews, exposes variant output JSON snippets, and can apply a selected variant back to Content JSON for draft iteration.
+Status: started. Message editor now suggests fixed-split experiment variants from the current content, renders variant previews, exposes variant output JSON snippets, can apply a selected variant back to Content JSON for draft iteration, and can create a draft fixed-split message experiment that uses the current content as control and the selected variant as treatment.
 
 ### 7. Analytics
 
