@@ -110,7 +110,8 @@
 
     async function sendEvent(element, type, decision, extra) {
       const placement = placementName(element);
-      const variantKey = decision?.experiment?.variant_key || "";
+      const variantKey = decisionVariantKey(decision);
+      const messageVariantKey = messageVariant(decision);
       const payload = {
         event_id: eventId(type, decision, placement),
         decision_key: decision?.decision_key || element.dataset.deeDecisionKey || "",
@@ -128,9 +129,10 @@
           viewport_width: global.innerWidth || 0,
           viewport_height: global.innerHeight || 0,
           request_source: config.requestSource,
+          ...(messageVariantKey ? { message_variant: messageVariantKey } : {}),
           ...(extra?.context || {})
         },
-        ...(extra?.event ? { event: extra.event } : {})
+        ...(extra?.event || messageVariantKey ? { event: { ...(messageVariantKey ? { message_variant: messageVariantKey } : {}), ...(extra?.event || {}) } } : {})
       };
       const response = await post(`/v1/client/${type}`, payload, { keepalive: true });
       element.dispatchEvent(new CustomEvent("dee:event", { detail: { type, payload, response } }));
@@ -191,8 +193,8 @@
 
     async function renderDecision(element, decision) {
       if (decision.result !== "eligible") return { rendered: false, diagnostics: [] };
-      const template = decision.outputs?.template || (decision.outputs?.message ? "message" : "") || element.dataset.deeTemplate || "cards";
-      const renderer = config.renderers[template] || defaultRenderers[template] || defaultRenderers.cards;
+      const template = decisionTemplate(element, decision);
+      const renderer = config.renderers[template] || defaultRenderers[template] || (hasMessageOutput(decision) ? defaultRenderers.message : defaultRenderers.cards);
       const result = await renderer(element, decision, config);
       if (result && typeof result === "object" && "rendered" in result) {
         return {
@@ -233,14 +235,34 @@
         decision?.decision_key || "decision",
         decision?.rule_version || "v0",
         decision?.profile_key || profileKey(),
-        decision?.experiment?.variant_key || "none",
+        decisionVariantKey(decision) || "none",
         placement,
         Date.now()
       ].join(":");
     }
 
     function messageId(decision) {
-      return decision?.outputs?.message_id || decision?.outputs?.message?.id || "";
+      return decision?.outputs?.message_id || decision?.outputs?.message?.id || decision?.outputs?.messageId || "";
+    }
+
+    function messageVariant(decision) {
+      return decision?.outputs?.message_variant || decision?.outputs?.messageVariant || decision?.outputs?.message?.variant || "";
+    }
+
+    function decisionVariantKey(decision) {
+      return decision?.experiment?.variant_key || decision?.outputs?.variant_key || decision?.outputs?.variant || messageVariant(decision) || "";
+    }
+
+    function hasMessageOutput(decision) {
+      const outputs = decision?.outputs || {};
+      return Boolean(outputs.message || outputs.message_content || outputs.messageContent || outputs.message_id || outputs.messageId);
+    }
+
+    function decisionTemplate(element, decision) {
+      const outputs = decision?.outputs || {};
+      const template = outputs.template || outputs.message?.content?.template_type || outputs.message_content?.template_type || outputs.messageContent?.template_type || element.dataset.deeTemplate || "";
+      if (hasMessageOutput(decision) && isMessageTemplate(template)) return "message";
+      return template || (hasMessageOutput(decision) ? "message" : "cards");
     }
 
     return {
@@ -325,8 +347,8 @@
   }
 
   async function renderMessage(element, decision, config) {
-    const message = decision?.outputs?.message || {};
-    const content = message.content || decision?.outputs?.message_content || {};
+    const message = normalizedDecisionMessage(decision);
+    const content = message.content || {};
     if (!content || typeof content !== "object" || (!content.title && !content.body && !content.html)) {
       logWithConfig(config, "Message renderer received no renderable content");
       return false;
@@ -340,6 +362,7 @@
     const wrapper = document.createElement("article");
     wrapper.className = `dee-message dee-message-${modeSafe(template)}`;
     wrapper.dataset.deeMessageId = message.id || decision?.outputs?.message_id || "";
+    if (message.variant) wrapper.dataset.deeMessageVariant = message.variant;
     wrapper.innerHTML = messageHtml(content, template);
     if (template === "html_fragment") {
       const html = content.html || content.fragment || content.markup || "";
@@ -353,11 +376,30 @@
     return true;
   }
 
+  function normalizedDecisionMessage(decision) {
+    const outputs = decision?.outputs || {};
+    const message = outputs.message && typeof outputs.message === "object" ? outputs.message : {};
+    const directContent = outputs.message_content || outputs.messageContent || {};
+    const content = message.content && typeof message.content === "object"
+      ? { ...message.content, ...(directContent && typeof directContent === "object" ? directContent : {}) }
+      : (directContent && typeof directContent === "object" ? directContent : {});
+    return {
+      ...message,
+      id: message.id || outputs.message_id || outputs.messageId || "",
+      variant: message.variant || outputs.message_variant || outputs.messageVariant || decision?.experiment?.variant_key || "",
+      content
+    };
+  }
+
   function messageTemplateType(value) {
     const normalized = String(value || "").trim();
     return ["banner", "alert", "modal", "inline", "toast", "card", "carousel", "survey", "recommendation", "html_fragment"].includes(normalized)
       ? normalized
       : "banner";
+  }
+
+  function isMessageTemplate(value) {
+    return ["message", "inapp_message", "banner", "alert", "modal", "inline", "toast", "card", "carousel", "survey", "recommendation", "html_fragment"].includes(String(value || "").trim());
   }
 
   function messageHtml(content = {}, template = "banner") {

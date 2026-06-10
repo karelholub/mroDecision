@@ -285,6 +285,31 @@ When a rule returns `message_id`, DEE attaches the message content and normalize
 
 The SDK includes a default `message` renderer for banner, alert, modal, inline, and toast-style content. If `outputs.message` is present and no explicit template is returned, the SDK uses the message renderer automatically. Message delivery policies share the same post-decision checks as experiments, including consent, device targeting, and browser-side display frequency.
 
+Message experiments can return inline variant content without creating a separate message record for every variant. The SDK treats `message_content`, `message_id`, and `message_variant` as a message render target even when `outputs.template` is a concrete message template such as `banner`, `modal`, or `card`:
+
+```json
+{
+  "decision_key": "homepage_message_test",
+  "result": "eligible",
+  "outputs": {
+    "message_id": "homepage_banner",
+    "message_variant": "value_framing",
+    "template": "banner",
+    "message_content": {
+      "template_type": "banner",
+      "title": "A tailored offer is ready",
+      "body": "Available for a limited time based on your current profile.",
+      "ctas": [{ "label": "View my offer", "url": "/offers", "style": "primary", "tracking_name": "message_click" }]
+    }
+  },
+  "experiment": {
+    "variant_key": "value_framing"
+  }
+}
+```
+
+Exposure, click, and conversion feedback uses the experiment `variant_key` when present and also includes `message_variant` in the event/context payload so message-content experiments can be analyzed from both experiment and message views.
+
 ## Triggers
 
 Placements evaluate on page load by default. Use trigger attributes for delayed or manual activation:

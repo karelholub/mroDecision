@@ -228,7 +228,7 @@ Goal: bring in-app messages to the same product level as advanced experiments wi
 - Add SDK render/event support for message-specific display policies and future dismiss/view events.
 - Add message analytics, conflict detection, message experiments, preview links, and campaign readiness.
 
-Status: started. Message editor now captures structured delivery policy in `metadata.delivery`, preview health checks delivery risks, and message decisions return normalized delivery hints while server-side availability enforces cooldown and max-impression suppression.
+Status: started. Message editor now captures structured delivery policy in `metadata.delivery`, preview health checks delivery risks, and message decisions return normalized delivery hints while server-side availability enforces cooldown and max-impression suppression. Message experiment creation, message-to-experiment analytics, and SDK rendering for `message_content` variants are implemented; SDK feedback now keeps experiment `variant_key` plus message-level `message_variant` context for exposure/click/conversion analysis.
 
 Deferred or not adopted:
 
