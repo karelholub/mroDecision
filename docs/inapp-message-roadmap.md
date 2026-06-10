@@ -51,6 +51,8 @@ Status: started. Message editor now captures display mode, cooldown TTL, max imp
 - Report CTR, conversion rate, lift, significance, winner recommendation, and winner rollout.
 - Support short-lived preview links for each message variant.
 
+Status: started. Message editor now suggests fixed-split experiment variants from the current content, renders variant previews, exposes variant output JSON snippets, and can apply a selected variant back to Content JSON for draft iteration.
+
 ### 7. Analytics
 
 - Add message performance panels for eligibility, rendered impressions, views, clicks, dismissals, conversions, CTR, conversion rate, suppression, caps, and recent eligible profiles.

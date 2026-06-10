@@ -56,6 +56,7 @@ const messageTokenSuggestions = document.querySelector("#message-token-suggestio
 const messageTokenSample = document.querySelector("#message-token-sample");
 const messageRenderTokens = document.querySelector("#message-render-tokens");
 const messageAudienceComparison = document.querySelector("#message-audience-comparison");
+const messageExperimentIdeas = document.querySelector("#message-experiment-ideas");
 const lookupInspectorSummary = document.querySelector("#lookup-inspector-summary");
 const lookupHelpTable = document.querySelector("#lookup-help-table");
 const lookupHelpKey = document.querySelector("#lookup-help-key");
@@ -565,6 +566,7 @@ document.querySelector("#message-image-dropzone")?.addEventListener("drop", hand
 messageRenderTokens?.addEventListener("change", renderMessagePreview);
 messageTokenSample?.addEventListener("input", renderMessagePreview);
 messageTokenSuggestions?.addEventListener("click", handleMessageTokenClick);
+messageExperimentIdeas?.addEventListener("click", handleMessageExperimentIdeaClick);
 document.querySelectorAll("[data-message-preview-device]").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll("[data-message-preview-device]").forEach((item) => item.classList.remove("active"));
@@ -7465,6 +7467,7 @@ function renderMessagePreview() {
     imageUrl
   }, health);
   renderMessageAudienceComparison({ templateType, placement, surface, raw });
+  renderMessageExperimentIdeas({ templateType, placement, surface, raw, ctas });
   renderMessageRuleLinks();
   renderMessageAssetList();
 }
@@ -7503,6 +7506,142 @@ function renderMessageAudienceComparison({ templateType, placement, surface, raw
       ${samples.map((sample) => messageAudienceCard({ sample, templateType, placement, surface, raw })).join("")}
     </div>
   `;
+}
+
+function renderMessageExperimentIdeas({ templateType, placement, surface, raw, ctas }) {
+  if (!messageExperimentIdeas) return;
+  const baseContent = parseJsonSafe(document.querySelector("#message-content").value || "{}");
+  const variants = messageExperimentVariants({ templateType, placement, surface, raw, ctas, baseContent });
+  messageExperimentIdeas.innerHTML = `
+    <div class="message-experiment-head">
+      <div>
+        <strong>Experiment ideas</strong>
+        <span>Variant-ready content snippets for A/B tests or holdout rules.</span>
+      </div>
+      <mark>Fixed split ready</mark>
+    </div>
+    <div class="message-experiment-grid">
+      ${variants.map((variant, index) => messageExperimentIdeaCard(variant, index)).join("")}
+    </div>
+  `;
+}
+
+function messageExperimentVariants({ templateType, placement, raw, ctas, baseContent }) {
+  const title = raw.title || document.querySelector("#message-name")?.value.trim() || baseContent.title || "Message";
+  const body = raw.body || baseContent.body || "A personalized message is ready.";
+  const primaryCta = ctas?.[0] || { label: baseContent.cta_label || "Learn more", url: baseContent.cta_url || "#", style: "primary" };
+  const existingItems = Array.isArray(baseContent.items) ? baseContent.items : Array.isArray(baseContent.products) ? baseContent.products : Array.isArray(baseContent.recommendations) ? baseContent.recommendations : [];
+  return [
+    {
+      key: "control",
+      weight: 50,
+      label: "Control",
+      hypothesis: "Keep the current message as the baseline for lift comparison.",
+      content: {
+        ...baseContent,
+        template_type: templateType,
+        placement,
+        title,
+        body,
+        ctas: ctas?.length ? ctas : [primaryCta]
+      }
+    },
+    {
+      key: "value_framing",
+      weight: 25,
+      label: "Value framing",
+      hypothesis: "Lead with a sharper benefit and direct CTA to improve click-through.",
+      content: {
+        ...baseContent,
+        template_type: templateType,
+        placement,
+        title: title.includes("{{") ? title : `${title}: tailored for you`,
+        body: body.length > 20 ? `${body} Available for a limited time based on your current profile.` : "A relevant offer is available based on your recent activity.",
+        ctas: [{ ...primaryCta, label: primaryCta.label && primaryCta.label !== "Learn more" ? primaryCta.label : "View my offer" }]
+      }
+    },
+    {
+      key: ["carousel", "recommendation"].includes(templateType) ? "ranked_items" : "concise_layout",
+      weight: 25,
+      label: ["carousel", "recommendation"].includes(templateType) ? "Ranked items" : "Concise layout",
+      hypothesis: ["carousel", "recommendation"].includes(templateType)
+        ? "Show fewer, clearer recommendations to reduce choice friction."
+        : "Shorter copy with a stronger CTA can perform better on mobile placements.",
+      content: {
+        ...baseContent,
+        template_type: ["banner", "alert", "modal", "inline", "toast"].includes(templateType) ? "card" : templateType,
+        placement,
+        title: title.replace(/\.$/, ""),
+        body: conciseMessageBody(body),
+        items: existingItems.length ? existingItems.slice(0, 3) : baseContent.items,
+        ctas: [{ ...primaryCta, label: "Continue" }]
+      }
+    }
+  ];
+}
+
+function conciseMessageBody(body) {
+  const value = String(body || "").trim();
+  if (!value) return "Personalized for your current journey.";
+  if (value.length <= 110) return value;
+  return `${value.slice(0, 106).trim()}...`;
+}
+
+function messageExperimentIdeaCard(variant, index) {
+  const outputPayload = {
+    variant: variant.key,
+    message_content: variant.content
+  };
+  return `
+    <section class="message-experiment-card">
+      <div class="message-experiment-card-head">
+        <div>
+          <strong>${escapeHtml(variant.label)}</strong>
+          <span>${escapeHtml(`${variant.key} · ${variant.weight}%`)}</span>
+        </div>
+        <button type="button" data-message-variant-apply="${index}">Apply</button>
+      </div>
+      <p>${escapeHtml(variant.hypothesis)}</p>
+      <div class="message-experiment-preview message-preview-card compact" data-template="${escapeHtml(messageTemplateType(variant.content.template_type))}" data-has-cta="${normalizeMessageCtas(variant.content).length ? "true" : "false"}">
+        ${messagePreviewCardInnerHtml({
+          templateType: variant.content.template_type,
+          placement: variant.content.placement,
+          surface: document.querySelector("#message-surface")?.value.trim() || "",
+          title: variant.content.title,
+          body: variant.content.body,
+          footer: variant.content.footer || "",
+          imageUrl: variant.content.image_url || "",
+          ctas: normalizeMessageCtas(variant.content),
+          content: variant.content
+        })}
+      </div>
+      <details>
+        <summary>Variant output JSON</summary>
+        <pre>${escapeHtml(JSON.stringify(outputPayload, null, 2))}</pre>
+      </details>
+    </section>
+  `;
+}
+
+function handleMessageExperimentIdeaClick(event) {
+  const button = event.target.closest("[data-message-variant-apply]");
+  if (!button) return;
+  const raw = messagePreviewRawContent();
+  const templateType = messageTemplateType(document.querySelector("#message-template-type").value);
+  const ctas = normalizeMessageCtas(parseJsonSafe(document.querySelector("#message-content").value || "{}"));
+  const variants = messageExperimentVariants({
+    templateType,
+    placement: document.querySelector("#message-placement").value.trim(),
+    surface: document.querySelector("#message-surface").value.trim(),
+    raw,
+    ctas,
+    baseContent: parseJsonSafe(document.querySelector("#message-content").value || "{}")
+  });
+  const variant = variants[Number(button.dataset.messageVariantApply || 0)];
+  if (!variant) return;
+  document.querySelector("#message-content").value = JSON.stringify(variant.content, null, 2);
+  syncMessagePreviewFromJson();
+  messageOutput.textContent = `Applied ${variant.label} variant to Content JSON. Save the message or copy the variant output into an experiment branch.`;
 }
 
 function messageAudienceCard({ sample, templateType, placement, surface, raw }) {
