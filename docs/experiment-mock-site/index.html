@@ -3,38 +3,51 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DEE Website Integration Lab</title>
+    <title>Meiro Engage DEE Experiment Mock</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body>
-    <header class="site-shell">
+  <body class="engage-page">
+    <header class="site-shell engage-nav">
       <div class="brand">
-        <span class="brand-mark">D</span>
+        <span class="brand-mark">M</span>
         <div>
-          <strong>DEE Website Lab</strong>
-          <span>SDK, decisions, experiments, messages, and feedback events</span>
+          <strong>Meiro Engage</strong>
+          <span>Activation, journeys, channels, and DEE experiments</span>
         </div>
       </div>
       <nav aria-label="Demo sections">
-        <a href="#shopping">Shopping</a>
-        <a href="#account">Account</a>
-        <a href="#diagnostics">Diagnostics</a>
+        <a href="#capabilities">Capabilities</a>
+        <a href="#channels">Channels</a>
+        <a href="#journey-ai">Journey AI</a>
+        <a href="#diagnostics">DEE SDK</a>
       </nav>
     </header>
 
     <main>
-      <section class="lab-hero">
+      <section class="lab-hero engage-hero">
         <div>
-          <span class="eyebrow">Integration-ready mock site</span>
-          <h1>Test how DEE personalizes a real website journey.</h1>
+          <span class="eyebrow">Customer engagement platform</span>
+          <h1>Activate governed customer context across every channel.</h1>
           <p>
-            This page loads the reusable DEE Web SDK, evaluates multiple placements, renders returned content,
-            and sends exposure, impression, and conversion feedback with idempotency-safe payloads.
+            This mock page recreates the Meiro Engage product story with paraphrased content and live DEE SDK
+            placements for hero copy, feature flags, DOM edits, message rendering, recommendations, and feedback events.
           </p>
+          <div class="hero-actions">
+            <a href="#diagnostics" class="primary">Run DEE experiments</a>
+            <a href="#capabilities">Explore capabilities</a>
+          </div>
+          <div class="engage-hero-visual" aria-label="Journey orchestration visual">
+            <div class="journey-node start">Profile</div>
+            <div class="journey-node branch">Segment</div>
+            <div class="journey-node email">Email</div>
+            <div class="journey-node push">Push</div>
+            <div class="journey-node ai">AI agent</div>
+          </div>
         </div>
+
         <aside class="connection-card">
           <div class="card-head">
-            <h2>Runtime setup</h2>
+            <h2>DEE runtime setup</h2>
             <span id="connection-state">Not initialized</span>
           </div>
           <form id="runtime-form">
@@ -48,28 +61,28 @@
             </label>
             <div class="form-grid">
               <label>
-                Website config key
+                Page configuration key
                 <input id="config-decision-key" value="website_configuration" autocomplete="off" />
               </label>
               <label>
-                DOM modification key
+                DOM experiment key
                 <input id="dom-decision-key" value="homepage_dom_experiment" autocomplete="off" />
               </label>
             </div>
             <div class="form-grid">
               <label>
                 Hero experiment key
-                <input id="hero-decision-key" value="smoke_experiment" autocomplete="off" />
+                <input id="hero-decision-key" value="demo_cta_friction_experiment_high" autocomplete="off" />
               </label>
               <label>
-                Offer decision key
+                Recommendation key
                 <input id="offer-decision-key" value="next_best_offer" autocomplete="off" />
               </label>
             </div>
             <div class="form-grid">
               <label>
                 Message decision key
-                <input id="message-decision-key" value="inapp_homepage_message" autocomplete="off" />
+                <input id="message-decision-key" value="webinar_message" autocomplete="off" />
               </label>
             </div>
             <div class="form-grid">
@@ -104,10 +117,10 @@
                   <option value="__holdout">Force holdout</option>
                   <option value="control">Force control</option>
                   <option value="treatment">Force treatment</option>
-                  <option value="visual_editor_treatment">Force visual_editor_treatment</option>
-                  <option value="merchandising_variant">Force merchandising_variant</option>
-                  <option value="destination_focus">Force destination_focus</option>
-                  <option value="green_offer">Force green_offer</option>
+                  <option value="visual_editor_treatment">Force visual editor treatment</option>
+                  <option value="merchandising_variant">Force merchandising variant</option>
+                  <option value="destination_focus">Force destination focus</option>
+                  <option value="green_offer">Force green offer</option>
                 </select>
               </label>
             </div>
@@ -123,11 +136,11 @@
             </div>
             <label class="check-row">
               <input id="send-local-payload" type="checkbox" checked />
-              Include local attributes in evaluation requests
+              Include local profile attributes in SDK requests
             </label>
             <label class="check-row">
               <input id="auto-exposure" type="checkbox" checked />
-              SDK sends experiment exposure after render
+              Send exposure after a variant renders
             </label>
             <div class="button-row">
               <button class="primary" type="submit">Apply and evaluate all</button>
@@ -137,7 +150,7 @@
         </aside>
       </section>
 
-      <section class="kpi-strip" aria-label="Integration coverage">
+      <section class="kpi-strip engage-proof" aria-label="Engage proof points">
         <article>
           <span>SDK placements</span>
           <strong id="metric-placements">0</strong>
@@ -158,7 +171,7 @@
 
       <section
         id="website-configuration"
-        class="commerce-stage configuration-stage"
+        class="commerce-stage configuration-stage engage-config"
         data-dee-placement="website_configuration"
         data-dee-surface="homepage_configuration"
         data-dee-decision-key="website_configuration"
@@ -168,86 +181,131 @@
       >
         <div class="stage-head">
           <div>
-            <span class="eyebrow">Website configuration experiment</span>
-            <h2>One DEE decision controls five page features</h2>
+            <span class="eyebrow">Feature flag experiment</span>
+            <h2>One DEE decision changes the Engage page composition</h2>
           </div>
           <button data-evaluate-placement="#website-configuration" type="button">Refresh configuration</button>
         </div>
         <div class="configuration-summary">
           <span class="variant-badge" id="configuration-variant">Static fallback</span>
-          <p id="configuration-rationale">The page starts with a safe default configuration, then DEE can switch feature visibility and eligibility by assigned variant.</p>
+          <p id="configuration-rationale">
+            The page starts with a conservative layout, then DEE can reveal the proof, templates, channel hints,
+            and recommendation blocks that match this visitor profile.
+          </p>
         </div>
         <div class="feature-toggle-grid" aria-label="Feature states from DEE">
           <article data-feature-card="discounted_prices_visible">
-            <span>Discounted prices</span>
+            <span>Email builder</span>
             <strong data-feature-state="discounted_prices_visible">Fallback</strong>
           </article>
           <article data-feature-card="testimonials_visible">
-            <span>Testimonials</span>
+            <span>Customer proof</span>
             <strong data-feature-state="testimonials_visible">Fallback</strong>
           </article>
           <article data-feature-card="free_shipping_eligible">
-            <span>Free shipping</span>
+            <span>Push prompt</span>
             <strong data-feature-state="free_shipping_eligible">Fallback</strong>
           </article>
           <article data-feature-card="outlet_collection_visible">
-            <span>Outlet collection</span>
+            <span>Template library</span>
             <strong data-feature-state="outlet_collection_visible">Fallback</strong>
           </article>
           <article data-feature-card="recommended_products_visible">
-            <span>Recommended products</span>
+            <span>AI recommendations</span>
             <strong data-feature-state="recommended_products_visible">Fallback</strong>
           </article>
         </div>
-        <div class="merchandising-demo">
+        <div class="merchandising-demo engage-toggle-demo">
           <article class="price-card" data-config-feature="discounted_prices_visible">
-            <span>Summer city break</span>
+            <span>Email campaign</span>
             <strong>
-              <span data-regular-price>€849</span>
-              <span data-discount-price>€699</span>
+              <span data-regular-price>Batch send</span>
+              <span data-discount-price>Profile-aware flow</span>
             </strong>
-            <small data-config-note>Discount badge is controlled by DEE.</small>
+            <small data-config-note>DEE can test whether visitors respond better to native email or journey framing.</small>
           </article>
           <article class="shipping-card" data-config-feature="free_shipping_eligible">
-            <span>Delivery promise</span>
-            <strong>Free shipping unlocked</strong>
-            <small>Visible when the variant makes the visitor eligible.</small>
+            <span>Mobile push</span>
+            <strong>Trigger at the moment of intent</strong>
+            <small>Use profile and page context to decide whether mobile push deserves first-page emphasis.</small>
           </article>
           <article class="testimonial-card" data-config-feature="testimonials_visible">
             <span>Customer proof</span>
-            <strong>“Booking was fast, clear, and the offer matched my plans.”</strong>
-            <small>Testimonials can be toggled for trust-building tests.</small>
+            <strong>Governed activation works without another data copy.</strong>
+            <small>Proof modules can be shown to regulated-industry visitors.</small>
           </article>
           <article class="outlet-card" data-config-feature="outlet_collection_visible">
-            <span>Outlet collection</span>
-            <strong>Last-minute outlet deals</strong>
-            <small>Useful for margin or inventory experiments.</small>
+            <span>Templates</span>
+            <strong>Launch onboarding, winback, and promotional journeys faster</strong>
+            <small>Template blocks are useful for lower-intent visitors who need concrete examples.</small>
           </article>
           <article class="recommendation-card" data-config-feature="recommended_products_visible">
-            <span>Recommended products</span>
-            <strong>Suggested add-ons: airport transfer, lounge, flexible ticket</strong>
-            <small>Recommendations can be shown or hidden as one config flag.</small>
+            <span>AI personalisation</span>
+            <strong>Use live profile signals for channel, content, and timing decisions</strong>
+            <small>Recommendation emphasis is useful for high lead-score visitors.</small>
           </article>
         </div>
       </section>
 
-      <section class="journey-grid" id="shopping">
-        <article class="commerce-stage hero-stage">
+      <section class="engage-section" id="capabilities">
+        <div class="section-copy">
+          <span class="eyebrow">Feature overview</span>
+          <h2>One platform for activation work that usually lives in separate tools.</h2>
+          <p>
+            Engage brings email, journey orchestration, AI personalisation, push, and reusable campaign templates
+            onto the same governed profile layer. The cards below are static page content; the panels that follow
+            are live DEE SDK placements.
+          </p>
+        </div>
+        <div class="capability-grid">
+          <article>
+            <span>Email</span>
+            <h3>Campaigns that read the profile</h3>
+            <p>Lifecycle and triggered email can use the same profile, consent, and segments as every other channel.</p>
+          </article>
+          <article>
+            <span>Journey</span>
+            <h3>Visual orchestration</h3>
+            <p>Branch by behaviour, predictive scores, segment membership, or campaign goals without waiting for sync jobs.</p>
+          </article>
+          <article>
+            <span>AI</span>
+            <h3>Personalisation in your stack</h3>
+            <p>Models and agents can work against controlled profile context instead of exported customer copies.</p>
+          </article>
+          <article>
+            <span>Push</span>
+            <h3>Mobile timing tests</h3>
+            <p>Push and web notifications can be triggered by live intent, frequency caps, and consent-aware routing.</p>
+          </article>
+          <article>
+            <span>Templates</span>
+            <h3>Launchable patterns</h3>
+            <p>Reusable blocks help teams ship onboarding, winback, replenishment, and promotional journeys quickly.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="journey-grid" id="journey-ai">
+        <article class="commerce-stage hero-stage engage-decision-stage">
           <div class="stage-copy">
-            <span class="eyebrow">Homepage hero experiment</span>
+            <span class="eyebrow">Hero copy experiment</span>
             <div
               id="hero-placement"
               data-dee-placement="homepage_hero"
               data-dee-surface="homepage_hero"
-              data-dee-decision-key="homepage_hero_experiment"
+              data-dee-decision-key="demo_cta_friction_experiment_high"
               data-dee-template="hero"
               data-dee-object-type="experiment"
               data-dee-object-id="homepage_hero"
             >
               <span class="variant-badge">Static fallback</span>
-              <h2>Make every trip feel easier from the first click.</h2>
-              <p>Fallback content stays visible if DEE is unreachable or returns no renderable content.</p>
-              <a href="#checkout" data-track-conversion="hero_cta">Find a deal</a>
+              <h2>Smarter journeys. Real-time decisions.</h2>
+              <p>
+                DEE can evaluate whether this visitor should see a journey orchestration promise, a personalisation
+                promise, or an AI-agent promise based on live profile attributes.
+              </p>
+              <a href="#checkout" data-dee-conversion="hero_cta">Talk to an expert</a>
             </div>
           </div>
         </article>
@@ -265,58 +323,66 @@
           <div class="stage-head">
             <div>
               <span class="eyebrow">Visual editor runtime</span>
-              <h2 data-demo-selector="headline">Structured DOM modifications</h2>
+              <h2 data-demo-selector="headline">Edit product-page modules without a release</h2>
             </div>
             <button data-evaluate-placement="#dom-modification-placement" type="button">Apply modifications</button>
           </div>
           <p data-demo-selector="body">
-            This placement demonstrates the future visual editor output: selectors, modification types, and guarded HTML.
+            This placement demonstrates how a visual-editor experiment could alter page text, links, styling, or inserted HTML while the SDK records the assigned variant.
           </p>
           <div class="visual-edit-demo-grid">
             <article data-demo-selector="trust">
-              <span>Trust panel</span>
-              <strong>Fallback copy</strong>
+              <span>Trust module</span>
+              <strong>Self-hosted, managed, or on-prem activation</strong>
             </article>
             <article data-demo-selector="cta">
-              <span>CTA panel</span>
-              <a href="#checkout" data-dee-conversion="visual_editor_cta">Fallback CTA</a>
+              <span>CTA module</span>
+              <a href="#checkout" data-dee-conversion="visual_editor_cta">Explore deployment options</a>
             </article>
           </div>
           <div data-demo-selector="insert-target" class="insert-target">
-            <span>Inserted content appears here.</span>
+            <span>Inserted experiment content appears here.</span>
           </div>
         </article>
 
-        <article class="commerce-stage">
+        <article class="commerce-stage engage-recommendations" id="channels">
           <div class="stage-head">
             <div>
-              <span class="eyebrow">Next best offer carousel</span>
-              <h2>Recommended offers</h2>
+              <span class="eyebrow">Channel recommendation experiment</span>
+              <h2>Reach customers wherever they are</h2>
             </div>
-            <button data-evaluate-placement="#offer-carousel" type="button">Refresh offers</button>
+            <button data-evaluate-placement="#offer-carousel" type="button">Refresh recommendations</button>
           </div>
+          <p>
+            The fallback cards show meaningful Engage channel examples. A DEE response can replace them with returned
+            cards or offers for the current visitor profile.
+          </p>
           <div
             id="offer-carousel"
-            class="meiro-banner"
-            data-dee-placement="offer_carousel"
-            data-dee-surface="homepage_offers"
+            class="meiro-banner engage-channel-carousel"
+            data-dee-placement="homepage_offer_carousel"
+            data-dee-surface="homepage_offer_carousel"
             data-dee-decision-key="next_best_offer"
             data-dee-template="cards"
-            data-dee-object-type="offer_carousel"
-            data-dee-object-id="homepage_offers"
+            data-dee-object-type="decision"
+            data-dee-object-id="homepage_offer_carousel"
           >
             <div class="meiro-banner-track" data-dee-track>
-              <a class="meiro-banner-item" href="https://www.flyin.com/en/offers/exclusive-discounts-to-abu-dhabi" target="_blank" rel="noopener noreferrer">
-                <img src="https://ui.cltp.co/offers-ui/OfferPages/offers/cms/abu-dhabi.png" alt="Exclusive Discounts to Abu Dhabi" />
-                <p>Save up to 15% on your trip!</p>
+              <a class="meiro-banner-item engage-channel-card" href="#checkout">
+                <span>Email</span>
+                <p>Lifecycle campaigns powered by live profile and consent data.</p>
               </a>
-              <a class="meiro-banner-item" href="https://www.flyin.com/en/offers/exclusive-discounts-to-morocco" target="_blank" rel="noopener noreferrer">
-                <img src="https://ui.cltp.co/offers-ui/OfferPages/offers/cms/morocco.png" alt="Exclusive Discounts to Morocco" />
-                <p>Exclusive Discounts to Morocco</p>
+              <a class="meiro-banner-item engage-channel-card" href="#checkout">
+                <span>Mobile push</span>
+                <p>Moment-based push with frequency capping and deep-link actions.</p>
               </a>
-              <a class="meiro-banner-item" href="https://www.flyin.com/en/offers/special-discounts-on-trips-to-dubai" target="_blank" rel="noopener noreferrer">
-                <img src="https://ui.cltp.co/flyin/prod/merchandising/upload_5a8985aedd1a62dcd0497b1416ec5188.jpg" alt="Special Discounts on Trips to Dubai" />
-                <p>Enjoy deals on flights, hotels and packages.</p>
+              <a class="meiro-banner-item engage-channel-card" href="#checkout">
+                <span>WhatsApp</span>
+                <p>Conversational flows for reminders, loyalty milestones, and recovery moments.</p>
+              </a>
+              <a class="meiro-banner-item engage-channel-card" href="#checkout">
+                <span>AI personalisation</span>
+                <p>Profile-aware content decisions made inside your infrastructure boundary.</p>
               </a>
             </div>
           </div>
@@ -325,37 +391,112 @@
         <article class="commerce-stage" id="account">
           <div class="stage-head">
             <div>
-              <span class="eyebrow">In-app message</span>
-              <h2>Account notification</h2>
+              <span class="eyebrow">In-app message experiment</span>
+              <h2>Contextual Engage prompt</h2>
             </div>
             <button data-evaluate-placement="#message-placement" type="button">Evaluate message</button>
           </div>
           <div
             id="message-placement"
             class="message-slot"
-            data-dee-placement="account_alert"
+            data-dee-placement="homepage_message"
             data-dee-surface="homepage"
-            data-dee-decision-key="inapp_homepage_message"
+            data-dee-decision-key="webinar_message"
             data-dee-template="message"
             data-dee-object-type="inapp_message"
-            data-dee-object-id="account_alert"
+            data-dee-object-id="homepage_message"
           >
-            <span>Static alert</span>
-            <strong>Your travel preferences are ready to personalize.</strong>
-            <p>DEE can replace this with a reusable message template and decision-specific content overrides.</p>
+            <span>Static prompt</span>
+            <strong>Book a walkthrough of governed customer activation.</strong>
+            <p>DEE can replace this block with a reusable message and decision-specific content.</p>
           </div>
         </article>
 
         <article class="commerce-stage checkout-card" id="checkout">
           <span class="eyebrow">Conversion goal</span>
-          <h2>Complete demo conversion</h2>
-          <p>Use these actions after rendering decisions to validate conversion tracking and experiment operations rollups.</p>
+          <h2>Measure the product-page experiment loop</h2>
+          <p>
+            After the SDK renders variants, send exposure, impression, and conversion events to validate experiment
+            rollups, idempotency, and downstream operations.
+          </p>
           <div class="button-row">
             <button id="send-exposure" type="button">Send exposure</button>
             <button id="send-impression" type="button">Send impression</button>
             <button id="send-conversion" class="primary" type="button">Send conversion</button>
           </div>
         </article>
+      </section>
+
+      <section class="engage-section engage-compare">
+        <div class="section-copy">
+          <span class="eyebrow">Why Engage</span>
+          <h2>Stop stitching activation tools together.</h2>
+          <p>
+            The original page contrasts disconnected channel stacks with a single governed activation layer. This mock
+            keeps that comparison and makes it testable through DEE-controlled modules above.
+          </p>
+        </div>
+        <div class="compare-grid">
+          <article>
+            <h3>The stitched stack</h3>
+            <ul>
+              <li>Separate email, push, WhatsApp, and paid-media lists.</li>
+              <li>Nightly exports make customer intent stale by the time messages send.</li>
+              <li>Consent and suppression logic must be recreated in every tool.</li>
+              <li>AI workflows operate on copied context instead of governed profiles.</li>
+            </ul>
+          </article>
+          <article>
+            <h3>With Engage</h3>
+            <ul>
+              <li>One activation layer reads the same customer profile across channels.</li>
+              <li>Journeys can react to live context and conversion events.</li>
+              <li>Consent follows the profile into every send decision.</li>
+              <li>AI agents use controlled profile access through the same governed foundation.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="engage-section platform-band">
+        <div>
+          <span class="eyebrow">The Meiro platform</span>
+          <h2>Capture, profile, and activate without syncing.</h2>
+        </div>
+        <div class="platform-grid">
+          <article>
+            <span>CDI</span>
+            <h3>Meiro Pipes</h3>
+            <p>Collects events, resolves identity, and feeds clean signals into the platform.</p>
+          </article>
+          <article>
+            <span>CDP</span>
+            <h3>Meiro Audiences</h3>
+            <p>Maintains the governed profile, segment, score, and consent layer used by activation.</p>
+          </article>
+          <article class="active">
+            <span>CEP</span>
+            <h3>Meiro Engage</h3>
+            <p>Activates audiences across email, push, SMS, WhatsApp, paid media, web, and agents.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="engage-section deployment-band">
+        <div class="section-copy">
+          <span class="eyebrow">Deployment and data sovereignty</span>
+          <h2>Run the engagement layer where the customer data already lives.</h2>
+          <p>
+            The demo page reflects the deployment story from the product page: self-hosted, managed, cloud, or on-prem,
+            with activation decisions and personalisation calls kept inside the chosen infrastructure boundary.
+          </p>
+        </div>
+        <div class="deployment-grid">
+          <article><strong>AWS</strong><span>Private cloud</span></article>
+          <article><strong>Azure</strong><span>Regional hosting</span></article>
+          <article><strong>Google Cloud</strong><span>Managed or owned</span></article>
+          <article><strong>On-prem</strong><span>Regulated environments</span></article>
+        </div>
       </section>
 
       <section class="diagnostics" id="diagnostics">

@@ -677,19 +677,78 @@ async function renderMessage(element, decision) {
   const outputs = decision.outputs || {};
   const message = outputs.message || {};
   const content = outputs.message_content || message.content || outputs;
+  const template = messageTemplateType(content.template_type || message.template_type || outputs.template || "message");
   const imageUrl = messageImageUrl(content);
   element.classList.add("message-slot-live");
   element.innerHTML = `
-    <span>${escapeHtml(message.template_type || outputs.template || "DEE message")}</span>
+    <span>${escapeHtml(template)}</span>
     ${imageUrl ? `<img class="message-slot-image" src="${escapeAttribute(imageUrl)}" alt="${escapeAttribute(content.image_alt || content.alt || content.title || message.name || "Message image")}" referrerpolicy="no-referrer" />` : ""}
-    <strong>${escapeHtml(content.title || content.headline || message.name || "Personalized message")}</strong>
-    <p>${escapeHtml(content.body || content.text || "DEE returned an eligible in-app message.")}</p>
+    ${content.title || content.headline || message.name ? `<strong>${escapeHtml(content.title || content.headline || message.name)}</strong>` : ""}
+    ${content.body || content.text ? `<p>${escapeHtml(content.body || content.text)}</p>` : ""}
+    ${renderMessageExtras(content, template)}
     ${content.footer ? `<small>${escapeHtml(content.footer)}</small>` : ""}
-    <div class="message-actions">
+    ${hasCtas(content) ? `<div class="message-actions">
       ${renderCtas(content)}
-    </div>
+    </div>` : ""}
   `;
   return true;
+}
+
+function renderMessageExtras(content = {}, template = "message") {
+  if (template === "survey") return renderSurveyContent(content);
+  if (template === "carousel" || template === "recommendation") return renderMessageItems(content);
+  return "";
+}
+
+function renderSurveyContent(content = {}) {
+  const survey = content.survey && typeof content.survey === "object" ? content.survey : {};
+  const questions = Array.isArray(content.questions) && content.questions.length
+    ? content.questions
+    : Array.isArray(survey.questions) && survey.questions.length
+      ? survey.questions
+      : [{ label: content.question || survey.question || "How relevant is this message?", options: content.options || survey.options || ["Low", "Medium", "High"] }];
+  return `
+    <div class="message-survey">
+      ${questions.slice(0, 6).map((question, index) => `
+        <fieldset>
+          <legend>${escapeHtml(question.label || question.title || `Question ${index + 1}`)}</legend>
+          <div>
+            ${surveyOptions(question).length
+              ? surveyOptions(question).map((option) => `<button type="button" data-dee-conversion="${escapeAttribute(option.tracking)}" data-dee-survey-value="${escapeAttribute(option.value)}">${escapeHtml(option.label)}</button>`).join("")
+              : `<textarea aria-label="${escapeAttribute(question.label || "Survey response")}"></textarea>`}
+          </div>
+        </fieldset>
+      `).join("")}
+    </div>
+  `;
+}
+
+function surveyOptions(question = {}) {
+  return (Array.isArray(question.options) ? question.options : []).slice(0, 8).map((option) => {
+    const optionObject = option && typeof option === "object" ? option : {};
+    const label = optionObject.label || optionObject.title || optionObject.value || option;
+    const value = optionObject.value || optionObject.id || label;
+    return {
+      label,
+      value,
+      tracking: optionObject.tracking_name || question.tracking_name || question.id || "survey_response"
+    };
+  });
+}
+
+function renderMessageItems(content = {}) {
+  const items = Array.isArray(content.items) ? content.items : Array.isArray(content.products) ? content.products : Array.isArray(content.recommendations) ? content.recommendations : [];
+  if (!items.length) return "";
+  return `
+    <div class="message-items">
+      ${items.slice(0, 6).map((item) => `
+        <a href="${escapeAttribute(safeUrl(item.url || item.href || "#"))}" data-dee-conversion="${escapeAttribute(item.tracking_name || item.id || item.title || "message_item")}">
+          ${item.image_url || item.image ? `<img src="${escapeAttribute(assetUrl(item.image_url || item.image))}" alt="${escapeAttribute(item.title || item.name || "Item")}" referrerpolicy="no-referrer" />` : ""}
+          <span><b>${escapeHtml(item.title || item.name || item.id || "Item")}</b>${item.body || item.description || item.price ? `<em>${escapeHtml(item.body || item.description || item.price)}</em>` : ""}</span>
+        </a>
+      `).join("")}
+    </div>
+  `;
 }
 
 async function renderCards(element, decision, config) {
@@ -777,6 +836,19 @@ function renderCtas(content) {
     content.cta_label ? { label: content.cta_label, url: content.cta_url || "#" } : null
   ].filter(Boolean);
   return ctas.slice(0, 3).map((cta) => `<a href="${escapeAttribute(safeUrl(cta.url || "#"))}">${escapeHtml(cta.label || "Open")}</a>`).join("");
+}
+
+function hasCtas(content = {}) {
+  return Array.isArray(content.ctas)
+    ? content.ctas.some((cta) => cta?.label || cta?.url)
+    : Boolean(content.cta_label || content.cta_url);
+}
+
+function messageTemplateType(value) {
+  const normalized = String(value || "").trim();
+  return ["banner", "alert", "modal", "inline", "toast", "card", "carousel", "survey", "recommendation", "html_fragment", "message", "inapp_message"].includes(normalized)
+    ? normalized
+    : "message";
 }
 
 function messageImageUrl(content = {}) {
@@ -964,7 +1036,7 @@ function applyPlacementSettings() {
     if (config) config.dataset.deeSurface = `${surface}_configuration`;
     if (dom) dom.dataset.deeSurface = `${surface}_visual_editor`;
     if (hero) hero.dataset.deeSurface = `${surface}_hero`;
-    if (offers) offers.dataset.deeSurface = `${surface}_offers`;
+    if (offers) offers.dataset.deeSurface = `${surface}_offer_carousel`;
     if (message) message.dataset.deeSurface = surface;
   }
 }

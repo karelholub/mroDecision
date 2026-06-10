@@ -438,7 +438,12 @@
       `).join("")}</div>`;
     }
     if (template === "survey") {
-      const questions = Array.isArray(content.questions) ? content.questions : [{ label: content.question || "", options: content.options || [] }].filter((question) => question.label);
+      const survey = content.survey && typeof content.survey === "object" ? content.survey : {};
+      const questions = Array.isArray(content.questions) && content.questions.length
+        ? content.questions
+        : Array.isArray(survey.questions) && survey.questions.length
+          ? survey.questions
+          : [{ label: content.question || survey.question || "", options: content.options || survey.options || [] }].filter((question) => question.label);
       return `<div class="dee-message-survey">${questions.slice(0, 6).map((question, index) => `
         <fieldset>
           <legend>${escapeHtml(question.label || question.title || `Question ${index + 1}`)}</legend>
