@@ -24,7 +24,7 @@ Status: started. The message editor and SDK now recognize the full template voca
 - Keep JSON tabs for advanced users, but make business fields the primary editing surface.
 - Add mobile/tablet/desktop previews, personalization token previews, and audience comparison cards.
 
-Status: planned. Survey messages currently render from structured JSON; the next authoring step is a visual builder so marketers can configure questions and options without editing raw JSON.
+Status: started. Survey messages render from structured JSON and now have a visual Survey Builder for question text, type, required flag, tracking name, answer option labels/values, add/remove, and reorder controls. The builder syncs to `questions` and `survey.questions` so SDK and external payloads can use either structure. Next: add richer survey response analytics, branching questions, and reusable survey blocks.
 
 ### 3. Delivery Policy
 

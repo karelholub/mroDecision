@@ -57,6 +57,8 @@ const messageTokenSample = document.querySelector("#message-token-sample");
 const messageRenderTokens = document.querySelector("#message-render-tokens");
 const messageAudienceComparison = document.querySelector("#message-audience-comparison");
 const messageExperimentIdeas = document.querySelector("#message-experiment-ideas");
+const messageSurveyPanel = document.querySelector("#message-survey-panel");
+const messageSurveyBuilder = document.querySelector("#message-survey-builder");
 const lookupInspectorSummary = document.querySelector("#lookup-inspector-summary");
 const lookupHelpTable = document.querySelector("#lookup-help-table");
 const lookupHelpKey = document.querySelector("#lookup-help-key");
@@ -569,6 +571,12 @@ messageTokenSample?.addEventListener("input", renderMessagePreview);
 messageTokenSuggestions?.addEventListener("click", handleMessageTokenClick);
 messageExperimentIdeas?.addEventListener("click", handleMessageExperimentIdeaClick);
 messageOutput?.addEventListener("click", handleMessageOutputActionClick);
+messageSurveyBuilder?.addEventListener("click", handleMessageSurveyBuilderClick);
+messageSurveyBuilder?.addEventListener("input", handleMessageSurveyBuilderInput);
+messageSurveyBuilder?.addEventListener("change", handleMessageSurveyBuilderInput);
+document.querySelector("#message-template-type")?.addEventListener("change", () => {
+  renderMessageSurveyBuilder();
+});
 document.querySelectorAll("[data-message-preview-device]").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll("[data-message-preview-device]").forEach((item) => item.classList.remove("active"));
@@ -7060,7 +7068,8 @@ function messagePreviewPayloadFromMessage(message = {}) {
     body: content.body || "No message body yet.",
     footer: content.footer || "",
     imageUrl: content.image_url || "",
-    ctas
+    ctas,
+    content
   };
 }
 
@@ -7144,6 +7153,7 @@ function syncMessagePreviewFromJson() {
     document.querySelector("#message-primary-cta-url").value = ctas[0]?.url || "";
     document.querySelector("#message-secondary-cta-label").value = ctas[1]?.label || "";
     document.querySelector("#message-secondary-cta-url").value = ctas[1]?.url || "";
+    renderMessageSurveyBuilder(content);
     renderMessagePreview();
     renderMessageRuleLinks();
   } catch (error) {
@@ -7175,11 +7185,236 @@ function syncMessageJsonFromPreview(options = {}) {
     image_url: document.querySelector("#message-preview-image").value.trim(),
     ctas
   };
+  if (content.template_type === "survey") {
+    const questions = collectSurveyQuestionsFromBuilder();
+    if (questions.length) {
+      content.questions = questions;
+      content.survey = {
+        ...(current.survey && typeof current.survey === "object" ? current.survey : {}),
+        questions
+      };
+      delete content.question;
+      delete content.options;
+    }
+  }
   content.cta_label = ctas[0]?.label || "";
   content.cta_url = ctas[0]?.url || "";
   document.querySelector("#message-content").value = JSON.stringify(content, null, 2);
   renderMessagePreview();
   if (!options.quiet) messageOutput.textContent = "Message JSON synced";
+}
+
+function renderMessageSurveyBuilder(content = null) {
+  if (!messageSurveyPanel || !messageSurveyBuilder) return;
+  const templateType = messageTemplateType(document.querySelector("#message-template-type")?.value || "banner");
+  const isSurvey = templateType === "survey";
+  messageSurveyPanel.hidden = !isSurvey;
+  if (!isSurvey) return;
+  const source = content || parseJsonSafe(document.querySelector("#message-content")?.value || "{}") || {};
+  const questions = surveyQuestionsFromContent(source);
+  messageSurveyBuilder.innerHTML = questions.map((question, index) => surveyQuestionEditor(question, index, questions.length)).join("");
+}
+
+function surveyQuestionsFromContent(content = {}) {
+  const survey = content.survey && typeof content.survey === "object" ? content.survey : {};
+  const sourceQuestions = Array.isArray(content.questions) && content.questions.length
+    ? content.questions
+    : Array.isArray(survey.questions) && survey.questions.length
+      ? survey.questions
+      : content.question
+        ? [{ label: content.question, type: content.type || "choice", options: content.options || survey.options || [] }]
+        : [];
+  const questions = sourceQuestions.length ? sourceQuestions : [defaultSurveyQuestion()];
+  return questions.slice(0, 12).map(normalizeSurveyQuestion);
+}
+
+function defaultSurveyQuestion() {
+  return {
+    id: uniqueSurveyId("question"),
+    label: "How relevant is this message?",
+    type: "choice",
+    required: false,
+    tracking_name: "survey_response",
+    options: [
+      { label: "Not relevant", value: "low" },
+      { label: "Somewhat relevant", value: "medium" },
+      { label: "Very relevant", value: "high" }
+    ]
+  };
+}
+
+function normalizeSurveyQuestion(question = {}) {
+  const type = surveyQuestionType(question.type || (Array.isArray(question.options) && question.options.length ? "choice" : "text"));
+  return {
+    id: question.id || uniqueSurveyId("question"),
+    label: question.label || question.title || question.question || "Question",
+    type,
+    required: Boolean(question.required),
+    tracking_name: question.tracking_name || question.trackingName || question.id || "survey_response",
+    options: type === "text" ? [] : surveyOptionsForQuestion(question, type)
+  };
+}
+
+function surveyOptionsForQuestion(question = {}, type = "choice") {
+  const source = Array.isArray(question.options) && question.options.length
+    ? question.options
+    : type === "rating"
+      ? [1, 2, 3, 4, 5]
+      : ["Yes", "No"];
+  return source.slice(0, 12).map((option) => {
+    const optionObject = option && typeof option === "object" ? option : {};
+    const label = optionObject.label || optionObject.title || optionObject.value || String(option);
+    return {
+      id: optionObject.id || uniqueSurveyId("option"),
+      label,
+      value: optionObject.value || optionObject.id || slug(label) || label,
+      tracking_name: optionObject.tracking_name || ""
+    };
+  });
+}
+
+function surveyQuestionType(value) {
+  return ["choice", "rating", "text"].includes(value) ? value : "choice";
+}
+
+function surveyQuestionEditor(question, index, total) {
+  const optionsDisabled = question.type === "text";
+  return `
+    <section class="message-survey-question" data-survey-question-index="${escapeHtml(index)}" data-question-id="${escapeHtml(question.id)}">
+      <div class="message-survey-question-head">
+        <strong>Question ${index + 1}</strong>
+        <div>
+          <button type="button" data-survey-action="move-question-up" data-index="${escapeHtml(index)}" ${index === 0 ? "disabled" : ""}>Up</button>
+          <button type="button" data-survey-action="move-question-down" data-index="${escapeHtml(index)}" ${index >= total - 1 ? "disabled" : ""}>Down</button>
+          <button type="button" data-survey-action="remove-question" data-index="${escapeHtml(index)}" ${total <= 1 ? "disabled" : ""}>Remove</button>
+        </div>
+      </div>
+      <div class="message-survey-question-grid">
+        <label>
+          Question text
+          <input value="${escapeHtml(question.label)}" data-survey-question-field="label" />
+        </label>
+        <label>
+          Type
+          <select data-survey-question-field="type">
+            <option value="choice" ${question.type === "choice" ? "selected" : ""}>Choice</option>
+            <option value="rating" ${question.type === "rating" ? "selected" : ""}>Rating</option>
+            <option value="text" ${question.type === "text" ? "selected" : ""}>Text</option>
+          </select>
+        </label>
+        <label>
+          Tracking name
+          <input value="${escapeHtml(question.tracking_name)}" data-survey-question-field="tracking_name" placeholder="survey_response" />
+        </label>
+        <label class="message-survey-required">
+          <input type="checkbox" data-survey-question-field="required" ${question.required ? "checked" : ""} />
+          Required
+        </label>
+      </div>
+      <div class="message-survey-options" data-options-disabled="${optionsDisabled ? "true" : "false"}">
+        <div class="message-survey-options-head">
+          <span>${optionsDisabled ? "Text response" : "Answer options"}</span>
+          <button type="button" data-survey-action="add-option" data-index="${escapeHtml(index)}" ${optionsDisabled ? "disabled" : ""}>Add Option</button>
+        </div>
+        ${optionsDisabled ? `<p>Visitors will type a free-form answer.</p>` : question.options.map((option, optionIndex) => surveyOptionEditor(option, index, optionIndex)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function surveyOptionEditor(option, questionIndex, optionIndex) {
+  return `
+    <div class="message-survey-option" data-survey-option-index="${escapeHtml(optionIndex)}">
+      <input value="${escapeHtml(option.label)}" data-survey-option-field="label" aria-label="Option label" placeholder="Label" />
+      <input value="${escapeHtml(option.value)}" data-survey-option-field="value" aria-label="Option value" placeholder="Value" />
+      <button type="button" data-survey-action="remove-option" data-index="${escapeHtml(questionIndex)}" data-option-index="${escapeHtml(optionIndex)}">Remove</button>
+    </div>
+  `;
+}
+
+function handleMessageSurveyBuilderClick(event) {
+  const button = event.target.closest("[data-survey-action]");
+  if (!button) return;
+  const questions = collectSurveyQuestionsFromBuilder();
+  const index = Number(button.dataset.index || 0);
+  const optionIndex = Number(button.dataset.optionIndex || 0);
+  if (button.dataset.surveyAction === "add-question") {
+    questions.push(defaultSurveyQuestion());
+  }
+  if (button.dataset.surveyAction === "remove-question" && questions.length > 1) {
+    questions.splice(index, 1);
+  }
+  if (button.dataset.surveyAction === "move-question-up" && index > 0) {
+    [questions[index - 1], questions[index]] = [questions[index], questions[index - 1]];
+  }
+  if (button.dataset.surveyAction === "move-question-down" && index < questions.length - 1) {
+    [questions[index + 1], questions[index]] = [questions[index], questions[index + 1]];
+  }
+  if (button.dataset.surveyAction === "add-option") {
+    questions[index]?.options.push({ label: "New option", value: `option_${questions[index].options.length + 1}` });
+  }
+  if (button.dataset.surveyAction === "remove-option") {
+    questions[index]?.options.splice(optionIndex, 1);
+  }
+  setSurveyQuestionsInContent(questions);
+  renderMessageSurveyBuilder(parseJsonSafe(document.querySelector("#message-content")?.value || "{}"));
+  renderMessagePreview();
+}
+
+function handleMessageSurveyBuilderInput(event) {
+  if (!event.target.closest("[data-survey-question-field], [data-survey-option-field]")) return;
+  setSurveyQuestionsInContent(collectSurveyQuestionsFromBuilder());
+  if (event.target.matches('[data-survey-question-field="type"]')) {
+    renderMessageSurveyBuilder(parseJsonSafe(document.querySelector("#message-content")?.value || "{}"));
+  }
+  renderMessagePreview();
+}
+
+function collectSurveyQuestionsFromBuilder() {
+  if (!messageSurveyBuilder || messageSurveyPanel?.hidden) return [];
+  return [...messageSurveyBuilder.querySelectorAll(".message-survey-question")].map((questionElement) => {
+    const type = surveyQuestionType(questionElement.querySelector('[data-survey-question-field="type"]')?.value || "choice");
+    const question = {
+      id: questionElement.dataset.questionId || uniqueSurveyId("question"),
+      label: questionElement.querySelector('[data-survey-question-field="label"]')?.value.trim() || "Question",
+      type,
+      required: Boolean(questionElement.querySelector('[data-survey-question-field="required"]')?.checked),
+      tracking_name: questionElement.querySelector('[data-survey-question-field="tracking_name"]')?.value.trim() || "survey_response",
+      options: []
+    };
+    if (type !== "text") {
+      question.options = [...questionElement.querySelectorAll(".message-survey-option")].map((optionElement) => {
+        const label = optionElement.querySelector('[data-survey-option-field="label"]')?.value.trim() || "Option";
+        return {
+          label,
+          value: optionElement.querySelector('[data-survey-option-field="value"]')?.value.trim() || slug(label) || label
+        };
+      });
+      if (!question.options.length) question.options = surveyOptionsForQuestion({}, type);
+    }
+    return question;
+  });
+}
+
+function setSurveyQuestionsInContent(questions = []) {
+  const current = parseJsonSafe(document.querySelector("#message-content")?.value || "{}") || {};
+  const normalized = questions.length ? questions.map(normalizeSurveyQuestion) : [defaultSurveyQuestion()];
+  const next = {
+    ...current,
+    template_type: "survey",
+    questions: normalized,
+    survey: {
+      ...(current.survey && typeof current.survey === "object" ? current.survey : {}),
+      questions: normalized
+    }
+  };
+  delete next.question;
+  delete next.options;
+  document.querySelector("#message-content").value = JSON.stringify(next, null, 2);
+}
+
+function uniqueSurveyId(prefix) {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
 function syncMessageJsonFromPreviewLive() {
@@ -8040,13 +8275,13 @@ function messagePreviewTemplateExtra(templateType, content = {}) {
     `;
   }
   if (templateType === "survey") {
-    const questions = Array.isArray(content.questions) ? content.questions.slice(0, 3) : [{ label: content.question || "How relevant is this offer?", options: ["Low", "Medium", "High"] }];
+    const questions = surveyQuestionsForPreview(content).slice(0, 3);
     return `
       <div class="message-preview-survey">
         ${questions.map((question) => `
           <div>
             <b>${escapeHtml(question.label || question.title || "Question")}</b>
-            <span>${(Array.isArray(question.options) ? question.options : ["Text response"]).slice(0, 4).map((option) => `<em>${escapeHtml(option)}</em>`).join("")}</span>
+            <span>${(Array.isArray(question.options) && question.options.length ? question.options : ["Text response"]).slice(0, 4).map((option) => `<em>${escapeHtml(surveyOptionLabel(option))}</em>`).join("")}</span>
           </div>
         `).join("")}
       </div>
@@ -8062,6 +8297,19 @@ function messagePreviewTemplateExtra(templateType, content = {}) {
     `;
   }
   return "";
+}
+
+function surveyQuestionsForPreview(content = {}) {
+  const survey = content.survey && typeof content.survey === "object" ? content.survey : {};
+  if (Array.isArray(content.questions) && content.questions.length) return content.questions;
+  if (Array.isArray(survey.questions) && survey.questions.length) return survey.questions;
+  if (content.question || survey.question) return [{ label: content.question || survey.question, options: content.options || survey.options || [] }];
+  return [{ label: "How relevant is this offer?", options: ["Low", "Medium", "High"] }];
+}
+
+function surveyOptionLabel(option) {
+  const optionObject = option && typeof option === "object" ? option : {};
+  return optionObject.label || optionObject.title || optionObject.value || String(option);
 }
 
 function htmlTextPreview(html) {
@@ -8160,7 +8408,10 @@ function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, 
   const checks = [];
   const content = parseJsonSafe(document.querySelector("#message-content")?.value || "{}");
   const items = Array.isArray(content.items) ? content.items : Array.isArray(content.products) ? content.products : Array.isArray(content.recommendations) ? content.recommendations : [];
-  const questions = Array.isArray(content.questions) ? content.questions : [];
+  const survey = content.survey && typeof content.survey === "object" ? content.survey : {};
+  const questions = Array.isArray(content.questions) && content.questions.length
+    ? content.questions
+    : Array.isArray(survey.questions) ? survey.questions : [];
   const now = Date.now();
   const starts = startsAt ? new Date(startsAt).getTime() : 0;
   const expires = expiresAt ? new Date(expiresAt).getTime() : 0;
@@ -8187,7 +8438,10 @@ function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, 
   if (body.length > 320 || footer.length > 180 || title.length > 70) checks.push({ level: "warn", title: "Mobile clipping risk", detail: "Preview on mobile and shorten content if it pushes below the fold." });
   if (templateType === "banner" && !imageUrl) checks.push({ level: "info", title: "No image", detail: "Banners can work without media, but a visual may improve recognition." });
   if (["carousel", "recommendation"].includes(templateType) && !items.length) checks.push({ level: "warn", title: "No items configured", detail: "Add items, products, or recommendations in Content JSON for this template." });
-  if (templateType === "survey" && !questions.length && !content.question) checks.push({ level: "warn", title: "No survey question", detail: "Add questions in Content JSON before launching a survey message." });
+  if (templateType === "survey" && !questions.length && !content.question && !survey.question) checks.push({ level: "warn", title: "No survey question", detail: "Add questions in the Survey Builder before launching this message." });
+  if (templateType === "survey" && questions.some((question) => surveyQuestionType(question.type || "choice") !== "text" && !(Array.isArray(question.options) && question.options.length))) {
+    checks.push({ level: "warn", title: "Survey option missing", detail: "Choice and rating questions need at least one answer option." });
+  }
   if (templateType === "html_fragment") {
     const html = String(content.html || content.fragment || content.markup || "");
     if (!html) checks.push({ level: "warn", title: "No HTML fragment", detail: "Add html, fragment, or markup in Content JSON." });

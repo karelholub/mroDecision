@@ -1305,6 +1305,19 @@
                       Footer
                       <textarea id="message-preview-footer" spellcheck="false" placeholder="Optional fine print, disclaimer, or secondary context"></textarea>
                     </label>
+                    <div id="message-survey-panel" class="message-survey-builder" hidden>
+                      <div class="message-survey-builder-head">
+                        <div>
+                          <strong>Survey Builder</strong>
+                          <span>Define questions, answer types, tracking names, and option values without editing JSON.</span>
+                        </div>
+                        <button type="button" data-survey-action="add-question">Add Question</button>
+                      </div>
+                      <div id="message-survey-builder" class="message-survey-question-list"></div>
+                      <div class="message-survey-builder-foot">
+                        <span>Saved to Content JSON as <code>questions</code> and mirrored under <code>survey.questions</code> for SDK compatibility.</span>
+                      </div>
+                    </div>
                     <div class="message-personalization-panel">
                       <div class="message-personalization-head">
                         <div>
