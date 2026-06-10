@@ -7,7 +7,7 @@ It follows the recommended production pattern:
 - the website owns the placement and fallback markup
 - DEE returns structured decision outputs
 - the SDK replaces the placement only after a valid eligible response
-- exposure and conversion feedback are sent with the assigned variant
+- impression, exposure, and conversion feedback are sent with the assigned variant and message metadata
 - QA can force variants with `?dee_force_variant=control`
 
 ## Basic Setup
@@ -24,6 +24,8 @@ It follows the recommended production pattern:
   dee.init();
 </script>
 ```
+
+By default the SDK sends an `impression` event after a placement renders. Experiment variants still send `exposure` when `autoExposure` is enabled. Interruptive message templates (`modal`, `toast`, and `alert`) render an accessible dismiss button; dismissals are sent as `conversion` events with `event.name: "dismiss"` and are stored in browser storage according to the message dismiss policy (`suppress`, `cooldown`, or `ignore`).
 
 ## Carousel Placement
 

@@ -6791,6 +6791,8 @@ function renderMessagePerformance(metrics, options = {}) {
   const impressions = byType.impression || 0;
   const exposures = byType.exposure || 0;
   const conversions = byType.conversion || 0;
+  const interactionCounts = messageInteractionCounts(metrics.recent_events || []);
+  const dismissals = interactionCounts.dismiss || 0;
   const conversionRate = exposures > 0 ? conversions / exposures : 0;
   const surfaces = (metrics.by_surface || []).filter((item) => item.key && item.key !== "(empty)").slice(0, 4);
   const profiles = (metrics.by_profile || []).filter((item) => item.key && item.key !== "(empty)").slice(0, 4);
@@ -6809,6 +6811,7 @@ function renderMessagePerformance(metrics, options = {}) {
       ${statusItem("Exposures", formatNumber(exposures))}
       ${statusItem("Conversions", formatNumber(conversions))}
       ${statusItem("Conv. rate", formatPercent(conversionRate))}
+      ${statusItem("Dismissals", formatNumber(dismissals))}
     </div>
     <div class="message-performance-grid">
       ${messagePerformanceList("Top surfaces", surfaces, "surface")}
@@ -6832,6 +6835,16 @@ function messageEventCounts(recentEvents = [], groupedMessages = []) {
   for (const event of recentEvents || []) {
     const type = event.event_type || event.type || "";
     if (type) counts[type] = (counts[type] || 0) + 1;
+  }
+  return counts;
+}
+
+function messageInteractionCounts(recentEvents = []) {
+  const counts = {};
+  for (const event of recentEvents || []) {
+    const details = event.event || {};
+    const name = details.name || details.action || details.type || "";
+    if (name) counts[name] = (counts[name] || 0) + 1;
   }
   return counts;
 }

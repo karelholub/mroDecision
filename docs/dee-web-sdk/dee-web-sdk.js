@@ -11,6 +11,7 @@
     requestSource: "dee_web_sdk",
     autoEvaluate: true,
     autoExposure: true,
+    autoImpression: true,
     debug: false,
     maxItems: 10,
     fallback: "keep",
@@ -41,6 +42,12 @@
       if (!element || element.dataset.deeWired === "true") return;
       element.dataset.deeWired = "true";
       element.addEventListener("click", (event) => {
+        const dismiss = event.target.closest("[data-dee-dismiss]");
+        if (dismiss && element.contains(dismiss)) {
+          const decision = state.decisions.get(element);
+          if (decision) dismissMessage(element, decision, dismiss.dataset.deeDismiss || "dismiss").catch(() => {});
+          return;
+        }
         const action = event.target.closest("[data-dee-conversion]");
         if (action && element.contains(action)) {
           const decision = state.decisions.get(element);
@@ -106,6 +113,9 @@
       if (rendered && config.autoExposure && decision.experiment?.variant_key) {
         await sendEvent(element, "exposure", decision).catch((error) => log("Exposure failed", error));
       }
+      if (rendered && config.autoImpression) {
+        await sendEvent(element, "impression", decision, { event: { name: "view", action: "render" } }).catch((error) => log("Impression failed", error));
+      }
       if (rendered) recordDisplay(element, decision);
       return decision;
     }
@@ -156,6 +166,20 @@
           conversion_name: name || "conversion"
         }
       });
+    }
+
+    async function dismissMessage(element, decision, reason) {
+      recordDismiss(element, decision);
+      await trackConversion("dismiss", element, {
+        action: "dismiss",
+        name: "dismiss",
+        reason: reason || "dismiss",
+        value: reason || "dismiss",
+        label: "Dismiss"
+      }).catch((error) => log("Dismiss failed", error));
+      const message = element.querySelector(".dee-message");
+      if (message) message.hidden = true;
+      element.dispatchEvent(new CustomEvent("dee:dismiss", { detail: { decision, reason: reason || "dismiss" } }));
     }
 
     function buildEvaluateRequest(element, overrides) {
@@ -365,6 +389,7 @@
     wrapper.className = `dee-message dee-message-${modeSafe(template)}`;
     wrapper.dataset.deeMessageId = message.id || decision?.outputs?.message_id || "";
     if (message.variant) wrapper.dataset.deeMessageVariant = message.variant;
+    applyMessageAccessibility(wrapper, content, template);
     wrapper.innerHTML = messageHtml(content, template);
     if (template === "html_fragment") {
       const html = content.html || content.fragment || content.markup || "";
@@ -375,6 +400,7 @@
       }
     }
     element.replaceChildren(wrapper);
+    wireMessageAccessibility(element, wrapper, template);
     return true;
   }
 
@@ -419,6 +445,7 @@
   function messageHtml(content = {}, template = "banner") {
     const ctas = Array.isArray(content.ctas) ? content.ctas : [{ label: content.cta_label, url: content.cta_url, style: "primary" }].filter((cta) => cta.label || cta.url);
     return [
+      messageDismissButton(content, template),
       content.image_url ? `<img class="dee-message-image" src="${escapeHtml(safeUrl(content.image_url))}" alt="${escapeHtml(content.image_alt || content.title || "Message")}" loading="lazy" />` : "",
       `<div class="dee-message-body">`,
       content.title ? `<strong>${escapeHtml(content.title)}</strong>` : "",
@@ -428,6 +455,45 @@
       content.footer ? `<small>${escapeHtml(content.footer)}</small>` : "",
       `</div>`
     ].join("");
+  }
+
+  function messageDismissButton(content = {}, template = "banner") {
+    const dismissible = content.dismissible === true || ["modal", "toast", "alert"].includes(template);
+    if (!dismissible || content.dismissible === false) return "";
+    return `<button type="button" class="dee-message-close" data-dee-dismiss="close" aria-label="${escapeHtml(content.dismiss_label || "Dismiss message")}">×</button>`;
+  }
+
+  function applyMessageAccessibility(wrapper, content = {}, template = "banner") {
+    if (template === "modal") {
+      wrapper.setAttribute("role", "dialog");
+      wrapper.setAttribute("aria-modal", "true");
+      wrapper.setAttribute("tabindex", "-1");
+      if (content.title) wrapper.setAttribute("aria-label", content.title);
+      return;
+    }
+    if (template === "alert") {
+      wrapper.setAttribute("role", "alert");
+      return;
+    }
+    if (template === "toast") {
+      wrapper.setAttribute("role", "status");
+      wrapper.setAttribute("aria-live", "polite");
+    }
+  }
+
+  function wireMessageAccessibility(element, wrapper, template) {
+    if (template === "modal") {
+      setTimeout(() => wrapper.focus?.(), 0);
+      const keyHandler = (event) => {
+        if (event.key !== "Escape" || !element.contains(wrapper) || wrapper.hidden) return;
+        const closeButton = wrapper.querySelector("[data-dee-dismiss]");
+        if (closeButton) {
+          closeButton.dataset.deeDismiss = "escape";
+          closeButton.click();
+        }
+      };
+      global.addEventListener("keydown", keyHandler, { once: true });
+    }
   }
 
   function messageTemplateExtraHtml(content = {}, template = "banner") {
@@ -497,7 +563,12 @@
   function messageCss(template) {
     return `
       .dee-message{box-sizing:border-box;width:100%;border:1px solid #d8dee8;border-radius:10px;background:#fff;color:#182230;box-shadow:0 10px 30px rgba(16,24,40,.08);overflow:hidden;font-family:inherit}
+      .dee-message[hidden]{display:none!important}
+      .dee-message{position:relative}
+      .dee-message-close{position:absolute;top:8px;right:8px;z-index:2;display:inline-grid;place-items:center;width:28px;height:28px;border:1px solid #d0d5dd;border-radius:999px;background:rgba(255,255,255,.92);color:#344054;font-size:20px;line-height:1;cursor:pointer}
+      .dee-message-close:hover{background:#fff}
       .dee-message-body{display:grid;gap:8px;padding:14px}
+      .dee-message-modal .dee-message-body,.dee-message-toast .dee-message-body,.dee-message-alert .dee-message-body{padding-right:48px}
       .dee-message-body strong{font-size:18px;line-height:1.2}
       .dee-message-body p{margin:0;color:#475467;line-height:1.45}
       .dee-message-body small{color:#667085;line-height:1.35}
@@ -969,6 +1040,8 @@
 
   function displayPrecheck(element, decision) {
     const delivery = decisionDeliverySettings(decision);
+    const dismissResult = dismissPrecheck(element, decision, delivery);
+    if (!dismissResult.ok) return dismissResult;
     const mode = delivery.display?.mode || decision?.outputs?.display_mode || "always";
     if (mode === "always") return { ok: true };
     const storage = safeStorage(mode === "once_per_session" ? "session" : "local");
@@ -987,6 +1060,31 @@
     const storage = safeStorage(mode === "once_per_session" ? "session" : "local");
     if (!storage) return;
     storage.setItem(displayKey(element, decision, delivery.display || {}), String(Date.now()));
+  }
+
+  function dismissPrecheck(element, decision, delivery = decisionDeliverySettings(decision)) {
+    const behavior = delivery.dismiss?.behavior || "suppress";
+    if (!["suppress", "cooldown"].includes(behavior)) return { ok: true };
+    const storage = safeStorage("local");
+    if (!storage) return { ok: true };
+    const dismissedAt = Number(storage.getItem(dismissKey(element, decision)) || 0);
+    if (!dismissedAt) return { ok: true };
+    if (behavior === "cooldown") {
+      const cooldown = Number(delivery.frequency?.cooldown_seconds || 0);
+      return cooldown > 0 && Date.now() - dismissedAt >= cooldown * 1000
+        ? { ok: true }
+        : { ok: false, reason: "dismiss_cooldown", detail: { behavior, cooldown_seconds: cooldown } };
+    }
+    return { ok: false, reason: "dismiss_suppression", detail: { behavior } };
+  }
+
+  function recordDismiss(element, decision) {
+    const delivery = decisionDeliverySettings(decision);
+    const behavior = delivery.dismiss?.behavior || "suppress";
+    if (!["suppress", "cooldown"].includes(behavior)) return;
+    const storage = safeStorage("local");
+    if (!storage) return;
+    storage.setItem(dismissKey(element, decision), String(Date.now()));
   }
 
   function decisionDeliverySettings(decision) {
@@ -1011,6 +1109,16 @@
       placementName(element),
       decision?.experiment?.variant_key || "none",
       version
+    ].join(":");
+  }
+
+  function dismissKey(element, decision) {
+    return [
+      "dee_dismiss",
+      decision?.profile_key || "",
+      messageId(decision) || decision?.decision_key || element.dataset.deeDecisionKey || "",
+      placementName(element),
+      decision?.rule_version || "v0"
     ].join(":");
   }
 

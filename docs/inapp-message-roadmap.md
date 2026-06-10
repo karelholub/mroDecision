@@ -48,6 +48,8 @@ Status: started. Message editor now captures display mode, cooldown TTL, max imp
 - Enforce display policy in browser storage when available, while keeping server-side suppression as the source of truth.
 - Add accessibility defaults for close buttons, focus management, ARIA labels, and keyboard dismissal.
 
+Status: started. The SDK renders the full message template set, sends automatic impression events after successful render, keeps experiment exposure events, adds accessible dismiss controls for modal/toast/alert messages, sends dismissals as conversion events, and enforces browser-side display and dismiss suppression/cooldown policies.
+
 ### 6. Message Experiments
 
 - Allow message content/layout/CTA variants with holdout and fixed or adaptive allocation.
