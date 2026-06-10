@@ -572,6 +572,7 @@ document.querySelectorAll("[data-message-preview-device]").forEach((button) => {
     messagePreview?.setAttribute("data-device", button.dataset.messagePreviewDevice);
   });
 });
+document.querySelector("#message-content").addEventListener("input", debounce(syncMessagePreviewFromJson, 250));
 document.querySelector("#message-content").addEventListener("change", syncMessagePreviewFromJson);
 document.querySelector("#import-lookup-csv").addEventListener("click", importLookupCsv);
 document.querySelector("#add-reference-row").addEventListener("click", addReferenceRow);
@@ -6677,7 +6678,7 @@ function newMessage(options = {}) {
     ]
   }, null, 2);
   document.querySelector("#message-schema").value = JSON.stringify({
-    template_type: "banner|alert|modal|inline|toast",
+    template_type: "banner|alert|modal|inline|toast|card|carousel|survey|recommendation|html_fragment",
     placement: "string",
     title: "string",
     body: "string",
@@ -6685,7 +6686,10 @@ function newMessage(options = {}) {
     cta_label: "string",
     cta_url: "url",
     image_url: "url",
-    ctas: [{ label: "string", url: "url", style: "primary|secondary" }]
+    ctas: [{ label: "string", url: "url", style: "primary|secondary" }],
+    items: [{ title: "string", body: "string", image_url: "url", url: "url" }],
+    questions: [{ label: "string", type: "choice|text|rating", options: ["string"] }],
+    html: "guarded sanitized fragment for html_fragment"
   }, null, 2);
   document.querySelector("#message-metadata").value = JSON.stringify({
     application: "web-storefront",
@@ -7418,7 +7422,7 @@ function renderMessagePreview() {
   messagePreview.dataset.hasCta = ctas.length ? "true" : "false";
   messagePreview.dataset.archived = status === "archived" ? "true" : "false";
   messagePreview.dataset.template = templateType;
-  messagePreview.innerHTML = messagePreviewCardInnerHtml({ templateType, placement, surface, title, body, footer, imageUrl, ctas });
+  messagePreview.innerHTML = messagePreviewCardInnerHtml({ templateType, placement, surface, title, body, footer, imageUrl, ctas, content: parseJsonSafe(document.querySelector("#message-content").value || "{}") });
   messageInspectorSummary.innerHTML = [
     statusItem("Status", status),
     statusItem("Preview health", messagePreviewHealthLabel(health)),
@@ -7526,7 +7530,7 @@ function messageAudienceCard({ sample, templateType, placement, surface, raw }) 
         <span>${escapeHtml(sample.detail)}</span>
       </div>
       <div class="message-preview-card compact" data-template="${escapeHtml(templateType)}" data-has-cta="${ctas.length ? "true" : "false"}">
-        ${messagePreviewCardInnerHtml({ templateType, placement, surface, title, body, footer, imageUrl: raw.imageUrl, ctas })}
+        ${messagePreviewCardInnerHtml({ templateType, placement, surface, title, body, footer, imageUrl: raw.imageUrl, ctas, content: parseJsonSafe(document.querySelector("#message-content").value || "{}") })}
       </div>
       <div class="message-audience-card-foot ${missing.length ? "warn" : "ok"}">
         ${escapeHtml(missing.length ? `Missing: ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? "..." : ""}` : "All tokens resolved")}
@@ -7587,18 +7591,73 @@ function mergeMessageSamples(base = {}, overrides = {}) {
   };
 }
 
-function messagePreviewCardInnerHtml({ templateType = "banner", placement = "", surface = "", title = "Untitled message", body = "No message body yet.", footer = "", imageUrl = "", ctas = [] } = {}) {
+function messagePreviewCardInnerHtml({ templateType = "banner", placement = "", surface = "", title = "Untitled message", body = "No message body yet.", footer = "", imageUrl = "", ctas = [], content = {} } = {}) {
   const imageStyle = safeBackgroundImageStyle(imageUrl);
+  const normalizedTemplate = messageTemplateType(templateType);
   return `
     ${imageStyle ? `<div class="message-preview-image"${imageStyle}></div>` : ""}
     <div class="message-preview-body">
-      <span>${escapeHtml([templateType, placement || surface].filter(Boolean).join(" · "))}</span>
+      <span>${escapeHtml([normalizedTemplate, placement || surface].filter(Boolean).join(" · "))}</span>
       <strong>${escapeHtml(title)}</strong>
       <p>${escapeHtml(body)}</p>
+      ${messagePreviewTemplateExtra(normalizedTemplate, content)}
       ${ctas.length ? `<div class="message-preview-actions">${ctas.map((cta) => `<a class="${cta.style === "secondary" ? "secondary" : "primary"}" href="${escapeHtml(cta.url || "#")}" target="_blank" rel="noopener">${escapeHtml(cta.label || cta.url)}</a>`).join("")}</div>` : ""}
       ${footer ? `<small>${escapeHtml(footer)}</small>` : ""}
     </div>
   `;
+}
+
+function messagePreviewTemplateExtra(templateType, content = {}) {
+  const items = Array.isArray(content.items) ? content.items : Array.isArray(content.products) ? content.products : Array.isArray(content.recommendations) ? content.recommendations : [];
+  if (templateType === "carousel" || templateType === "recommendation") {
+    const previewItems = items.length ? items.slice(0, 4) : [
+      { title: "Item A", body: "Personalized option" },
+      { title: "Item B", body: "Alternative offer" }
+    ];
+    return `
+      <div class="message-preview-items" data-kind="${escapeHtml(templateType)}">
+        ${previewItems.map((item) => `
+          <div>
+            <b>${escapeHtml(item.title || item.name || item.id || "Item")}</b>
+            <em>${escapeHtml(item.body || item.description || item.price || item.category || "")}</em>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+  if (templateType === "survey") {
+    const questions = Array.isArray(content.questions) ? content.questions.slice(0, 3) : [{ label: content.question || "How relevant is this offer?", options: ["Low", "Medium", "High"] }];
+    return `
+      <div class="message-preview-survey">
+        ${questions.map((question) => `
+          <div>
+            <b>${escapeHtml(question.label || question.title || "Question")}</b>
+            <span>${(Array.isArray(question.options) ? question.options : ["Text response"]).slice(0, 4).map((option) => `<em>${escapeHtml(option)}</em>`).join("")}</span>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+  if (templateType === "html_fragment") {
+    const htmlText = htmlTextPreview(content.html || content.fragment || content.markup || "");
+    return `
+      <div class="message-preview-fragment">
+        <b>Guarded HTML fragment</b>
+        <em>${escapeHtml(htmlText || "Advanced sanitized HTML will render in the SDK.")}</em>
+      </div>
+    `;
+  }
+  return "";
+}
+
+function htmlTextPreview(html) {
+  return String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 140);
 }
 
 function renderMessageImageGuidance(templateType) {
@@ -7609,7 +7668,12 @@ function renderMessageImageGuidance(templateType) {
     modal: "Recommended 800 x 600 px, centered subject.",
     alert: "Optional small image, 600 x 240 px.",
     inline: "Recommended 1000 x 560 px for in-page placements.",
-    toast: "Avoid large images; icon-sized assets work best."
+    toast: "Avoid large images; icon-sized assets work best.",
+    card: "Recommended 800 x 520 px with concise copy.",
+    carousel: "Use Content JSON items for each slide; keep titles short.",
+    survey: "Use Content JSON questions with options for quick feedback.",
+    recommendation: "Use Content JSON items or products for personalized lists.",
+    html_fragment: "Advanced template: SDK sanitizes HTML and blocks unsafe tags."
   };
   target.textContent = guidance[templateType] || "Recommended size depends on template.";
 }
@@ -7680,6 +7744,9 @@ async function cleanupMessageAssets() {
 
 function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, placement, surface, title, body, footer, imageUrl, ctas, displayMode, triggerType, maxImpressions, targetDevices, consentCategory, dismissBehavior, tokens }) {
   const checks = [];
+  const content = parseJsonSafe(document.querySelector("#message-content")?.value || "{}");
+  const items = Array.isArray(content.items) ? content.items : Array.isArray(content.products) ? content.products : Array.isArray(content.recommendations) ? content.recommendations : [];
+  const questions = Array.isArray(content.questions) ? content.questions : [];
   const now = Date.now();
   const starts = startsAt ? new Date(startsAt).getTime() : 0;
   const expires = expiresAt ? new Date(expiresAt).getTime() : 0;
@@ -7705,6 +7772,13 @@ function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, 
   if (["modal", "toast"].includes(templateType) && body.length > 220) checks.push({ level: "warn", title: "Long compact copy", detail: "This may feel crowded in modal or toast placements." });
   if (body.length > 320 || footer.length > 180 || title.length > 70) checks.push({ level: "warn", title: "Mobile clipping risk", detail: "Preview on mobile and shorten content if it pushes below the fold." });
   if (templateType === "banner" && !imageUrl) checks.push({ level: "info", title: "No image", detail: "Banners can work without media, but a visual may improve recognition." });
+  if (["carousel", "recommendation"].includes(templateType) && !items.length) checks.push({ level: "warn", title: "No items configured", detail: "Add items, products, or recommendations in Content JSON for this template." });
+  if (templateType === "survey" && !questions.length && !content.question) checks.push({ level: "warn", title: "No survey question", detail: "Add questions in Content JSON before launching a survey message." });
+  if (templateType === "html_fragment") {
+    const html = String(content.html || content.fragment || content.markup || "");
+    if (!html) checks.push({ level: "warn", title: "No HTML fragment", detail: "Add html, fragment, or markup in Content JSON." });
+    if (/<script|<iframe|<form|\son/i.test(html)) checks.push({ level: "warn", title: "HTML will be sanitized", detail: "The SDK removes scripts, iframes, forms, and inline event handlers." });
+  }
   if (!placement || surface === "-") checks.push({ level: "info", title: "Placement not fully defined", detail: "Surface and placement help client apps render this consistently." });
   if (tokens?.missing?.length) checks.push({ level: "warn", title: "Token sample missing", detail: `No sample value for ${tokens.missing.slice(0, 3).join(", ")}${tokens.missing.length > 3 ? "..." : ""}.` });
   if (tokens?.tokens?.length) checks.push({ level: "info", title: "Personalized content", detail: `${tokens.tokens.length} token${tokens.tokens.length === 1 ? "" : "s"} used in this message.` });
@@ -7930,7 +8004,7 @@ function normalizeMessageCtas(content) {
 }
 
 function messageTemplateType(value) {
-  return ["banner", "alert", "modal", "inline", "toast"].includes(value) ? value : "banner";
+  return ["banner", "alert", "modal", "inline", "toast", "card", "carousel", "survey", "recommendation", "html_fragment"].includes(value) ? value : "banner";
 }
 
 function renderMessageRuleLinks() {

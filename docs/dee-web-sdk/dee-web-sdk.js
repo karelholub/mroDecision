@@ -331,7 +331,7 @@
       logWithConfig(config, "Message renderer received no renderable content");
       return false;
     }
-    const template = String(content.template_type || content.type || element.dataset.deeMessageTemplate || "banner");
+    const template = messageTemplateType(content.template_type || content.type || element.dataset.deeMessageTemplate || "banner");
     installFragmentStyle(element, {
       outputs: {
         css: messageCss(template)
@@ -340,22 +340,63 @@
     const wrapper = document.createElement("article");
     wrapper.className = `dee-message dee-message-${modeSafe(template)}`;
     wrapper.dataset.deeMessageId = message.id || decision?.outputs?.message_id || "";
-    wrapper.innerHTML = messageHtml(content);
+    wrapper.innerHTML = messageHtml(content, template);
+    if (template === "html_fragment") {
+      const html = content.html || content.fragment || content.markup || "";
+      const slot = wrapper.querySelector("[data-dee-message-html]");
+      if (slot && html) {
+        slot.replaceChildren(sanitizedHtmlFragment(String(html), config));
+        wireHtmlFragmentBehavior(slot);
+      }
+    }
     element.replaceChildren(wrapper);
     return true;
   }
 
-  function messageHtml(content = {}) {
+  function messageTemplateType(value) {
+    const normalized = String(value || "").trim();
+    return ["banner", "alert", "modal", "inline", "toast", "card", "carousel", "survey", "recommendation", "html_fragment"].includes(normalized)
+      ? normalized
+      : "banner";
+  }
+
+  function messageHtml(content = {}, template = "banner") {
     const ctas = Array.isArray(content.ctas) ? content.ctas : [{ label: content.cta_label, url: content.cta_url, style: "primary" }].filter((cta) => cta.label || cta.url);
     return [
       content.image_url ? `<img class="dee-message-image" src="${escapeHtml(safeUrl(content.image_url))}" alt="${escapeHtml(content.image_alt || content.title || "Message")}" loading="lazy" />` : "",
       `<div class="dee-message-body">`,
       content.title ? `<strong>${escapeHtml(content.title)}</strong>` : "",
       content.body ? `<p>${escapeHtml(content.body)}</p>` : "",
+      messageTemplateExtraHtml(content, template),
       ctas.length ? `<div class="dee-message-actions">${ctas.map((cta) => `<a class="dee-message-cta ${cta.style === "secondary" ? "secondary" : "primary"}" href="${escapeHtml(safeUrl(cta.url || "#"))}" data-dee-conversion="${escapeHtml(cta.tracking_name || cta.label || "message_click")}">${escapeHtml(cta.label || cta.url || "Open")}</a>`).join("")}</div>` : "",
       content.footer ? `<small>${escapeHtml(content.footer)}</small>` : "",
       `</div>`
     ].join("");
+  }
+
+  function messageTemplateExtraHtml(content = {}, template = "banner") {
+    const items = Array.isArray(content.items) ? content.items : Array.isArray(content.products) ? content.products : Array.isArray(content.recommendations) ? content.recommendations : [];
+    if (template === "carousel" || template === "recommendation") {
+      return `<div class="dee-message-items" data-kind="${escapeHtml(template)}">${items.slice(0, 12).map((item) => `
+        <a class="dee-message-item" href="${escapeHtml(safeUrl(item.url || item.href || "#"))}" data-dee-conversion="${escapeHtml(item.tracking_name || item.id || item.title || "message_item")}">
+          ${item.image_url || item.image ? `<img src="${escapeHtml(safeUrl(item.image_url || item.image))}" alt="${escapeHtml(item.title || item.name || "Recommendation")}" loading="lazy" />` : ""}
+          <span><b>${escapeHtml(item.title || item.name || item.id || "Item")}</b>${item.body || item.description || item.price ? `<em>${escapeHtml(item.body || item.description || item.price)}</em>` : ""}</span>
+        </a>
+      `).join("")}</div>`;
+    }
+    if (template === "survey") {
+      const questions = Array.isArray(content.questions) ? content.questions : [{ label: content.question || "", options: content.options || [] }].filter((question) => question.label);
+      return `<div class="dee-message-survey">${questions.slice(0, 6).map((question, index) => `
+        <fieldset>
+          <legend>${escapeHtml(question.label || question.title || `Question ${index + 1}`)}</legend>
+          <div>${(Array.isArray(question.options) ? question.options : []).slice(0, 8).map((option) => `<button type="button" data-dee-conversion="${escapeHtml(question.tracking_name || "survey_response")}" data-dee-survey-value="${escapeHtml(option)}">${escapeHtml(option)}</button>`).join("") || `<textarea aria-label="${escapeHtml(question.label || "Survey response")}"></textarea>`}</div>
+        </fieldset>
+      `).join("")}</div>`;
+    }
+    if (template === "html_fragment") {
+      return `<div class="dee-message-fragment" data-dee-message-html></div>`;
+    }
+    return "";
   }
 
   function messageCss(template) {
@@ -370,9 +411,24 @@
       .dee-message-cta{border-radius:8px;padding:8px 12px;text-decoration:none;font-weight:700}
       .dee-message-cta.primary{background:#0f766e;color:#fff}
       .dee-message-cta.secondary{border:1px solid #d0d5dd;color:#344054;background:#fff}
+      .dee-message-items{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+      .dee-message-item{display:grid;gap:6px;min-width:0;border:1px solid #eaecf0;border-radius:8px;padding:8px;color:inherit;text-decoration:none;background:#f8fafc}
+      .dee-message-item img{width:100%;height:90px;object-fit:cover;border-radius:6px}
+      .dee-message-item span{display:grid;gap:2px;min-width:0}
+      .dee-message-item b{font-size:13px;overflow-wrap:anywhere}
+      .dee-message-item em{color:#667085;font-size:12px;font-style:normal;line-height:1.35}
+      .dee-message-survey{display:grid;gap:10px}
+      .dee-message-survey fieldset{display:grid;gap:8px;margin:0;border:1px solid #eaecf0;border-radius:8px;padding:10px}
+      .dee-message-survey legend{font-weight:700}
+      .dee-message-survey fieldset div{display:flex;flex-wrap:wrap;gap:6px}
+      .dee-message-survey button{border:1px solid #d0d5dd;border-radius:999px;background:#fff;padding:7px 10px;cursor:pointer}
+      .dee-message-survey textarea{width:100%;min-height:72px;border:1px solid #d0d5dd;border-radius:8px;padding:8px;font:inherit}
+      .dee-message-fragment{min-width:0}
       .dee-message-toast{max-width:360px;margin-left:auto}
       .dee-message-modal{max-width:520px;margin:24px auto}
       .dee-message-alert{border-left:4px solid #0f766e}
+      .dee-message.dee-message-survey{border-left:4px solid #2563eb}
+      .dee-message.dee-message-html_fragment{border-style:dashed}
       ${template === "inline" ? ".dee-message{box-shadow:none}" : ""}
     `;
   }

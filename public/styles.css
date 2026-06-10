@@ -7348,6 +7348,23 @@ header {
   border-radius: 10px;
 }
 
+.message-thumb[data-template="card"],
+.message-thumb[data-template="recommendation"] {
+  border-color: rgba(15, 118, 110, 0.34);
+}
+
+.message-thumb[data-template="carousel"] {
+  background: linear-gradient(90deg, #ffffff 0%, #ffffff 68%, #eef8f6 68%, #eef8f6 100%);
+}
+
+.message-thumb[data-template="survey"] {
+  border-left: 4px solid #2563eb;
+}
+
+.message-thumb[data-template="html_fragment"] {
+  border-style: dashed;
+}
+
 .message-thumb-image {
   min-width: 0;
   background-color: #e5e7eb;
@@ -7901,6 +7918,23 @@ header {
   box-shadow: 0 18px 36px rgba(15, 23, 42, 0.16);
 }
 
+.message-preview-card[data-template="card"],
+.message-preview-card[data-template="recommendation"] {
+  border-color: rgba(15, 118, 110, 0.34);
+}
+
+.message-preview-card[data-template="carousel"] {
+  max-width: 620px;
+}
+
+.message-preview-card[data-template="survey"] {
+  border-left: 5px solid #2563eb;
+}
+
+.message-preview-card[data-template="html_fragment"] {
+  border-style: dashed;
+}
+
 .message-preview-card[data-device="tablet"] {
   max-width: 460px;
 }
@@ -7923,6 +7957,65 @@ header {
 
 .message-preview-card[data-has-cta="false"] .message-preview-body {
   padding-bottom: 24px;
+}
+
+.message-preview-items,
+.message-preview-survey,
+.message-preview-fragment {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.message-preview-items {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.message-preview-items > div,
+.message-preview-survey > div,
+.message-preview-fragment {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px;
+  background: var(--panel-soft);
+}
+
+.message-preview-items b,
+.message-preview-survey b,
+.message-preview-fragment b {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.message-preview-items em,
+.message-preview-survey em,
+.message-preview-fragment em {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.message-preview-survey span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.message-preview-survey span em {
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: #eef4ff;
+  color: #1d4ed8;
+  font-weight: 700;
 }
 
 .message-version-preview {

@@ -14,6 +14,8 @@ Make in-app messages first-class activation assets. A message should be reusable
 - Capture application, surface, placement, campaign, and folder as structured metadata.
 - Add placement compatibility checks so rules, surfaces, and messages do not drift apart.
 
+Status: started. The message editor and SDK now recognize the full template vocabulary, with preview and SDK rendering for card, carousel, survey, recommendation, and guarded sanitized HTML fragment templates.
+
 ### 2. Visual Message Builder
 
 - Keep the current structured fields for title, body, image, footer, and CTAs.
