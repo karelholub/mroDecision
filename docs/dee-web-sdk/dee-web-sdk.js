@@ -48,7 +48,7 @@
           if (decision) {
             trackConversion(name, element, {
               action: name,
-              value: action.dataset.deeValue || action.value || action.textContent?.trim() || "",
+              value: action.dataset.deeValue || action.dataset.deeSurveyValue || action.value || action.textContent?.trim() || "",
               label: action.dataset.deeLabel || action.getAttribute("aria-label") || action.textContent?.trim() || ""
             }).catch(() => {});
           }
@@ -349,7 +349,7 @@
   async function renderMessage(element, decision, config) {
     const message = normalizedDecisionMessage(decision);
     const content = message.content || {};
-    if (!content || typeof content !== "object" || (!content.title && !content.body && !content.html)) {
+    if (!messageContentRenderable(content)) {
       logWithConfig(config, "Message renderer received no renderable content");
       return false;
     }
@@ -389,6 +389,17 @@
       variant: message.variant || outputs.message_variant || outputs.messageVariant || decision?.experiment?.variant_key || "",
       content
     };
+  }
+
+  function messageContentRenderable(content) {
+    if (!content || typeof content !== "object") return false;
+    if (content.title || content.body || content.html || content.fragment || content.markup || content.image_url) return true;
+    if (Array.isArray(content.questions) && content.questions.length) return true;
+    if (content.question) return true;
+    if (Array.isArray(content.items) && content.items.length) return true;
+    if (Array.isArray(content.products) && content.products.length) return true;
+    if (Array.isArray(content.recommendations) && content.recommendations.length) return true;
+    return false;
   }
 
   function messageTemplateType(value) {
@@ -431,7 +442,7 @@
       return `<div class="dee-message-survey">${questions.slice(0, 6).map((question, index) => `
         <fieldset>
           <legend>${escapeHtml(question.label || question.title || `Question ${index + 1}`)}</legend>
-          <div>${(Array.isArray(question.options) ? question.options : []).slice(0, 8).map((option) => `<button type="button" data-dee-conversion="${escapeHtml(question.tracking_name || "survey_response")}" data-dee-survey-value="${escapeHtml(option)}">${escapeHtml(option)}</button>`).join("") || `<textarea aria-label="${escapeHtml(question.label || "Survey response")}"></textarea>`}</div>
+          <div>${(Array.isArray(question.options) ? question.options : []).slice(0, 8).map((option) => surveyOptionButton(option, question)).join("") || `<textarea aria-label="${escapeHtml(question.label || "Survey response")}"></textarea>`}</div>
         </fieldset>
       `).join("")}</div>`;
     }
@@ -439,6 +450,14 @@
       return `<div class="dee-message-fragment" data-dee-message-html></div>`;
     }
     return "";
+  }
+
+  function surveyOptionButton(option, question = {}) {
+    const optionObject = option && typeof option === "object" ? option : {};
+    const label = optionObject.label || optionObject.title || optionObject.value || option;
+    const value = optionObject.value || optionObject.id || label;
+    const trackingName = optionObject.tracking_name || question.tracking_name || question.id || "survey_response";
+    return `<button type="button" data-dee-conversion="${escapeHtml(trackingName)}" data-dee-survey-value="${escapeHtml(value)}">${escapeHtml(label)}</button>`;
   }
 
   function messageCss(template) {

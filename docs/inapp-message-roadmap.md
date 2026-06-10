@@ -20,8 +20,11 @@ Status: started. The message editor and SDK now recognize the full template voca
 
 - Keep the current structured fields for title, body, image, footer, and CTAs.
 - Extend builder controls for multiple CTAs, managed image assets, theme/layout hints, and reusable content blocks.
+- Add a dedicated Survey Builder for `survey` messages: question list, answer options, text/rating/choice types, required toggle, tracking name, option values, add/remove/reorder controls, and sample response preview.
 - Keep JSON tabs for advanced users, but make business fields the primary editing surface.
 - Add mobile/tablet/desktop previews, personalization token previews, and audience comparison cards.
+
+Status: planned. Survey messages currently render from structured JSON; the next authoring step is a visual builder so marketers can configure questions and options without editing raw JSON.
 
 ### 3. Delivery Policy
 
