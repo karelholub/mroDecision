@@ -114,6 +114,12 @@ function bindEvents() {
     rememberModifications(event.target, event.detail || {});
   }, true);
 
+  document.addEventListener("dee:skipped", (event) => {
+    const placement = event.target?.dataset?.deePlacement || "unknown";
+    const reason = event.detail?.reason || "skipped";
+    logEvent("skipped", `${placement}: ${reason}`);
+  }, true);
+
   document.addEventListener("dee:event", (event) => {
     const placement = event.target?.dataset?.deePlacement || "unknown";
     state.eventCount += 1;

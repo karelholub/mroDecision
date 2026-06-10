@@ -41,6 +41,8 @@ Status: started. Message editor now captures display mode, cooldown TTL, max imp
 - Add missing attribute diagnostics, suppression reasons, profile cache freshness, and “why not shown” detail.
 - Add batch precompute visibility by message, campaign, surface, and profile.
 
+Status: started. Message performance now includes delivery diagnostics from SDK `skipped` feedback events, grouped by reason and profile count, with guidance for consent, device targeting, URL targeting, SDK conditions, display policy, dismiss cooldown, and dismiss suppression.
+
 ### 5. SDK Rendering
 
 - Make `template: "message"` a first-class SDK renderer with modal/banner/toast/inline behavior.
@@ -48,7 +50,7 @@ Status: started. Message editor now captures display mode, cooldown TTL, max imp
 - Enforce display policy in browser storage when available, while keeping server-side suppression as the source of truth.
 - Add accessibility defaults for close buttons, focus management, ARIA labels, and keyboard dismissal.
 
-Status: started. The SDK renders the full message template set, sends automatic impression events after successful render, keeps experiment exposure events, adds accessible dismiss controls for modal/toast/alert messages, sends dismissals as conversion events, enforces survey response validation/acknowledgement states, and enforces browser-side display and dismiss suppression/cooldown policies.
+Status: started. The SDK renders the full message template set, sends automatic impression events after successful render, keeps experiment exposure events, records skipped delivery events for targeting/consent/frequency/dismiss blocks, adds accessible dismiss controls for modal/toast/alert messages, sends dismissals as conversion events, enforces survey response validation/acknowledgement states, and enforces browser-side display and dismiss suppression/cooldown policies.
 
 ### 6. Message Experiments
 

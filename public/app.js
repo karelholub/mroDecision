@@ -6791,6 +6791,7 @@ function renderMessagePerformance(metrics, options = {}) {
   const impressions = byType.impression || 0;
   const exposures = byType.exposure || 0;
   const conversions = byType.conversion || 0;
+  const skipped = byType.skipped || 0;
   const interactionCounts = messageInteractionCounts(metrics.recent_events || []);
   const dismissals = interactionCounts.dismiss || 0;
   const conversionRate = exposures > 0 ? conversions / exposures : 0;
@@ -6798,6 +6799,7 @@ function renderMessagePerformance(metrics, options = {}) {
   const profiles = (metrics.by_profile || []).filter((item) => item.key && item.key !== "(empty)").slice(0, 4);
   const recent = (metrics.recent_events || []).slice(0, 5);
   const surveyResponses = messageSurveyResponseSummary(metrics.recent_events || []);
+  const deliveryDiagnostics = messageDeliveryDiagnostics(metrics.recent_events || []);
   const linkedExperiments = messageLinkedExperiments(options.messageId, options.experiments || cachedExperiments || []);
   messagePerformanceSummary.innerHTML = `
     <div class="message-performance-head">
@@ -6812,7 +6814,9 @@ function renderMessagePerformance(metrics, options = {}) {
       ${statusItem("Conversions", formatNumber(conversions))}
       ${statusItem("Conv. rate", formatPercent(conversionRate))}
       ${statusItem("Dismissals", formatNumber(dismissals))}
+      ${statusItem("Skipped", formatNumber(skipped))}
     </div>
+    ${messageDeliveryDiagnosticsPanel(deliveryDiagnostics)}
     <div class="message-performance-grid">
       ${messagePerformanceList("Top surfaces", surfaces, "surface")}
       ${messagePerformanceList("Recent profiles", profiles, "profile")}
@@ -6847,6 +6851,80 @@ function messageInteractionCounts(recentEvents = []) {
     if (name) counts[name] = (counts[name] || 0) + 1;
   }
   return counts;
+}
+
+function messageDeliveryDiagnostics(events = []) {
+  const reasons = new Map();
+  for (const event of events || []) {
+    if ((event.event_type || event.type) !== "skipped") continue;
+    const details = event.event || {};
+    const reason = details.reason || event.context?.skipped_reason || "skipped";
+    const current = reasons.get(reason) || {
+      reason,
+      category: details.category || "runtime",
+      count: 0,
+      profiles: new Set(),
+      latest_at: ""
+    };
+    current.count += 1;
+    if (event.profile_key) current.profiles.add(event.profile_key);
+    if (event.occurred_at && (!current.latest_at || event.occurred_at > current.latest_at)) current.latest_at = event.occurred_at;
+    reasons.set(reason, current);
+  }
+  return [...reasons.values()]
+    .map((item) => ({ ...item, profiles: item.profiles.size }))
+    .sort((left, right) => right.count - left.count || left.reason.localeCompare(right.reason))
+    .slice(0, 6);
+}
+
+function messageDeliveryDiagnosticsPanel(items = []) {
+  return `
+    <div class="message-delivery-diagnostics">
+      <div class="message-performance-head">
+        <strong>Delivery diagnostics</strong>
+        <span>${items.length ? "Recent SDK skip reasons and likely fixes." : "No skipped delivery events recorded for this message."}</span>
+      </div>
+      ${items.length ? `
+        <div class="message-delivery-diagnostic-list">
+          ${items.map(messageDeliveryDiagnosticRow).join("")}
+        </div>
+      ` : `
+        <div class="message-delivery-empty">
+          Messages that do not render because of consent, device, URL, SDK condition, display policy, or dismiss policy will appear here after the SDK reports skipped delivery.
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function messageDeliveryDiagnosticRow(item = {}) {
+  return `
+    <div class="message-delivery-diagnostic-row">
+      <span>${escapeHtml(messageDeliveryDiagnosticLabel(item.reason))}</span>
+      <strong>${escapeHtml(formatNumber(item.count || 0))}</strong>
+      <em>${escapeHtml(`${formatNumber(item.profiles || 0)} profiles${item.latest_at ? ` · latest ${formatTime(item.latest_at)}` : ""}`)}</em>
+      <small>${escapeHtml(messageDeliveryDiagnosticHint(item.reason, item.category))}</small>
+    </div>
+  `;
+}
+
+function messageDeliveryDiagnosticLabel(reason = "") {
+  return String(reason || "skipped")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function messageDeliveryDiagnosticHint(reason = "", category = "") {
+  const hints = {
+    consent: "Check consent category and SDK consentProvider values.",
+    device_targeting: "Check target devices against the visitor viewport.",
+    url_targeting: "Check Show on URL rules and page URL.",
+    sdk_condition: "Check named SDK condition wiring on the website.",
+    display_policy: "The visitor has already seen this message in the configured display window.",
+    dismiss_cooldown: "The visitor dismissed this message and is still inside cooldown.",
+    dismiss_suppression: "The visitor dismissed this message and suppression is active."
+  };
+  return hints[reason] || (category === "frequency" ? "Check frequency, cooldown, and dismiss policy." : "Inspect SDK skipped event detail for this placement.");
 }
 
 function messagePerformanceList(title, items, fallbackLabel) {

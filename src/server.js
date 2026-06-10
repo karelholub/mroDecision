@@ -233,7 +233,7 @@ async function routeApi(req, res, url) {
     return;
   }
 
-  const clientEventMatch = pathname.match(/^\/v1\/client\/(impression|exposure|conversion)$/);
+  const clientEventMatch = pathname.match(/^\/v1\/client\/(impression|exposure|conversion|skipped)$/);
   if (clientEventMatch && req.method === "POST") {
     requireScope(req, "client");
     enforceClientRateLimit(req, res, clientEventMatch[1]);
@@ -1507,7 +1507,7 @@ function clientTrafficAction(method, path) {
   if (method === "GET" && cleanPath === "/v1/client/rule-catalog") return "rule_catalog";
   if (method === "POST" && cleanPath === "/v1/client/surface") return "surface";
   if (method === "POST" && cleanPath === "/v1/client/surface/batch") return "surface_batch";
-  const eventMatch = cleanPath.match(/^\/v1\/client\/(impression|exposure|conversion)$/);
+  const eventMatch = cleanPath.match(/^\/v1\/client\/(impression|exposure|conversion|skipped)$/);
   if (method === "POST" && eventMatch) return eventMatch[1];
   return "client";
 }

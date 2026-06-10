@@ -166,7 +166,7 @@ export function nativePostgresSchemaSql() {
     )`,
     `CREATE TABLE IF NOT EXISTS client_events (
       event_id TEXT PRIMARY KEY,
-      event_type TEXT NOT NULL CHECK (event_type IN ('impression', 'exposure', 'conversion')),
+      event_type TEXT NOT NULL CHECK (event_type IN ('impression', 'exposure', 'conversion', 'skipped')),
       occurred_at TIMESTAMPTZ NOT NULL,
       decision_key TEXT NOT NULL,
       profile_key TEXT NOT NULL,

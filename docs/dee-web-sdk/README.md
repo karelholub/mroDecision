@@ -25,7 +25,7 @@ It follows the recommended production pattern:
 </script>
 ```
 
-By default the SDK sends an `impression` event after a placement renders. Experiment variants still send `exposure` when `autoExposure` is enabled. Interruptive message templates (`modal`, `toast`, and `alert`) render an accessible dismiss button; dismissals are sent as `conversion` events with `event.name: "dismiss"` and are stored in browser storage according to the message dismiss policy (`suppress`, `cooldown`, or `ignore`).
+By default the SDK sends an `impression` event after a placement renders. Experiment variants still send `exposure` when `autoExposure` is enabled. When a placement or decision is blocked by URL/device targeting, consent, SDK conditions, display frequency, or dismiss policy, the SDK dispatches `dee:skipped` and sends `/v1/client/skipped` with `event.reason` and `event.category` when `autoSkipped` is enabled. Interruptive message templates (`modal`, `toast`, and `alert`) render an accessible dismiss button; dismissals are sent as `conversion` events with `event.name: "dismiss"` and are stored in browser storage according to the message dismiss policy (`suppress`, `cooldown`, or `ignore`).
 
 ## Carousel Placement
 
@@ -254,7 +254,7 @@ Placements can also define local prechecks before calling DEE:
 ></div>
 ```
 
-Server responses can include `delivery.display`, `delivery.targeting`, `delivery.trigger`, `delivery.consent`, and `delivery.goal`. Message decisions can also return `outputs.delivery.message` and `outputs.message.delivery`; the SDK applies those hints after the decision returns, keeps fallback content when a postcheck fails, and dispatches `dee:skipped` with the reason.
+Server responses can include `delivery.display`, `delivery.targeting`, `delivery.trigger`, `delivery.consent`, and `delivery.goal`. Message decisions can also return `outputs.delivery.message` and `outputs.message.delivery`; the SDK applies those hints after the decision returns, keeps fallback content when a postcheck fails, and dispatches `dee:skipped` with the reason. Skipped events are also recorded as client feedback so DEE can show delivery diagnostics such as `consent`, `device_targeting`, `url_targeting`, `sdk_condition`, `display_policy`, `dismiss_cooldown`, and `dismiss_suppression`.
 
 ## In-App Messages
 

@@ -12,6 +12,7 @@
     autoEvaluate: true,
     autoExposure: true,
     autoImpression: true,
+    autoSkipped: true,
     debug: false,
     maxItems: 10,
     fallback: "keep",
@@ -41,6 +42,7 @@
     function wirePlacement(element) {
       if (!element || element.dataset.deeWired === "true") return;
       element.dataset.deeWired = "true";
+      element.deeClient = { sendSkippedEvent };
       element.addEventListener("click", (event) => {
         const dismiss = event.target.closest("[data-dee-dismiss]");
         if (dismiss && element.contains(dismiss)) {
@@ -104,7 +106,7 @@
     async function evaluatePlacement(element, overrides) {
       const precheck = placementPrecheck(element, config, overrides);
       if (!precheck.ok) {
-        dispatchSkipped(element, precheck.reason, precheck.detail);
+        dispatchSkipped(element, precheck.reason, precheck.detail, config);
         return null;
       }
       const request = buildEvaluateRequest(element, overrides);
@@ -112,7 +114,7 @@
       const postcheck = decisionPrecheck(element, decision, config);
       if (!postcheck.ok) {
         state.decisions.set(element, decision);
-        dispatchSkipped(element, postcheck.reason, { decision, ...(postcheck.detail || {}) });
+        dispatchSkipped(element, postcheck.reason, { decision, ...(postcheck.detail || {}) }, config);
         return decision;
       }
       const renderResult = await renderDecision(element, decision);
@@ -157,6 +159,42 @@
       };
       const response = await post(`/v1/client/${type}`, payload, { keepalive: true });
       element.dispatchEvent(new CustomEvent("dee:event", { detail: { type, payload, response } }));
+      return response;
+    }
+
+    async function sendSkippedEvent(element, reason, detail = {}) {
+      if (!config.autoSkipped) return null;
+      const decision = detail.decision || null;
+      const placement = placementName(element);
+      const payload = {
+        event_id: eventId("skipped", decision || { decision_key: element.dataset.deeDecisionKey, profile_key: profileKey(), rule_version: "v0" }, placement),
+        decision_key: decision?.decision_key || element.dataset.deeDecisionKey || "",
+        profile_key: decision?.profile_key || profileKey(),
+        rule_version: decision?.rule_version || null,
+        variant_key: decisionVariantKey(decision) || null,
+        message_id: messageId(decision),
+        surface: placement,
+        object_type: element.dataset.deeObjectType || "placement",
+        object_id: element.dataset.deeObjectId || placement,
+        context: {
+          page_url: location.href,
+          placement,
+          device_type: deviceType(),
+          viewport_width: global.innerWidth || 0,
+          viewport_height: global.innerHeight || 0,
+          request_source: config.requestSource,
+          skipped_reason: reason || "skipped"
+        },
+        event: {
+          name: "skipped",
+          action: "skipped",
+          reason: reason || "skipped",
+          category: skippedCategory(reason),
+          detail: sanitizedSkippedDetail(detail)
+        }
+      };
+      const response = await post("/v1/client/skipped", payload, { keepalive: true });
+      element.dispatchEvent(new CustomEvent("dee:event", { detail: { type: "skipped", payload, response } }));
       return response;
     }
 
@@ -1226,8 +1264,29 @@
     return "desktop";
   }
 
-  function dispatchSkipped(element, reason, detail) {
-    element.dispatchEvent(new CustomEvent("dee:skipped", { detail: { reason, ...(detail || {}) } }));
+  function dispatchSkipped(element, reason, detail, config) {
+    const payload = { reason, category: skippedCategory(reason), ...(detail || {}) };
+    element.dispatchEvent(new CustomEvent("dee:skipped", { detail: payload }));
+    const client = element?.deeClient || null;
+    if (client?.sendSkippedEvent) {
+      client.sendSkippedEvent(element, reason, detail).catch(() => {});
+      return;
+    }
+    if (config?.autoSkipped !== false && typeof element?.dispatchEvent === "function") {
+      element.dispatchEvent(new CustomEvent("dee:skipped-recordable", { detail: payload }));
+    }
+  }
+
+  function skippedCategory(reason) {
+    if (["consent", "device_targeting", "url_targeting", "sdk_condition"].includes(reason)) return "targeting";
+    if (["display_policy", "dismiss_cooldown", "dismiss_suppression"].includes(reason)) return "frequency";
+    if (["profile_enrichment", "missing_attribute", "suppression"].includes(reason)) return "eligibility";
+    return "runtime";
+  }
+
+  function sanitizedSkippedDetail(detail = {}) {
+    const { decision, ...rest } = detail || {};
+    return rest;
   }
 
   function findElementForDecision(decision) {

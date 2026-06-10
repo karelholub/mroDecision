@@ -167,6 +167,24 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(eventReport.by_variant[0].key, "control");
   assert.equal(eventReport.recent_events[0].event_id, "evt-test-1");
   assert.equal(store.getClientEventMetrics({ event_object: "control" }).recent_events[0].event_id, "evt-test-1");
+  const skippedClientEvent = store.addClientEvent({
+    event_id: "evt-skip-1",
+    event_type: "skipped",
+    occurred_at: "2026-05-27T00:02:30.000Z",
+    decision_key: "campaign_suppression",
+    profile_key: "p-2",
+    rule_version: 1,
+    variant_key: "control",
+    message_id: "hero_message",
+    surface: "homepage",
+    context: { skipped_reason: "consent" },
+    event: { name: "skipped", reason: "consent", category: "targeting" }
+  });
+  assert.equal(skippedClientEvent.accepted, true);
+  assert.equal(store.countClientEvents({ event_type: "skipped", decision_key: "campaign_suppression" }), 1);
+  const skippedReport = store.getClientEventMetrics({ message_id: "hero_message" });
+  assert.equal(skippedReport.recent_events[0].event_type, "skipped");
+  assert.equal(skippedReport.recent_events[0].event.reason, "consent");
 
   store.createRuleSet(
     {

@@ -354,6 +354,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientEventResponse"
+  /v1/client/skipped:
+    post:
+      summary: Record a skipped client delivery
+      description: Requires a token with the `client` scope. Used when the SDK does not render a placement because of consent, targeting, SDK conditions, display frequency, or dismiss policy.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientEventRequest"
+      responses:
+        "200":
+          description: Duplicate client event ignored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientEventResponse"
+        "202":
+          description: Accepted client event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientEventResponse"
   /v1/assistant/plan:
     post:
       summary: Create a guarded assistant draft plan

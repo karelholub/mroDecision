@@ -7826,7 +7826,7 @@ header {
 
 .message-performance-kpis {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 8px;
 }
 
@@ -7883,6 +7883,66 @@ header {
   font-style: normal;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.message-delivery-diagnostics {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.message-delivery-diagnostic-list {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.message-delivery-diagnostic-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(44px, auto) minmax(150px, 1fr) minmax(180px, 1.4fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  border-radius: 7px;
+  padding: 8px;
+  background: #f8fafc;
+}
+
+.message-delivery-diagnostic-row span,
+.message-delivery-diagnostic-row strong,
+.message-delivery-diagnostic-row em,
+.message-delivery-diagnostic-row small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.message-delivery-diagnostic-row span {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.message-delivery-diagnostic-row strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.message-delivery-diagnostic-row em,
+.message-delivery-diagnostic-row small,
+.message-delivery-empty {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.message-delivery-empty {
+  border-radius: 7px;
+  padding: 8px;
+  background: #f8fafc;
 }
 
 .message-survey-analytics {

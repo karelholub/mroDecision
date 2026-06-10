@@ -2417,7 +2417,7 @@ function migrate(db) {
 
     CREATE TABLE IF NOT EXISTS client_events (
       event_id TEXT PRIMARY KEY,
-      event_type TEXT NOT NULL CHECK (event_type IN ('impression', 'exposure', 'conversion')),
+      event_type TEXT NOT NULL CHECK (event_type IN ('impression', 'exposure', 'conversion', 'skipped')),
       occurred_at TEXT NOT NULL,
       decision_key TEXT NOT NULL,
       profile_key TEXT NOT NULL,
@@ -4002,12 +4002,12 @@ function isPlainObject(value) {
 
 function migrateClientEventsForConversions(db) {
   const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'client_events'").get();
-  if (!row?.sql || row.sql.includes("'conversion'")) return;
+  if (!row?.sql || row.sql.includes("'skipped'")) return;
   db.exec(`
     ALTER TABLE client_events RENAME TO client_events_old;
     CREATE TABLE client_events (
       event_id TEXT PRIMARY KEY,
-      event_type TEXT NOT NULL CHECK (event_type IN ('impression', 'exposure', 'conversion')),
+      event_type TEXT NOT NULL CHECK (event_type IN ('impression', 'exposure', 'conversion', 'skipped')),
       occurred_at TEXT NOT NULL,
       decision_key TEXT NOT NULL,
       profile_key TEXT NOT NULL,
