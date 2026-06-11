@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { config } from "./config.js";
+import { normalizeDecisionStack } from "./decisionStacks.js";
 import { nativePostgresAdapterInfo, nativePostgresSchemaSql } from "./storePostgresNativeSchema.js";
 
 const allowedSettingKeys = new Set([
@@ -98,6 +99,64 @@ export class PostgresNativeReadStore {
       ...rowToRuleSet(row),
       versions: await this.getVersionsForRuleSet(key)
     };
+  }
+
+  async listDecisionStacks() {
+    const result = await this.client.query("SELECT * FROM decision_stacks ORDER BY updated_at DESC, id ASC", []);
+    return result.rows.map(rowToDecisionStack);
+  }
+
+  async getDecisionStack(id) {
+    const result = await this.client.query("SELECT * FROM decision_stacks WHERE id = $1", [id]);
+    return result.rows[0] ? rowToDecisionStack(result.rows[0]) : undefined;
+  }
+
+  async upsertDecisionStack(input, author = "system") {
+    const existing = input.id ? await this.getDecisionStack(input.id) : undefined;
+    const stack = normalizeDecisionStack(input, author, existing);
+    await this.client.query(
+      `INSERT INTO decision_stacks (
+        id, name, description, status, surface, ttl_seconds,
+        steps_json, metadata_json, created_at, updated_at, author
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        description = excluded.description,
+        status = excluded.status,
+        surface = excluded.surface,
+        ttl_seconds = excluded.ttl_seconds,
+        steps_json = excluded.steps_json,
+        metadata_json = excluded.metadata_json,
+        updated_at = excluded.updated_at,
+        author = excluded.author`,
+      [
+        stack.id,
+        stack.name,
+        stack.description,
+        stack.status,
+        stack.surface,
+        stack.ttl_seconds,
+        JSON.stringify(stack.steps),
+        JSON.stringify(stack.metadata),
+        stack.created_at,
+        stack.updated_at,
+        stack.author
+      ]
+    );
+    return stack;
+  }
+
+  async archiveDecisionStack(id, author = "system") {
+    const stack = await this.getDecisionStack(id);
+    if (!stack) throw new Error(`Decision stack not found: ${id}`);
+    const updated = { ...stack, status: "archived", author, updated_at: new Date().toISOString() };
+    await this.client.query("UPDATE decision_stacks SET status = $1, updated_at = $2, author = $3 WHERE id = $4", [
+      updated.status,
+      updated.updated_at,
+      updated.author,
+      updated.id
+    ]);
+    return updated;
   }
 
   async getVersionsForRuleSet(key) {
@@ -1817,6 +1876,22 @@ function rowToPublicRuleSet(row) {
     created_at: ruleSet.created_at,
     updated_at: ruleSet.updated_at,
     last_published_at: latest?.published_at || null
+  };
+}
+
+function rowToDecisionStack(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || "",
+    status: row.status || "draft",
+    surface: row.surface || "",
+    ttl_seconds: Number(row.ttl_seconds || 0),
+    steps: parseJson(row.steps_json, []),
+    metadata: parseJson(row.metadata_json, {}),
+    created_at: isoValue(row.created_at),
+    updated_at: isoValue(row.updated_at),
+    author: row.author
   };
 }
 

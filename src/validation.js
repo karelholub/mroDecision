@@ -1,6 +1,8 @@
 const slugPattern = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
 const allowedSources = new Set(["attribute", "segment", "context", "score"]);
 const allowedRuleSetTypes = new Set(["decision", "inapp_message", "experiment"]);
+const allowedDecisionStackStatuses = new Set(["draft", "active", "archived"]);
+const allowedDecisionStackStepModes = new Set(["always", "on_result", "on_output"]);
 const allowedOperators = new Set([
   "equals",
   "not_equals",
@@ -56,6 +58,47 @@ export function validateClientEvaluateRequest(body) {
   if (!isPlainObject(body)) badRequest("Request body must be an object");
   requiredString(body, "decision_key");
   requiredString(body, "profile_key");
+  optionalObject(body, "attributes");
+  optionalObject(body, "segments");
+  optionalObject(body, "context");
+}
+
+export function validateDecisionStackPayload(body) {
+  if (!isPlainObject(body)) badRequest("Decision stack payload must be an object");
+  requiredString(body, "id");
+  if (!slugPattern.test(body.id)) badRequest("Decision stack id must be a slug using lowercase letters, numbers, and underscores");
+  if (body.name != null) requiredString(body, "name");
+  if (body.status != null && !allowedDecisionStackStatuses.has(body.status)) badRequest("Decision stack status must be draft, active, or archived");
+  if (body.surface != null && typeof body.surface !== "string") badRequest("surface must be a string");
+  if (body.ttl_seconds != null && (!Number.isInteger(Number(body.ttl_seconds)) || Number(body.ttl_seconds) < 0)) {
+    badRequest("ttl_seconds must be a non-negative integer");
+  }
+  optionalObject(body, "metadata");
+  if (!Array.isArray(body.steps) || body.steps.length === 0) badRequest("Decision stack steps must be a non-empty array");
+  const ids = new Set();
+  for (const step of body.steps) {
+    if (!isPlainObject(step)) badRequest("Every decision stack step must be an object");
+    requiredString(step, "id");
+    if (!slugPattern.test(step.id)) badRequest("Decision stack step id must be a slug using lowercase letters, numbers, and underscores");
+    if (ids.has(step.id)) badRequest("Decision stack step ids must be unique");
+    ids.add(step.id);
+    requiredString(step, "decision_key");
+    if (!slugPattern.test(step.decision_key)) badRequest("Decision stack step decision_key must be a slug");
+    if (step.mode != null && !allowedDecisionStackStepModes.has(step.mode)) badRequest("Decision stack step mode must be always, on_result, or on_output");
+    if (step.required_output != null) optionalObject(step, "required_output");
+    if (step.stop_on_results != null && !Array.isArray(step.stop_on_results)) badRequest("Decision stack step stop_on_results must be an array");
+    if (step.stop_on != null && !Array.isArray(step.stop_on)) badRequest("Decision stack step stop_on must be an array");
+    if (step.rule_version != null && !Number.isInteger(Number(step.rule_version))) badRequest("Decision stack step rule_version must be an integer");
+    if (step.merge_outputs != null && typeof step.merge_outputs !== "boolean") badRequest("Decision stack step merge_outputs must be boolean");
+    if (step.stop_on_error != null && typeof step.stop_on_error !== "boolean") badRequest("Decision stack step stop_on_error must be boolean");
+    if (step.metadata != null) optionalObject(step, "metadata");
+  }
+}
+
+export function validateDecisionStackEvaluateRequest(body) {
+  if (!isPlainObject(body)) badRequest("Request body must be an object");
+  requiredString(body, "profile_key");
+  if (body.identifiers != null && !Array.isArray(body.identifiers)) badRequest("identifiers must be an array");
   optionalObject(body, "attributes");
   optionalObject(body, "segments");
   optionalObject(body, "context");
@@ -279,6 +322,7 @@ export function validateBundle(bundle) {
   if (!isPlainObject(bundle)) badRequest("Import bundle must be an object");
   if (bundle.kind !== "meiro-dee-config-bundle") badRequest("Unsupported bundle kind");
   if (!Array.isArray(bundle.rule_sets)) badRequest("Bundle rule_sets must be an array");
+  if (bundle.decision_stacks != null && !Array.isArray(bundle.decision_stacks)) badRequest("Bundle decision_stacks must be an array");
   if (bundle.lookup_tables != null && !Array.isArray(bundle.lookup_tables)) badRequest("Bundle lookup_tables must be an array");
   if (bundle.messages != null && !Array.isArray(bundle.messages)) badRequest("Bundle messages must be an array");
   if (bundle.condition_blocks != null && !Array.isArray(bundle.condition_blocks)) {
@@ -294,6 +338,9 @@ export function validateBundle(bundle) {
       if (!Number.isInteger(Number(version.version))) badRequest(`Rule set ${ruleSet.decision_key} has an invalid version`);
       validateRuleDefinition(version.definition);
     }
+  }
+  for (const stack of bundle.decision_stacks || []) {
+    validateDecisionStackPayload(stack);
   }
   for (const block of bundle.condition_blocks || []) {
     if (!isPlainObject(block)) badRequest("Every condition block must be an object");

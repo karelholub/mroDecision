@@ -791,6 +791,40 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   await rm(dataDir, { recursive: true, force: true });
 });
 
+test("sqlite store persists decision stacks", async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "dee-stack-store-"));
+  process.env.DEE_DATA_DIR = dataDir;
+  process.env.DEE_DB_PATH = path.join(dataDir, "test.sqlite");
+
+  const { Store } = await import(`../src/store.js?stack-store-test=${Date.now()}`);
+  const store = await Store.load();
+  const stack = store.upsertDecisionStack(
+    {
+      id: "web_journey",
+      name: "Web journey",
+      status: "active",
+      surface: "homepage",
+      ttl_seconds: 120,
+      steps: [
+        { id: "eligibility", decision_key: "homepage_eligibility" },
+        { id: "message", decision_key: "homepage_message", mode: "on_result", required_result: "eligible" }
+      ],
+      metadata: { owner: "growth" }
+    },
+    "tester"
+  );
+
+  assert.equal(stack.id, "web_journey");
+  assert.equal(store.listDecisionStacks()[0].status, "active");
+  assert.equal(store.getDecisionStack("web_journey").steps[1].mode, "on_result");
+  assert.equal(store.exportBundle().decision_stacks[0].id, "web_journey");
+  const archived = store.archiveDecisionStack("web_journey", "tester");
+  assert.equal(archived.status, "archived");
+  assert.equal(store.getDecisionStack("web_journey").metadata.owner, "growth");
+
+  await rm(dataDir, { recursive: true, force: true });
+});
+
 test("metrics expose Meiro Pipes in-app precompute profile rollups", async () => {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "dee-precompute-metrics-"));
   process.env.DEE_DATA_DIR = dataDir;

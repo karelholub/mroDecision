@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import { config, ensureDataDir } from "./config.js";
+import { normalizeDecisionStack } from "./decisionStacks.js";
 import { createdAtNow } from "./http.js";
 
 const databaseFile = () => config.dbPath;
@@ -59,6 +60,7 @@ const assistantProviderSettingKeys = [
 const snapshotTables = [
   "rule_sets",
   "rule_versions",
+  "decision_stacks",
   "lookup_tables",
   "lookup_table_versions",
   "messages",
@@ -158,6 +160,64 @@ export class Store {
       ...rowToRuleSet(row),
       versions: this.getVersionsForRuleSet(key)
     };
+  }
+
+  listDecisionStacks() {
+    return this.db
+      .prepare("SELECT * FROM decision_stacks ORDER BY updated_at DESC, id ASC")
+      .all()
+      .map(rowToDecisionStack);
+  }
+
+  getDecisionStack(id) {
+    const row = this.db.prepare("SELECT * FROM decision_stacks WHERE id = ?").get(id);
+    return row ? rowToDecisionStack(row) : undefined;
+  }
+
+  upsertDecisionStack(input, author) {
+    const existing = input.id ? this.getDecisionStack(input.id) : undefined;
+    const stack = normalizeDecisionStack(input, author, existing);
+    this.db
+      .prepare(
+        `INSERT INTO decision_stacks (
+          id, name, description, status, surface, ttl_seconds,
+          steps_json, metadata_json, created_at, updated_at, author
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          description = excluded.description,
+          status = excluded.status,
+          surface = excluded.surface,
+          ttl_seconds = excluded.ttl_seconds,
+          steps_json = excluded.steps_json,
+          metadata_json = excluded.metadata_json,
+          updated_at = excluded.updated_at,
+          author = excluded.author`
+      )
+      .run(
+        stack.id,
+        stack.name,
+        stack.description,
+        stack.status,
+        stack.surface,
+        stack.ttl_seconds,
+        stringify(stack.steps),
+        stringify(stack.metadata),
+        stack.created_at,
+        stack.updated_at,
+        stack.author
+      );
+    return stack;
+  }
+
+  archiveDecisionStack(id, author) {
+    const stack = this.getDecisionStack(id);
+    if (!stack) notFound(`Decision stack not found: ${id}`);
+    const updated = { ...stack, status: "archived", author, updated_at: createdAtNow() };
+    this.db
+      .prepare("UPDATE decision_stacks SET status = ?, updated_at = ?, author = ? WHERE id = ?")
+      .run(updated.status, updated.updated_at, updated.author, updated.id);
+    return updated;
   }
 
   listChangeLog(params = {}) {
@@ -2167,6 +2227,7 @@ export class Store {
         ...rowToRuleSet(row),
         versions: this.getVersionsForRuleSet(row.decision_key)
       })),
+      decision_stacks: this.listDecisionStacks(),
       lookup_tables: this.listLookupTables(),
       messages: this.listMessages(),
       condition_blocks: this.listConditionBlocks(),
@@ -2218,7 +2279,7 @@ export class Store {
   }
 
   importBundle(bundle, author) {
-    const imported = { rule_sets: 0, lookup_tables: 0, messages: 0, condition_blocks: 0, settings: 0 };
+    const imported = { rule_sets: 0, decision_stacks: 0, lookup_tables: 0, messages: 0, condition_blocks: 0, settings: 0 };
     this.transaction(() => {
       for (const ruleSet of bundle.rule_sets) {
         this.upsertRuleSet(ruleSet, author);
@@ -2227,6 +2288,10 @@ export class Store {
       for (const table of bundle.lookup_tables || []) {
         this.replaceLookupTable(table.id, table, author);
         imported.lookup_tables += 1;
+      }
+      for (const stack of bundle.decision_stacks || []) {
+        this.upsertDecisionStack(stack, author);
+        imported.decision_stacks += 1;
       }
       for (const message of bundle.messages || []) {
         this.upsertMessage(message.id, message, author);
@@ -2317,6 +2382,20 @@ function migrate(db) {
       metadata_json TEXT NOT NULL DEFAULT '{}',
       PRIMARY KEY (decision_key, version),
       FOREIGN KEY (decision_key) REFERENCES rule_sets(decision_key) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS decision_stacks (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'archived')),
+      surface TEXT NOT NULL DEFAULT '',
+      ttl_seconds INTEGER NOT NULL DEFAULT 0,
+      steps_json TEXT NOT NULL DEFAULT '[]',
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      author TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS lookup_tables (
@@ -2535,6 +2614,7 @@ function migrate(db) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_rule_versions_decision ON rule_versions(decision_key, version);
+    CREATE INDEX IF NOT EXISTS idx_decision_stacks_status ON decision_stacks(status, updated_at);
     CREATE INDEX IF NOT EXISTS idx_audit_decision_time ON audit_log(decision_key, evaluated_at);
     CREATE INDEX IF NOT EXISTS idx_audit_profile_time ON audit_log(profile_key, evaluated_at);
     CREATE INDEX IF NOT EXISTS idx_audit_result_time ON audit_log(result, evaluated_at);
@@ -2943,6 +3023,22 @@ function rowToPublicRuleSet(row) {
     created_at: ruleSet.created_at,
     updated_at: ruleSet.updated_at,
     last_published_at: latest?.published_at || null
+  };
+}
+
+function rowToDecisionStack(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || "",
+    status: row.status || "draft",
+    surface: row.surface || "",
+    ttl_seconds: Number(row.ttl_seconds || 0),
+    steps: parse(row.steps_json || "[]"),
+    metadata: parse(row.metadata_json || "{}"),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    author: row.author
   };
 }
 

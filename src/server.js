@@ -8,6 +8,7 @@ import { assistantProviderMetrics } from "./assistantProviderMetrics.js";
 import { applyAssistantPlan, rollbackAssistantPlan } from "./assistantPlanner.js";
 import { config } from "./config.js";
 import { createClientResultCache } from "./clientCache.js";
+import { evaluateDecisionStack } from "./decisionStacks.js";
 import { createClientTrafficMetrics } from "./clientTrafficMetrics.js";
 import { evaluateDecision, evaluateDecisionAsync } from "./evaluator.js";
 import { notFound, readJson, sendBuffer, sendError, sendJson, sendText, serveStatic } from "./http.js";
@@ -29,6 +30,8 @@ import {
   validateClientEvaluateRequest,
   validateClientSurfaceBatchRequest,
   validateClientSurfaceRequest,
+  validateDecisionStackEvaluateRequest,
+  validateDecisionStackPayload,
   validateEvaluateRequest,
   validateRuleDefinition,
   validateRuleSetPayload
@@ -162,6 +165,47 @@ async function routeApi(req, res, url) {
     }
     await saveStore();
     sendJson(res, 200, { results });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/v1/decision-stacks") {
+    requireScope(req, "viewer");
+    sendJson(res, 200, { decision_stacks: await storeCall("listDecisionStacks") });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/v1/decision-stacks") {
+    requireScope(req, "editor");
+    const body = await readJson(req, config.requestBodyLimitBytes);
+    validateDecisionStackPayload(body);
+    const stack = await storeCall("upsertDecisionStack", body, req.auth.name);
+    await saveStore();
+    sendJson(res, 200, { decision_stack: stack });
+    return;
+  }
+
+  const decisionStackMatch = pathname.match(/^\/v1\/decision-stacks\/([^/]+)$/);
+  if (req.method === "GET" && decisionStackMatch) {
+    requireScope(req, "viewer");
+    const stack = await storeCall("getDecisionStack", decodeURIComponent(decisionStackMatch[1]));
+    if (!stack) notFoundError(`Decision stack not found: ${decisionStackMatch[1]}`);
+    sendJson(res, 200, { decision_stack: stack });
+    return;
+  }
+
+  const decisionStackEvaluateMatch = pathname.match(/^\/v1\/decision-stacks\/([^/]+)\/evaluate$/);
+  if (req.method === "POST" && decisionStackEvaluateMatch) {
+    requireScope(req, "evaluate");
+    const stackId = decodeURIComponent(decisionStackEvaluateMatch[1]);
+    const body = await readJson(req, config.requestBodyLimitBytes);
+    validateDecisionStackEvaluateRequest(body);
+    const result = await evaluateDecisionStackRequest(stackId, body);
+    await saveStore();
+    queueDecisionFeedbackDelivery(result, body, {
+      source: body.context?.request_source || "decision_stack",
+      request_id: res.requestId
+    });
+    sendJson(res, 200, result);
     return;
   }
 
@@ -2664,6 +2708,42 @@ async function evaluateRequest(body) {
       attribute_keys: Object.keys(body.attributes || {}),
       segment_keys: Object.keys(body.segments || {}),
       context_keys: Object.keys(body.context || {})
+    }
+  });
+  return result;
+}
+
+async function evaluateDecisionStackRequest(stackId, body) {
+  const stack = await storeCall("getDecisionStack", stackId);
+  if (!stack) notFoundError(`Decision stack not found: ${stackId}`);
+  if (stack.status === "archived") badRequest("Archived decision stacks cannot be evaluated");
+  const baseRequest = {
+    identifiers: [],
+    attributes: {},
+    segments: {},
+    context: {},
+    ...body
+  };
+  const result = await evaluateDecisionStack({
+    stack,
+    request: baseRequest,
+    lookupTables: await storeCall("listLookupTables"),
+    store: {
+      getVersion: (decisionKey, version) => storeCall("getVersion", decisionKey, version)
+    },
+    clientEventCounter: (params) => storeCall("countClientEvents", params)
+  });
+  await storeCall("addAudit", {
+    ...result,
+    rule_version: 0,
+    inputs: {
+      identifiers_count: Array.isArray(baseRequest.identifiers) ? baseRequest.identifiers.length : 0,
+      attribute_keys: Object.keys(baseRequest.attributes || {}),
+      segment_keys: Object.keys(baseRequest.segments || {}),
+      context_keys: Object.keys(baseRequest.context || {}),
+      request_source: baseRequest.context?.request_source || "decision_stack",
+      stack_id: stack.id,
+      stack_steps: stack.steps.map((step) => step.decision_key)
     }
   });
   return result;

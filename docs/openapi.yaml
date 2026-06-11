@@ -142,6 +142,97 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/EvaluateResponse"
+  /v1/decision-stacks:
+    get:
+      summary: List decision stacks
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Decision stacks
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [decision_stacks]
+                properties:
+                  decision_stacks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DecisionStack"
+    post:
+      summary: Create or update a decision stack
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecisionStackWrite"
+      responses:
+        "200":
+          description: Saved decision stack
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [decision_stack]
+                properties:
+                  decision_stack:
+                    $ref: "#/components/schemas/DecisionStack"
+  /v1/decision-stacks/{stackId}:
+    get:
+      summary: Get a decision stack
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: stackId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Decision stack
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [decision_stack]
+                properties:
+                  decision_stack:
+                    $ref: "#/components/schemas/DecisionStack"
+        "404":
+          $ref: "#/components/responses/Error"
+  /v1/decision-stacks/{stackId}/evaluate:
+    post:
+      summary: Evaluate a profile through an ordered decision stack
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: stackId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecisionStackEvaluateRequest"
+      responses:
+        "200":
+          description: Decision stack result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionStackEvaluateResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
   /v1/client/evaluate:
     post:
       summary: Evaluate an app-facing decision, in-app message, or experiment
@@ -2154,6 +2245,127 @@ components:
           items:
             type: object
             additionalProperties: true
+        errors:
+          type: array
+          items:
+            type: string
+    DecisionStack:
+      type: object
+      required: [id, name, status, steps]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [draft, active, archived]
+        surface:
+          type: string
+        ttl_seconds:
+          type: integer
+        metadata:
+          type: object
+          additionalProperties: true
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/DecisionStackStep"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        author:
+          type: string
+    DecisionStackWrite:
+      allOf:
+        - $ref: "#/components/schemas/DecisionStack"
+    DecisionStackStep:
+      type: object
+      required: [id, decision_key]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        decision_key:
+          type: string
+        mode:
+          type: string
+          enum: [always, on_result, on_output]
+        required_result:
+          type: string
+          nullable: true
+        required_output:
+          type: object
+          additionalProperties: true
+        rule_version:
+          type: integer
+          nullable: true
+        output_namespace:
+          type: string
+        merge_outputs:
+          type: boolean
+        stop_on_results:
+          type: array
+          items:
+            type: string
+        stop_on_error:
+          type: boolean
+    DecisionStackEvaluateRequest:
+      type: object
+      required: [profile_key]
+      properties:
+        profile_key:
+          type: string
+        identifiers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Identifier"
+        attributes:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/AttributeValue"
+        segments:
+          type: object
+          additionalProperties:
+            type: boolean
+        context:
+          type: object
+          additionalProperties: true
+    DecisionStackEvaluateResponse:
+      type: object
+      required: [stack_id, profile_key, result, outputs, steps, matched_rules, errors]
+      properties:
+        stack_id:
+          type: string
+        decision_key:
+          type: string
+        profile_key:
+          type: string
+        evaluated_at:
+          type: string
+          format: date-time
+        result:
+          type: string
+        outputs:
+          type: object
+          additionalProperties: true
+        steps:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        matched_rules:
+          type: array
+          items:
+            type: string
         errors:
           type: array
           items:

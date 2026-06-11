@@ -42,6 +42,7 @@ Implemented:
 - Settings UI for portable config export/import across rules, reference data, messages, condition blocks, and non-secret environment settings.
 - OpenAPI and Meiro Pipes integration templates.
 - Guardrailed assistant planner/apply endpoints for draft-only rule, message, and experiment configuration.
+- Decision stacks as advanced journey objects with ordered multi-rule evaluation, conditional step execution, stop policies, merged outputs, audit logging, and Postgres-native schema support.
 - Readiness endpoint, request IDs, request logs, bootstrap-token disablement, CI checks, production Compose/nginx examples, and deployment/backup guidance.
 
 Important gaps:
@@ -102,6 +103,21 @@ Goal: support the full v2 graph model without forcing engineers to edit JSON.
 Open decision: ship a pragmatic graph editor first, then add deeper route grouping and branch folding only when complex customer flows require them.
 
 Status: first-pass graph authoring is implemented with Branch/Graph mode switching, node cards for input, condition, score, lookup, frequency cap, output, fallback, and error nodes, draggable canvas positioning, visual route preview, JSON sync, route/reachability validation, draft/published evaluation trace cards, branch value-source comparisons, reusable condition blocks, branch output TTL helpers, safer publish review, guided helpers for lookup and frequency-cap nodes, a canvas minimap, and configurable snap-to-grid behavior.
+
+## Phase 3B: Decision Stacks for Coordinated Journeys
+
+Goal: support coordinated multi-rule decisions where one profile/context request must evaluate eligibility, suppression, offer/message selection, experiment assignment, and channel-specific delivery logic as one traceable journey.
+
+- Add stack objects with `draft`, `active`, and `archived` lifecycle.
+- Define ordered steps, each pointing to a published rule set.
+- Support conditional step execution by prior result or prior output.
+- Support stop policies for terminal results such as `ineligible` and `suppressed`.
+- Merge outputs into a combined response while preserving namespaced step outputs.
+- Write stack-level audit entries and expose per-step trace for debugging.
+- Keep stacks as an advanced feature; simple single-rule calls continue to use `/v1/evaluate` and `/v1/client/evaluate`.
+- Next UI slice: add a Decision Stacks advanced screen with step cards, dependency lines, validation, and “test journey” preview.
+
+Status: backend API, SQLite/Postgres persistence, validation, and evaluator tests are implemented. UI authoring remains on the roadmap.
 
 ## Phase 4: Client-Facing In-App and Experiment APIs
 

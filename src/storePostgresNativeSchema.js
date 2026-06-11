@@ -22,6 +22,7 @@ const nativePostgresTables = [
   "dee_migrations",
   "rule_sets",
   "rule_versions",
+  "decision_stacks",
   "lookup_tables",
   "lookup_table_versions",
   "messages",
@@ -75,6 +76,19 @@ export function nativePostgresSchemaSql() {
       definition_json JSONB NOT NULL,
       metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
       PRIMARY KEY (decision_key, version)
+    )`,
+    `CREATE TABLE IF NOT EXISTS decision_stacks (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'archived')),
+      surface TEXT NOT NULL DEFAULT '',
+      ttl_seconds INTEGER NOT NULL DEFAULT 0,
+      steps_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+      metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL,
+      author TEXT NOT NULL
     )`,
     `CREATE TABLE IF NOT EXISTS lookup_tables (
       id TEXT PRIMARY KEY,
@@ -284,6 +298,7 @@ export function nativePostgresSchemaSql() {
 export function nativePostgresIndexSql() {
   return [
     "CREATE INDEX IF NOT EXISTS idx_rule_versions_decision ON rule_versions(decision_key, version)",
+    "CREATE INDEX IF NOT EXISTS idx_decision_stacks_status ON decision_stacks(status, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_audit_decision_time ON audit_log(decision_key, evaluated_at)",
     "CREATE INDEX IF NOT EXISTS idx_audit_profile_time ON audit_log(profile_key, evaluated_at)",
     "CREATE INDEX IF NOT EXISTS idx_audit_result_time ON audit_log(result, evaluated_at)",

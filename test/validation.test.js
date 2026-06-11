@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   validateBundle,
   validateClientEventRequest,
+  validateDecisionStackEvaluateRequest,
+  validateDecisionStackPayload,
   validateEvaluateRequest,
   validateRuleDefinition,
   validateRuleSetPayload,
@@ -353,4 +355,27 @@ test("validates client surface batch requests", () => {
     () => validateClientSurfaceBatchRequest({ surface: "homepage_hero", profiles: [{ profile_key: "p1", limit: 1.5 }] }),
     /profile limit/
   );
+});
+
+test("validates decision stack payloads", () => {
+  assert.doesNotThrow(() =>
+    validateDecisionStackPayload({
+      id: "web_journey",
+      name: "Web journey",
+      status: "active",
+      steps: [
+        { id: "eligibility", decision_key: "eligibility_check" },
+        { id: "offer", decision_key: "offer_selection", mode: "on_result", required_result: "eligible" }
+      ]
+    })
+  );
+  assert.throws(
+    () => validateDecisionStackPayload({ id: "bad-key", steps: [{ id: "step_1", decision_key: "offer_selection" }] }),
+    /Decision stack id/
+  );
+  assert.throws(
+    () => validateDecisionStackPayload({ id: "stack", steps: [{ id: "one", decision_key: "OfferSelection" }] }),
+    /decision_key/
+  );
+  assert.doesNotThrow(() => validateDecisionStackEvaluateRequest({ profile_key: "profile-1", attributes: {} }));
 });
