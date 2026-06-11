@@ -5877,6 +5877,31 @@ header {
   text-align: right;
 }
 
+.precompute-raw-sample {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.precompute-raw-sample summary {
+  cursor: pointer;
+  padding: 8px 10px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.precompute-raw-sample pre {
+  max-height: 360px;
+  margin: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 7px 7px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .precompute-status {
   justify-self: start;
   border-radius: 5px;

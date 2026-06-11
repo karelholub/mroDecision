@@ -871,6 +871,17 @@ test("metrics expose Meiro Pipes in-app precompute profile rollups", async () =>
       diagnostics: {
         requested_surface: "homepage_footer",
         no_candidate_reason: "no_published_inapp_rules_for_surface"
+      },
+      raw_sample: {
+        endpoint: "/v1/client/surface/batch",
+        surface: "homepage_footer",
+        profile_count: 60,
+        profiles: [
+          {
+            profile_key: "profile-raw-1",
+            attributes: { lead_score: [{ value: 42 }] }
+          }
+        ]
       }
     }
   });
@@ -957,6 +968,7 @@ test("metrics expose Meiro Pipes in-app precompute profile rollups", async () =>
     );
     const emptyRun = metrics.precompute.recent_runs.find((run) => run.sync_id === "sync-empty");
     assert.equal(emptyRun.diagnostics.no_candidate_reason, "no_published_inapp_rules_for_surface");
+    assert.equal(emptyRun.raw_sample.profiles[0].profile_key, "profile-raw-1");
   } finally {
     Date.now = originalDateNow;
     await rm(dataDir, { recursive: true, force: true });

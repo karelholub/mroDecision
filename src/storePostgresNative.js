@@ -2030,7 +2030,8 @@ function rowToPrecomputeRun(row) {
     eligible_count: Number(row.eligible_count || 0),
     not_selected_count: Number(row.not_selected_count || 0),
     error_count: Number(row.error_count || 0),
-    diagnostics: payload.diagnostics || null
+    diagnostics: payload.diagnostics || null,
+    raw_sample: payload.raw_sample || null
   };
 }
 

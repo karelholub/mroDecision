@@ -3945,6 +3945,12 @@ function precomputeRunRows(items = []) {
       <em title="${escapeHtml(precomputeReasonLabel(item.diagnostics?.no_candidate_reason || ""))}">${formatNumber(item.candidate_evaluations || 0)} candidates</em>
       <time>${item.received_at ? escapeHtml(clientEventClock(item.received_at)) : "-"}</time>
     </div>
+    ${item.raw_sample ? `
+      <details class="precompute-raw-sample">
+        <summary>Raw profile sample</summary>
+        <pre>${escapeHtml(JSON.stringify(item.raw_sample, null, 2))}</pre>
+      </details>
+    ` : ""}
   `).join("") : `<div class="status-line">No recent runs</div>`;
 }
 

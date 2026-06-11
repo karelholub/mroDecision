@@ -3399,7 +3399,10 @@ async function evaluateClientSurfaceBatch(req, body) {
     eligible_count: eligible,
     not_selected_count: suppressed,
     error_count: errors,
-    metadata: { diagnostics: batchPlan.diagnostics }
+    metadata: {
+      diagnostics: batchPlan.diagnostics,
+      raw_sample: precomputeRawSample(body, results)
+    }
   });
 
   return {
@@ -3415,6 +3418,42 @@ async function evaluateClientSurfaceBatch(req, body) {
     diagnostics: batchPlan.diagnostics,
     results
   };
+}
+
+function precomputeRawSample(body = {}, results = []) {
+  const profiles = Array.isArray(body.profiles) ? body.profiles : [];
+  return {
+    captured_at: new Date().toISOString(),
+    endpoint: "/v1/client/surface/batch",
+    surface: body.surface || "",
+    limit: body.limit ?? null,
+    context: boundedPayload(body.context || {}),
+    profile_count: profiles.length,
+    profiles: profiles.slice(0, 5).map((profile, index) => ({
+      index,
+      profile_key: profile.profile_key || "",
+      identifiers: boundedPayload(profile.identifiers || []),
+      attributes: boundedPayload(profile.attributes || {}),
+      segments: boundedPayload(profile.segments || {}),
+      context: boundedPayload(profile.context || {}),
+      result_summary: {
+        selected: results[index]?.selected?.decision_key || null,
+        candidates: Array.isArray(results[index]?.candidates) ? results[index].candidates.length : 0,
+        error: results[index]?.error?.message || null
+      },
+      raw_profile: boundedPayload(profile)
+    }))
+  };
+}
+
+function boundedPayload(value, depth = 0) {
+  if (depth > 5) return "[depth_limit]";
+  if (Array.isArray(value)) return value.slice(0, 20).map((item) => boundedPayload(item, depth + 1));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).slice(0, 80).map(([key, item]) => [key, boundedPayload(item, depth + 1)]));
+  }
+  if (typeof value === "string" && value.length > 1200) return `${value.slice(0, 1200)}... [truncated]`;
+  return value;
 }
 
 function surfaceEvaluationPlan(body = {}, auth = {}) {
