@@ -233,6 +233,30 @@ paths:
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
+  /v1/decision-stacks/{stackId}/archive:
+    post:
+      summary: Archive a decision stack
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: stackId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Archived decision stack
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [decision_stack]
+                properties:
+                  decision_stack:
+                    $ref: "#/components/schemas/DecisionStack"
+        "404":
+          $ref: "#/components/responses/Error"
   /v1/client/evaluate:
     post:
       summary: Evaluate an app-facing decision, in-app message, or experiment

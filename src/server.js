@@ -209,6 +209,15 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  const decisionStackArchiveMatch = pathname.match(/^\/v1\/decision-stacks\/([^/]+)\/archive$/);
+  if (req.method === "POST" && decisionStackArchiveMatch) {
+    requireScope(req, "editor");
+    const stack = await storeCall("archiveDecisionStack", decodeURIComponent(decisionStackArchiveMatch[1]), req.auth.name);
+    await saveStore();
+    sendJson(res, 200, { decision_stack: stack });
+    return;
+  }
+
   if (req.method === "POST" && pathname === "/v1/client/evaluate") {
     requireScope(req, "client");
     enforceClientRateLimit(req, res, "evaluate");

@@ -118,6 +118,10 @@ const experimentSort = document.querySelector("#experiment-sort");
 const campaignMasterList = document.querySelector("#campaign-master-list");
 const campaignMasterDetail = document.querySelector("#campaign-master-detail");
 const clearCampaignSelection = document.querySelector("#clear-campaign-selection");
+const stackList = document.querySelector("#stack-list");
+const stackSteps = document.querySelector("#stack-steps");
+const stackOutput = document.querySelector("#stack-output");
+const stackTestPayload = document.querySelector("#stack-test-payload");
 const ruleInspectorSummary = document.querySelector("#rule-inspector-summary");
 const inspectorKey = document.querySelector("#inspector-key");
 const inspectorSurface = document.querySelector("#inspector-surface");
@@ -154,6 +158,7 @@ let cachedMessageAssets = [];
 let cachedExperiments = [];
 let cachedExperimentSummary = {};
 let cachedCampaigns = [];
+let cachedDecisionStacks = [];
 let cachedMeiroDeliveries = [];
 let cachedSettings = {};
 let cachedSchema = [];
@@ -165,6 +170,7 @@ let cachedAssistantRollback = [];
 let assistantChatHistory = [];
 let selectedExperimentKey = null;
 let selectedCampaignName = "";
+let selectedStackId = null;
 let activeExperimentTab = "design";
 let selectedLookupMetadata = {};
 let conditionBlocksLoaded = false;
@@ -233,6 +239,7 @@ function switchView(viewName, options = {}) {
   }
   if (viewName === "overview") loadMetrics();
   if (viewName === "experiments") loadExperiments();
+  if (viewName === "stacks") loadDecisionStacks();
   if (viewName === "audit") loadAudit();
 }
 
@@ -313,6 +320,12 @@ document.querySelectorAll("[data-assistant-suggestion]").forEach((button) => {
   });
 });
 document.querySelector("#refresh-rules").addEventListener("click", loadRules);
+document.querySelector("#refresh-stacks")?.addEventListener("click", loadDecisionStacks);
+document.querySelector("#new-stack")?.addEventListener("click", createNewStackDraft);
+document.querySelector("#add-stack-step")?.addEventListener("click", () => addStackStep());
+document.querySelector("#save-stack")?.addEventListener("click", saveDecisionStack);
+document.querySelector("#archive-stack")?.addEventListener("click", archiveDecisionStack);
+document.querySelector("#run-stack-test")?.addEventListener("click", runDecisionStackTest);
 document.querySelector("#rule-filter-search").addEventListener("input", renderRuleList);
 document.querySelector("#rule-filter-status").addEventListener("change", renderRuleList);
 document.querySelector("#rule-filter-type").addEventListener("change", renderRuleList);
@@ -631,6 +644,7 @@ document.addEventListener("keydown", (event) => {
 loadMetrics();
 loadExperiments();
 loadRules();
+loadDecisionStacks();
 newRule({ silent: true });
 newLookup({ silent: true });
 newMessage({ silent: true });
@@ -743,11 +757,288 @@ async function loadRules() {
     renderRuleInspector();
     renderMessageRuleLinks();
     renderMessageSurfaceOptions();
+    if (stackSteps?.querySelector(".stack-step-card")) {
+      const defaultRule = cachedRuleSets[0]?.decision_key || "";
+      renderStackSteps(readStackSteps().map((step) => ({ ...step, decision_key: step.decision_key || defaultRule })));
+    }
   } catch (error) {
     const target = document.querySelector("#rule-list");
     target.innerHTML = header(["Name", "Decision key", "Status", "Version", "Actions"]);
     target.innerHTML += row([error.message, "", "", "", ""]);
   }
+}
+
+async function loadDecisionStacks() {
+  if (!stackList) return;
+  try {
+    const body = await api("/v1/decision-stacks");
+    cachedDecisionStacks = body.decision_stacks || [];
+    renderDecisionStackList();
+    if (!selectedStackId && cachedDecisionStacks.length) {
+      selectDecisionStack(cachedDecisionStacks[0].id);
+    } else if (selectedStackId) {
+      const selected = cachedDecisionStacks.find((stack) => stack.id === selectedStackId);
+      if (selected) fillStackForm(selected);
+      else createNewStackDraft();
+    } else {
+      createNewStackDraft({ silent: true });
+    }
+  } catch (error) {
+    stackList.innerHTML = `<div class="status-line">Decision stacks unavailable: ${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderDecisionStackList() {
+  if (!stackList) return;
+  stackList.innerHTML = cachedDecisionStacks.length
+    ? cachedDecisionStacks.map((stack) => `
+      <button type="button" class="stack-card ${stack.id === selectedStackId ? "active" : ""}" data-stack-id="${escapeHtml(stack.id)}">
+        <span>${escapeHtml(stack.status || "draft")}</span>
+        <strong>${escapeHtml(stack.name || stack.id)}</strong>
+        <small>${escapeHtml(stack.id)} · ${formatNumber(stack.steps?.length || 0)} steps</small>
+        <small>${escapeHtml(stack.surface || "Any surface")}</small>
+      </button>
+    `).join("")
+    : `<div class="status-line">No decision stacks yet. Create a journey to coordinate multiple rule sets.</div>`;
+  stackList.querySelectorAll("[data-stack-id]").forEach((button) => {
+    button.addEventListener("click", () => selectDecisionStack(button.dataset.stackId));
+  });
+}
+
+function selectDecisionStack(id) {
+  selectedStackId = id;
+  const stack = cachedDecisionStacks.find((item) => item.id === id);
+  if (stack) fillStackForm(stack);
+  renderDecisionStackList();
+}
+
+function createNewStackDraft(options = {}) {
+  selectedStackId = null;
+  fillStackForm({
+    id: "",
+    name: "",
+    description: "",
+    status: "draft",
+    surface: "",
+    ttl_seconds: 0,
+    metadata: { result_policy: "last_evaluated" },
+    steps: [
+      {
+        id: "eligibility",
+        decision_key: cachedRuleSets[0]?.decision_key || "",
+        mode: "always",
+        output_namespace: "eligibility",
+        merge_outputs: true,
+        stop_on_results: ["ineligible", "suppressed"],
+        stop_on_error: true
+      }
+    ]
+  });
+  renderDecisionStackList();
+  if (!options.silent) stackOutput.textContent = "Draft a stack, save it, then run a journey test.";
+}
+
+function fillStackForm(stack) {
+  document.querySelector("#stack-id").value = stack.id || "";
+  document.querySelector("#stack-name").value = stack.name || "";
+  document.querySelector("#stack-description").value = stack.description || "";
+  document.querySelector("#stack-status").value = stack.status || "draft";
+  document.querySelector("#stack-surface").value = stack.surface || "";
+  document.querySelector("#stack-ttl").value = Number(stack.ttl_seconds || 0);
+  document.querySelector("#stack-result-policy").value = stack.metadata?.result_policy || "last_evaluated";
+  renderStackSteps(stack.steps || []);
+  if (stackTestPayload && !stackTestPayload.value.trim()) {
+    stackTestPayload.value = JSON.stringify(defaultStackTestPayload(stack), null, 2);
+  }
+}
+
+function renderStackSteps(steps = []) {
+  if (!stackSteps) return;
+  stackSteps.innerHTML = steps.map((step, index) => stackStepCard(step, index)).join("");
+  stackSteps.querySelectorAll("[data-stack-step-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const rows = readStackSteps();
+      const index = Number(button.dataset.stepIndex);
+      if (button.dataset.stackStepAction === "remove") rows.splice(index, 1);
+      if (button.dataset.stackStepAction === "up" && index > 0) [rows[index - 1], rows[index]] = [rows[index], rows[index - 1]];
+      if (button.dataset.stackStepAction === "down" && index < rows.length - 1) [rows[index], rows[index + 1]] = [rows[index + 1], rows[index]];
+      renderStackSteps(rows);
+    });
+  });
+}
+
+function stackStepCard(step = {}, index = 0) {
+  const ruleOptions = cachedRuleSets.map((rule) =>
+    `<option value="${escapeHtml(rule.decision_key)}" ${rule.decision_key === step.decision_key ? "selected" : ""}>${escapeHtml(rule.name || rule.decision_key)} (${escapeHtml(rule.decision_key)})</option>`
+  ).join("");
+  return `
+    <div class="stack-step-card" data-stack-step-index="${index}">
+      <div class="stack-step-order">${index + 1}</div>
+      <div class="stack-step-fields">
+        <label>
+          Step ID
+          <input data-stack-field="id" value="${escapeHtml(step.id || `step_${index + 1}`)}" />
+        </label>
+        <label>
+          Rule set
+          <select data-stack-field="decision_key">
+            <option value="">Select rule</option>
+            ${ruleOptions}
+          </select>
+        </label>
+        <label>
+          Run mode
+          <select data-stack-field="mode">
+            ${["always", "on_result", "on_output"].map((mode) => `<option value="${mode}" ${mode === (step.mode || "always") ? "selected" : ""}>${stackModeLabel(mode)}</option>`).join("")}
+          </select>
+        </label>
+        <label>
+          Required result
+          <input data-stack-field="required_result" value="${escapeHtml(step.required_result || "")}" placeholder="eligible" />
+        </label>
+        <label>
+          Output namespace
+          <input data-stack-field="output_namespace" value="${escapeHtml(step.output_namespace || step.decision_key || "")}" />
+        </label>
+        <label>
+          Stop on results
+          <input data-stack-field="stop_on_results" value="${escapeHtml((step.stop_on_results || step.stop_on || ["ineligible", "suppressed"]).join(", "))}" />
+        </label>
+        <label>
+          Required output JSON
+          <textarea data-stack-field="required_output" rows="2" placeholder='{"offer_id":"premium"}'>${escapeHtml(stableStringify(step.required_output || {}))}</textarea>
+        </label>
+        <label>
+          Merge outputs
+          <select data-stack-field="merge_outputs">
+            <option value="true" ${step.merge_outputs === false ? "" : "selected"}>Yes</option>
+            <option value="false" ${step.merge_outputs === false ? "selected" : ""}>No</option>
+          </select>
+        </label>
+      </div>
+      <div class="stack-step-actions">
+        <button type="button" data-stack-step-action="up" data-step-index="${index}">Up</button>
+        <button type="button" data-stack-step-action="down" data-step-index="${index}">Down</button>
+        <button type="button" data-stack-step-action="remove" data-step-index="${index}">Remove</button>
+      </div>
+    </div>
+  `;
+}
+
+function stackModeLabel(mode) {
+  if (mode === "on_result") return "After previous result";
+  if (mode === "on_output") return "After previous output";
+  return "Always";
+}
+
+function addStackStep() {
+  const rows = readStackSteps();
+  rows.push({
+    id: `step_${rows.length + 1}`,
+    decision_key: cachedRuleSets[0]?.decision_key || "",
+    mode: rows.length ? "on_result" : "always",
+    required_result: rows.length ? "eligible" : "",
+    output_namespace: "",
+    merge_outputs: true,
+    stop_on_results: ["ineligible", "suppressed"],
+    stop_on_error: true
+  });
+  renderStackSteps(rows);
+}
+
+function readStackForm() {
+  const metadata = { result_policy: document.querySelector("#stack-result-policy").value || "last_evaluated" };
+  return {
+    id: document.querySelector("#stack-id").value.trim(),
+    name: document.querySelector("#stack-name").value.trim(),
+    description: document.querySelector("#stack-description").value.trim(),
+    status: document.querySelector("#stack-status").value,
+    surface: document.querySelector("#stack-surface").value.trim(),
+    ttl_seconds: Number(document.querySelector("#stack-ttl").value || 0),
+    metadata,
+    steps: readStackSteps()
+  };
+}
+
+function readStackSteps() {
+  return [...(stackSteps?.querySelectorAll(".stack-step-card") || [])].map((card) => {
+    const value = (field) => card.querySelector(`[data-stack-field="${field}"]`)?.value ?? "";
+    const requiredOutputText = value("required_output").trim();
+    const requiredOutput = requiredOutputText ? parseJsonStrict(requiredOutputText) : {};
+    return {
+      id: value("id").trim(),
+      decision_key: value("decision_key").trim(),
+      mode: value("mode"),
+      required_result: value("required_result").trim() || null,
+      required_output: Object.keys(requiredOutput).length ? requiredOutput : null,
+      output_namespace: value("output_namespace").trim(),
+      merge_outputs: value("merge_outputs") !== "false",
+      stop_on_results: value("stop_on_results").split(",").map((item) => item.trim()).filter(Boolean),
+      stop_on_error: true
+    };
+  });
+}
+
+async function saveDecisionStack() {
+  try {
+    const stack = readStackForm();
+    const body = await api("/v1/decision-stacks", { method: "POST", body: JSON.stringify(stack) });
+    selectedStackId = body.decision_stack?.id || stack.id;
+    stackOutput.textContent = JSON.stringify(body, null, 2);
+    await loadDecisionStacks();
+  } catch (error) {
+    stackOutput.textContent = error.message;
+  }
+}
+
+async function archiveDecisionStack() {
+  const id = document.querySelector("#stack-id")?.value.trim();
+  if (!id) {
+    stackOutput.textContent = "Save or select a stack before archiving.";
+    return;
+  }
+  try {
+    const body = await api(`/v1/decision-stacks/${encodeURIComponent(id)}/archive`, { method: "POST", body: "{}" });
+    stackOutput.textContent = JSON.stringify(body, null, 2);
+    await loadDecisionStacks();
+  } catch (error) {
+    stackOutput.textContent = error.message;
+  }
+}
+
+async function runDecisionStackTest() {
+  const id = document.querySelector("#stack-id")?.value.trim();
+  if (!id) {
+    stackOutput.textContent = "Save the stack before running a journey test.";
+    return;
+  }
+  try {
+    const payload = parseJsonStrict(stackTestPayload.value || "{}");
+    const body = await api(`/v1/decision-stacks/${encodeURIComponent(id)}/evaluate`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    stackOutput.textContent = JSON.stringify(body, null, 2);
+  } catch (error) {
+    stackOutput.textContent = error.message;
+  }
+}
+
+function defaultStackTestPayload(stack = {}) {
+  return {
+    profile_key: "demo-profile",
+    identifiers: [{ typeId: "email", value: "demo@example.com" }],
+    attributes: {
+      lead_score: [{ value: 82 }],
+      customer_lifetime_value: [{ value: 12400 }],
+      churn_risk_score: [{ value: 0.2 }]
+    },
+    segments: {},
+    context: {
+      surface: stack.surface || "homepage",
+      request_source: "dee_ui_stack_test"
+    }
+  };
 }
 
 async function loadMetrics() {

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Meiro DEE</title>
-    <link rel="stylesheet" href="/styles.css?v=20260610-evaluate-builder-layout" />
+    <link rel="stylesheet" href="/styles.css?v=20260611-decision-stacks" />
   </head>
   <body>
     <aside>
@@ -19,6 +19,7 @@
         <span class="nav-section">Decisioning</span>
         <button data-view="rules">Rule Sets</button>
         <button data-view="experiments">Campaigns</button>
+        <button data-view="stacks">Decision Stacks</button>
         <button data-view="test">Evaluate</button>
         <span class="nav-section">Content & Data</span>
         <button data-view="messages">Messages</button>
@@ -921,6 +922,93 @@
               <div class="editor-title">Experiment Workbench</div>
               <div id="campaign-master-detail" class="campaign-master-detail"></div>
               <div id="experiment-detail" class="experiment-detail"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="stacks" class="view">
+        <header>
+          <div>
+            <h2>Decision Stacks</h2>
+            <p class="page-subtitle">Coordinate multi-rule journeys with ordered eligibility, suppression, offer, message, and experiment decisions.</p>
+          </div>
+          <div class="actions">
+            <button id="new-stack">New Stack</button>
+            <button id="refresh-stacks">Refresh</button>
+          </div>
+        </header>
+        <div class="stack-workbench">
+          <div class="editor stack-list-pane">
+            <div class="editor-title">Journey Inventory</div>
+            <div id="stack-list" class="stack-list"></div>
+          </div>
+          <div class="editor stack-detail-pane">
+            <div class="stack-detail-head">
+              <div>
+                <div class="editor-title">Stack Builder</div>
+                <p>Each step evaluates a published rule set. Steps can run always, only after a result, or after an output match.</p>
+              </div>
+              <div class="actions">
+                <button type="button" id="add-stack-step">Add Step</button>
+                <button type="button" id="save-stack">Save Stack</button>
+                <button type="button" id="archive-stack">Archive</button>
+              </div>
+            </div>
+            <div class="stack-form-grid">
+              <label>
+                Stack ID
+                <input id="stack-id" placeholder="homepage_journey" />
+              </label>
+              <label>
+                Name
+                <input id="stack-name" placeholder="Homepage journey" />
+              </label>
+              <label>
+                Status
+                <select id="stack-status">
+                  <option value="draft">Draft</option>
+                  <option value="active">Active</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </label>
+              <label>
+                Surface
+                <input id="stack-surface" placeholder="homepage_hero" />
+              </label>
+              <label>
+                TTL seconds
+                <input id="stack-ttl" type="number" min="0" value="0" />
+              </label>
+              <label>
+                Result policy
+                <select id="stack-result-policy">
+                  <option value="last_evaluated">Last evaluated step</option>
+                  <option value="any_eligible">Any eligible step</option>
+                  <option value="all_eligible">All evaluated steps eligible</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              Description
+              <textarea id="stack-description" rows="2" placeholder="What journey this stack coordinates"></textarea>
+            </label>
+            <div id="stack-steps" class="stack-step-list"></div>
+            <div class="stack-test-panel">
+              <div class="stack-test-input">
+                <div class="builder-section-head">
+                  <div>
+                    <strong>Test Journey</strong>
+                    <span>Run the current saved stack with a profile payload.</span>
+                  </div>
+                  <button type="button" id="run-stack-test">Run Stack</button>
+                </div>
+                <textarea id="stack-test-payload" spellcheck="false"></textarea>
+              </div>
+              <div class="stack-test-output">
+                <div class="editor-title">Response</div>
+                <pre id="stack-output"></pre>
+              </div>
             </div>
           </div>
         </div>
