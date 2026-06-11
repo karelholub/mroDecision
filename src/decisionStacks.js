@@ -111,6 +111,68 @@ export async function evaluateDecisionStack({ stack, request, store, lookupTable
   };
 }
 
+export async function decisionStackReadiness({ stack, store }) {
+  if (!stack) badRequest("Decision stack is required");
+  const checks = [];
+  const dependencies = [];
+  const stepIds = new Set();
+  const namespaces = new Map();
+  const steps = Array.isArray(stack.steps) ? stack.steps : [];
+  if (!steps.length) {
+    checks.push(readinessCheck("steps", "error", "No steps configured", "Add at least one rule step before activating the stack."));
+  }
+  for (const [index, step] of steps.entries()) {
+    const stepLabel = step.id || `step_${index + 1}`;
+    if (!step.id) checks.push(readinessCheck(stepLabel, "error", "Missing step id", "Every step needs a stable id for traceability."));
+    if (step.id && stepIds.has(step.id)) checks.push(readinessCheck(stepLabel, "error", "Duplicate step id", "Step ids must be unique."));
+    stepIds.add(step.id);
+    if (!step.decision_key) {
+      checks.push(readinessCheck(stepLabel, "error", "Missing rule set", "Select a rule set for this step."));
+      continue;
+    }
+    const namespace = step.output_namespace || step.decision_key;
+    if (namespace) {
+      const count = namespaces.get(namespace) || 0;
+      namespaces.set(namespace, count + 1);
+    }
+    const dependency = await dependencyReadiness(store, step.decision_key);
+    dependencies.push({ step_id: stepLabel, decision_key: step.decision_key, ...dependency });
+    if (!dependency.exists) {
+      checks.push(readinessCheck(stepLabel, "error", `Rule not found: ${step.decision_key}`, "Create the rule set or select a different dependency."));
+    } else {
+      if (dependency.status === "archived") checks.push(readinessCheck(stepLabel, "error", `Rule is archived: ${step.decision_key}`, "Restore or replace the archived rule."));
+      if (!dependency.published_version) checks.push(readinessCheck(stepLabel, "error", `Rule has no published version: ${step.decision_key}`, "Publish the rule before evaluating it in a stack."));
+    }
+    if (step.mode === "on_result" && !step.required_result) {
+      checks.push(readinessCheck(stepLabel, "warn", "Conditional step has no required result", "Set the previous result that should trigger this step."));
+    }
+    if (step.mode === "on_output" && (!step.required_output || !Object.keys(step.required_output).length)) {
+      checks.push(readinessCheck(stepLabel, "warn", "Output-triggered step has no output match", "Set required_output so the trigger is explicit."));
+    }
+    if (!Array.isArray(step.stop_on_results) || !step.stop_on_results.length) {
+      checks.push(readinessCheck(stepLabel, "warn", "Step does not stop on any result", "Most journeys should stop on suppressed or ineligible outcomes."));
+    }
+  }
+  for (const [namespace, count] of namespaces.entries()) {
+    if (count > 1) {
+      checks.push(readinessCheck(`namespace:${namespace}`, "warn", `Output namespace reused: ${namespace}`, "Repeated namespaces overwrite by_step output for earlier steps."));
+    }
+  }
+  const errors = checks.filter((check) => check.level === "error").length;
+  const warnings = checks.filter((check) => check.level === "warn").length;
+  return {
+    status: errors ? "blocked" : warnings ? "review" : "ready",
+    summary: {
+      steps: steps.length,
+      dependencies: dependencies.length,
+      errors,
+      warnings
+    },
+    checks,
+    dependencies
+  };
+}
+
 function normalizeStackSteps(steps) {
   if (!Array.isArray(steps)) badRequest("Decision stack steps must be an array");
   const ids = new Set();
@@ -181,6 +243,27 @@ function stackStepTrace(step, patch) {
     mode: step.mode || "always",
     ...patch
   };
+}
+
+async function dependencyReadiness(store, decisionKey) {
+  try {
+    const rule = await store.getRuleSet(decisionKey);
+    if (!rule) return { exists: false, status: "missing", published_version: null, type: "" };
+    const latest = Array.isArray(rule.versions) ? rule.versions.at(-1) : null;
+    return {
+      exists: true,
+      status: rule.status || "draft",
+      published_version: latest?.version || rule.version || null,
+      type: rule.type || "decision",
+      surface: rule.surface || ""
+    };
+  } catch (error) {
+    return { exists: false, status: "error", published_version: null, type: "", error: error.message };
+  }
+}
+
+function readinessCheck(id, level, title, detail) {
+  return { id, level, title, detail };
 }
 
 function normalizeStatus(value) {

@@ -233,6 +233,32 @@ paths:
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
+  /v1/decision-stacks/{stackId}/readiness:
+    get:
+      summary: Inspect decision stack readiness
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: stackId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Stack readiness checks and dependencies
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [decision_stack, readiness]
+                properties:
+                  decision_stack:
+                    $ref: "#/components/schemas/DecisionStack"
+                  readiness:
+                    $ref: "#/components/schemas/DecisionStackReadiness"
+        "404":
+          $ref: "#/components/responses/Error"
   /v1/decision-stacks/{stackId}/archive:
     post:
       summary: Archive a decision stack
@@ -2394,6 +2420,43 @@ components:
           type: array
           items:
             type: string
+    DecisionStackReadiness:
+      type: object
+      required: [status, summary, checks, dependencies]
+      properties:
+        status:
+          type: string
+          enum: [ready, review, blocked]
+        summary:
+          type: object
+          properties:
+            steps:
+              type: integer
+            dependencies:
+              type: integer
+            errors:
+              type: integer
+            warnings:
+              type: integer
+        checks:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              level:
+                type: string
+                enum: [ok, warn, error]
+              title:
+                type: string
+              detail:
+                type: string
+        dependencies:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
     ClientEvaluateRequest:
       type: object
       required: [decision_key, profile_key]

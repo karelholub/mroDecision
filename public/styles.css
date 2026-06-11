@@ -326,6 +326,99 @@ aside input {
   margin-top: 14px;
 }
 
+.stack-readiness-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.stack-readiness-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.stack-readiness-head strong {
+  display: block;
+  color: var(--ink);
+}
+
+.stack-readiness-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stack-readiness-head.ready strong {
+  color: #0f766e;
+}
+
+.stack-readiness-head.review strong {
+  color: #9a6a00;
+}
+
+.stack-readiness-head.blocked strong {
+  color: #b42318;
+}
+
+.stack-readiness-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.stack-readiness-check,
+.stack-dependency-strip > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.stack-readiness-check strong,
+.stack-readiness-check span,
+.stack-dependency-strip strong,
+.stack-dependency-strip span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.stack-readiness-check span,
+.stack-dependency-strip span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stack-readiness-check.ok,
+.stack-dependency-strip > div.ok {
+  border-color: #a7d7cd;
+  background: #f0faf7;
+}
+
+.stack-readiness-check.warn,
+.stack-dependency-strip > div.warn {
+  border-color: #f0cf75;
+  background: var(--warning-soft);
+}
+
+.stack-readiness-check.error {
+  border-color: #f4b4ab;
+  background: #fff5f3;
+}
+
+.stack-dependency-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
 .stack-step-card {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr) auto;

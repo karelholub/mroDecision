@@ -121,6 +121,7 @@ const clearCampaignSelection = document.querySelector("#clear-campaign-selection
 const stackList = document.querySelector("#stack-list");
 const stackSteps = document.querySelector("#stack-steps");
 const stackOutput = document.querySelector("#stack-output");
+const stackReadiness = document.querySelector("#stack-readiness");
 const stackTestPayload = document.querySelector("#stack-test-payload");
 const ruleInspectorSummary = document.querySelector("#rule-inspector-summary");
 const inspectorKey = document.querySelector("#inspector-key");
@@ -326,6 +327,8 @@ document.querySelector("#add-stack-step")?.addEventListener("click", () => addSt
 document.querySelector("#save-stack")?.addEventListener("click", saveDecisionStack);
 document.querySelector("#archive-stack")?.addEventListener("click", archiveDecisionStack);
 document.querySelector("#run-stack-test")?.addEventListener("click", runDecisionStackTest);
+document.querySelector("#stacks")?.addEventListener("input", renderStackReadiness);
+document.querySelector("#stacks")?.addEventListener("change", renderStackReadiness);
 document.querySelector("#rule-filter-search").addEventListener("input", renderRuleList);
 document.querySelector("#rule-filter-status").addEventListener("change", renderRuleList);
 document.querySelector("#rule-filter-type").addEventListener("change", renderRuleList);
@@ -865,6 +868,104 @@ function renderStackSteps(steps = []) {
       renderStackSteps(rows);
     });
   });
+  renderStackReadiness();
+}
+
+function renderStackReadiness() {
+  if (!stackReadiness) return;
+  let readiness;
+  try {
+    readiness = clientStackReadiness(readStackSteps());
+  } catch (error) {
+    readiness = {
+      status: "blocked",
+      summary: { errors: 1, warnings: 0 },
+      checks: [{ level: "error", title: "Stack form is invalid", detail: error.message }],
+      dependencies: []
+    };
+  }
+  stackReadiness.innerHTML = `
+    <div class="stack-readiness-head ${escapeHtml(readiness.status)}">
+      <div>
+        <strong>${escapeHtml(stackReadinessTitle(readiness.status))}</strong>
+        <span>${formatNumber(readiness.summary.errors || 0)} errors · ${formatNumber(readiness.summary.warnings || 0)} warnings · ${formatNumber(readiness.dependencies.length || 0)} dependencies</span>
+      </div>
+    </div>
+    <div class="stack-readiness-grid">
+      ${readiness.checks.length ? readiness.checks.map((check) => `
+        <div class="stack-readiness-check ${escapeHtml(check.level)}">
+          <strong>${escapeHtml(check.title)}</strong>
+          <span>${escapeHtml(check.detail || "")}</span>
+        </div>
+      `).join("") : `<div class="stack-readiness-check ok"><strong>Ready</strong><span>All configured dependencies have a published version.</span></div>`}
+    </div>
+    ${readiness.dependencies.length ? `
+      <div class="stack-dependency-strip">
+        ${readiness.dependencies.map((dependency) => `
+          <div class="${dependency.exists && dependency.published_version && dependency.status !== "archived" ? "ok" : "warn"}">
+            <strong>${escapeHtml(dependency.decision_key)}</strong>
+            <span>${escapeHtml(dependency.exists ? `${dependency.type || "rule"} · ${dependency.status || "draft"} · v${dependency.published_version || "-"}` : "missing")}</span>
+          </div>
+        `).join("")}
+      </div>
+    ` : ""}
+  `;
+}
+
+function clientStackReadiness(steps = []) {
+  const checks = [];
+  const dependencies = [];
+  const ids = new Set();
+  const namespaces = new Map();
+  if (!steps.length) checks.push({ level: "error", title: "No steps configured", detail: "Add at least one rule step before activating the stack." });
+  for (const [index, step] of steps.entries()) {
+    const stepLabel = step.id || `step_${index + 1}`;
+    if (!step.id) checks.push({ level: "error", title: "Missing step id", detail: "Every step needs a stable id for traceability." });
+    if (step.id && ids.has(step.id)) checks.push({ level: "error", title: `Duplicate step id: ${step.id}`, detail: "Step ids must be unique." });
+    ids.add(step.id);
+    if (!step.decision_key) {
+      checks.push({ level: "error", title: `${stepLabel}: missing rule set`, detail: "Select a rule set for this step." });
+      continue;
+    }
+    const rule = cachedRuleSets.find((item) => item.decision_key === step.decision_key);
+    dependencies.push({
+      step_id: stepLabel,
+      decision_key: step.decision_key,
+      exists: Boolean(rule),
+      status: rule?.status || "missing",
+      type: rule?.type || "",
+      published_version: rule?.version || null
+    });
+    if (!rule) checks.push({ level: "error", title: `Rule not found: ${step.decision_key}`, detail: "Create the rule set or select a different dependency." });
+    else if (rule.status === "archived") checks.push({ level: "error", title: `Rule is archived: ${step.decision_key}`, detail: "Restore or replace the archived rule." });
+    else if (!rule.version) checks.push({ level: "error", title: `Rule has no published version: ${step.decision_key}`, detail: "Publish the rule before evaluating it in a stack." });
+    if (step.mode === "on_result" && !step.required_result) {
+      checks.push({ level: "warn", title: `${stepLabel}: missing required result`, detail: "Set the previous result that should trigger this step." });
+    }
+    if (step.mode === "on_output" && (!step.required_output || !Object.keys(step.required_output).length)) {
+      checks.push({ level: "warn", title: `${stepLabel}: missing required output`, detail: "Set a required_output JSON match for this trigger." });
+    }
+    if (!step.stop_on_results?.length) checks.push({ level: "warn", title: `${stepLabel}: no stop policy`, detail: "Most journeys should stop on suppressed or ineligible outcomes." });
+    const namespace = step.output_namespace || step.decision_key;
+    namespaces.set(namespace, (namespaces.get(namespace) || 0) + 1);
+  }
+  for (const [namespace, count] of namespaces.entries()) {
+    if (count > 1) checks.push({ level: "warn", title: `Output namespace reused: ${namespace}`, detail: "Repeated namespaces overwrite by_step output for earlier steps." });
+  }
+  const errors = checks.filter((check) => check.level === "error").length;
+  const warnings = checks.filter((check) => check.level === "warn").length;
+  return {
+    status: errors ? "blocked" : warnings ? "review" : "ready",
+    summary: { errors, warnings },
+    checks,
+    dependencies
+  };
+}
+
+function stackReadinessTitle(status) {
+  if (status === "blocked") return "Blocked";
+  if (status === "review") return "Needs review";
+  return "Ready";
 }
 
 function stackStepCard(step = {}, index = 0) {

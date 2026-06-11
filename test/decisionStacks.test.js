@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateDecisionStack, normalizeDecisionStack } from "../src/decisionStacks.js";
+import { decisionStackReadiness, evaluateDecisionStack, normalizeDecisionStack } from "../src/decisionStacks.js";
 
 const versions = {
   eligibility_check: {
@@ -98,4 +98,32 @@ test("decision stacks skip dependent steps and stop on terminal results", async 
   assert.deepEqual(result.steps.map((step) => step.status), ["evaluated", "skipped"]);
   assert.equal(result.steps[1].reason, "previous_step_stopped");
   assert.deepEqual(result.outputs.by_step.eligibility_check, { reason: "low_score" });
+});
+
+test("decision stack readiness reports dependency and trigger issues", async () => {
+  const stack = normalizeDecisionStack(
+    {
+      id: "journey_orchestration",
+      steps: [
+        { id: "eligibility", decision_key: "eligibility_check", output_namespace: "shared" },
+        { id: "offer", decision_key: "missing_rule", mode: "on_result", output_namespace: "shared", stop_on_results: [] }
+      ]
+    },
+    "tester"
+  );
+  const readiness = await decisionStackReadiness({
+    stack,
+    store: {
+      getRuleSet: async (key) => key === "eligibility_check"
+        ? { decision_key: key, status: "published", type: "decision", versions: [{ version: 1 }] }
+        : undefined
+    }
+  });
+
+  assert.equal(readiness.status, "blocked");
+  assert.equal(readiness.summary.errors, 1);
+  assert.equal(readiness.summary.warnings, 3);
+  assert.ok(readiness.checks.some((check) => check.title.includes("Rule not found")));
+  assert.ok(readiness.checks.some((check) => check.title.includes("Conditional step")));
+  assert.ok(readiness.checks.some((check) => check.title.includes("Output namespace reused")));
 });

@@ -8,7 +8,7 @@ import { assistantProviderMetrics } from "./assistantProviderMetrics.js";
 import { applyAssistantPlan, rollbackAssistantPlan } from "./assistantPlanner.js";
 import { config } from "./config.js";
 import { createClientResultCache } from "./clientCache.js";
-import { evaluateDecisionStack } from "./decisionStacks.js";
+import { decisionStackReadiness, evaluateDecisionStack } from "./decisionStacks.js";
 import { createClientTrafficMetrics } from "./clientTrafficMetrics.js";
 import { evaluateDecision, evaluateDecisionAsync } from "./evaluator.js";
 import { notFound, readJson, sendBuffer, sendError, sendJson, sendText, serveStatic } from "./http.js";
@@ -190,6 +190,22 @@ async function routeApi(req, res, url) {
     const stack = await storeCall("getDecisionStack", decodeURIComponent(decisionStackMatch[1]));
     if (!stack) notFoundError(`Decision stack not found: ${decisionStackMatch[1]}`);
     sendJson(res, 200, { decision_stack: stack });
+    return;
+  }
+
+  const decisionStackReadinessMatch = pathname.match(/^\/v1\/decision-stacks\/([^/]+)\/readiness$/);
+  if (req.method === "GET" && decisionStackReadinessMatch) {
+    requireScope(req, "viewer");
+    const stackId = decodeURIComponent(decisionStackReadinessMatch[1]);
+    const stack = await storeCall("getDecisionStack", stackId);
+    if (!stack) notFoundError(`Decision stack not found: ${stackId}`);
+    const readiness = await decisionStackReadiness({
+      stack,
+      store: {
+        getRuleSet: (decisionKey) => storeCall("getRuleSet", decisionKey)
+      }
+    });
+    sendJson(res, 200, { decision_stack: stack, readiness });
     return;
   }
 
