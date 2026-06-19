@@ -4444,13 +4444,13 @@ header {
 .overview-workbench {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
   gap: 0;
 }
 
@@ -4470,12 +4470,13 @@ header {
 .overview-campaign-grid,
 .overview-bottom-grid {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 
 .overview-summary-grid {
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.7fr);
+  align-items: stretch;
 }
 
 .overview-alerts {
@@ -4486,11 +4487,11 @@ header {
 .overview-health-bar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   background: #f8fbf9;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
 }
@@ -4651,13 +4652,14 @@ header {
 .overview-live-assets {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 14px;
+  padding: 12px;
   background: #ffffff;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  align-content: start;
 }
 
 .live-assets-badge {
@@ -4835,8 +4837,8 @@ header {
   gap: 10px;
   align-items: center;
   min-width: 0;
-  min-height: 72px;
-  padding: 0 12px;
+  min-height: 64px;
+  padding: 0 10px;
   border-right: 1px solid var(--line);
 }
 
@@ -4879,7 +4881,7 @@ header {
   display: block;
   margin: 2px 0;
   overflow-wrap: anywhere;
-  font-size: 23px;
+  font-size: 20px;
   line-height: 1;
 }
 
@@ -4895,12 +4897,12 @@ header {
 }
 
 .overview-performance-grid {
-  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.72fr);
   gap: 12px;
 }
 
 .overview-insight-grid {
-  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr) minmax(320px, 0.95fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.88fr) minmax(280px, 0.92fr);
 }
 
 .overview-delivery-grid {
@@ -4912,7 +4914,7 @@ header {
 }
 
 .overview-trend-card {
-  min-height: 330px;
+  min-height: 300px;
 }
 
 .overview-schema-card,
@@ -4941,12 +4943,14 @@ header {
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(203, 213, 225, 0.55);
 }
 
 .overview-card-head p {
   color: #475467;
-  font-size: 12px;
+  font-size: 11.5px;
   line-height: 1.35;
 }
 
@@ -4955,7 +4959,7 @@ header {
   gap: 0;
   border-top: 1px solid var(--line);
   min-width: 0;
-  max-height: 420px;
+  max-height: 340px;
   overflow: auto;
 }
 
@@ -5855,7 +5859,7 @@ header {
 
 .portfolio-composition {
   display: grid;
-  gap: 9px;
+  gap: 7px;
   min-width: 0;
 }
 
@@ -5895,7 +5899,7 @@ header {
   align-items: center;
   min-width: 0;
   border-bottom: 1px solid var(--line);
-  padding: 7px 0;
+  padding: 6px 0;
 }
 
 .portfolio-composition-row:last-child {
@@ -5966,10 +5970,10 @@ header {
 .overview-service-footer {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 14px;
+  padding: 12px;
   background: var(--panel);
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
 }
@@ -6035,7 +6039,7 @@ header {
 
 .client-event-tabs {
   display: flex;
-  gap: 28px;
+  gap: 22px;
   min-width: 0;
   overflow-x: auto;
   border-bottom: 1px solid var(--line);
@@ -6100,7 +6104,7 @@ header {
 .client-event-tab-panel {
   display: none;
   gap: 6px;
-  max-height: 380px;
+  max-height: 340px;
   min-width: 0;
   overflow: auto;
   padding-right: 4px;
@@ -6116,10 +6120,10 @@ header {
   gap: 10px;
   align-items: center;
   min-width: 0;
-  min-height: 42px;
+  min-height: 40px;
   border: 1px solid transparent;
   border-radius: 7px;
-  padding: 7px 10px;
+  padding: 6px 10px;
   background: #fafafa;
 }
 
@@ -6214,7 +6218,7 @@ header {
 .client-event-row strong {
   color: var(--ink);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -6222,7 +6226,7 @@ header {
   color: var(--ink);
   font-size: 14px;
   font-style: normal;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .client-event-row small,
@@ -6352,14 +6356,15 @@ header {
 }
 
 .precompute-recent .editor-title {
-  font-size: 15px;
+  font-size: 13px;
+  margin-bottom: 0;
 }
 
 .precompute-activity-list {
   display: grid;
   gap: 6px;
   min-width: 0;
-  max-height: 260px;
+  max-height: 240px;
   overflow: auto;
   padding-right: 4px;
 }
@@ -6370,10 +6375,10 @@ header {
   gap: 10px;
   align-items: center;
   min-width: 0;
-  min-height: 42px;
+  min-height: 40px;
   border: 1px solid transparent;
   border-radius: 7px;
-  padding: 7px 10px;
+  padding: 6px 10px;
   background: #fafafa;
 }
 
@@ -6399,8 +6404,8 @@ header {
 
 .precompute-activity-row strong {
   color: var(--ink);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .precompute-activity-row span,
@@ -6412,8 +6417,8 @@ header {
 
 .precompute-activity-row em {
   color: var(--ink);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .precompute-activity-row time {
@@ -6668,10 +6673,17 @@ header {
 
 .overview-rule-detail-card .rule-detail-panel {
   display: grid;
-  gap: 16px;
+  gap: 14px;
   min-height: 0;
-  max-height: 720px;
+  max-height: 560px;
   overflow: auto;
+}
+
+.overview-rule-detail-card .rule-detail-panel > .status-line {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfe;
 }
 
 .lookup-guide {
