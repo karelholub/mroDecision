@@ -7093,17 +7093,41 @@ header {
 .rule-list-pane {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 12px;
-  height: calc(100vh - 172px);
+  gap: 10px;
+  height: calc(100vh - 164px);
   min-height: 560px;
   overflow: hidden;
 }
 
+.rule-list-pane.editor {
+  padding: 14px;
+}
+
+.rule-list-pane .editor-title {
+  margin-bottom: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
 .rule-filter-bar {
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  grid-template-columns:
+    minmax(220px, 1.3fr)
+    repeat(4, minmax(120px, 0.7fr));
+  gap: 8px;
   margin: 0;
-  padding: 12px;
+  padding: 10px;
+  align-items: end;
+}
+
+.rule-filter-bar label {
+  gap: 4px;
+  font-size: 12px;
+}
+
+.rule-filter-bar input,
+.rule-filter-bar select {
+  min-height: 38px;
+  padding: 8px 11px;
 }
 
 .rule-list-pane #rule-list {
@@ -7118,13 +7142,13 @@ header {
 .rule-inventory-row,
 .rule-list-header {
   grid-template-columns:
-    minmax(220px, 1.7fr)
-    minmax(76px, 0.55fr)
-    minmax(96px, 0.65fr)
-    minmax(110px, 0.85fr)
-    minmax(104px, 0.8fr)
-    minmax(108px, 0.75fr)
-    minmax(142px, 0.95fr);
+    minmax(240px, 1.8fr)
+    minmax(74px, 0.5fr)
+    minmax(90px, 0.6fr)
+    minmax(104px, 0.75fr)
+    minmax(108px, 0.7fr)
+    minmax(108px, 0.7fr)
+    minmax(144px, 0.9fr);
 }
 
 .rule-conflict-badge {
@@ -7189,7 +7213,7 @@ header {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
-  padding: 14px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--panel-soft);
 }
@@ -7201,12 +7225,13 @@ header {
 }
 
 .rule-detail-header strong {
-  font-size: 18px;
+  font-size: 17px;
+  line-height: 1.2;
 }
 
 .rule-detail-header span {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .modal-header-actions {
@@ -7227,10 +7252,10 @@ header {
 .rule-editor-pane {
   display: grid;
   grid-template-rows: auto auto auto auto;
-  gap: 16px;
+  gap: 14px;
   height: auto;
   overflow: visible;
-  padding: 16px;
+  padding: 14px;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -7257,7 +7282,7 @@ header {
 .rule-editor-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+  gap: 12px;
   align-items: start;
   overflow: visible;
 }
@@ -7279,13 +7304,13 @@ header {
 .rule-builder-pane,
 .rule-inspector {
   overflow: visible;
-  padding: 16px;
+  padding: 14px;
 }
 
 .rule-inspector {
   align-content: start;
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .rule-inspector .compact-status-panel {
@@ -7298,7 +7323,7 @@ header {
 
 .inspector-section {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .inspector-section h3 {
@@ -7311,7 +7336,7 @@ header {
 
 .inspector-lines {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .inspector-lines div {
@@ -7337,7 +7362,7 @@ header {
   align-items: center;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 14px;
+  padding: 12px 14px;
   background: var(--panel-soft);
 }
 
@@ -7355,7 +7380,8 @@ header {
 
 .logic-summary-card strong {
   overflow-wrap: anywhere;
-  font-size: 18px;
+  font-size: 16px;
+  line-height: 1.2;
 }
 
 .rule-builder-panel {
@@ -7409,7 +7435,7 @@ header {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--line);
   background: var(--panel-soft);
 }
@@ -7426,19 +7452,19 @@ header {
 }
 
 .rule-builder-header strong {
-  font-size: 18px;
+  font-size: 17px;
 }
 
 .rule-builder-header span {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .inline-builder-shell {
   min-height: 0;
   margin: 0;
   overflow: visible;
-  padding: 16px;
+  padding: 14px;
 }
 
 .workbench-actions {
@@ -11829,27 +11855,27 @@ textarea {
 
 .builder-shell {
   display: grid;
-  gap: 12px;
-  margin: 12px 0;
+  gap: 10px;
+  margin: 10px 0;
 }
 
 .builder-bar {
   display: grid;
-  grid-template-columns: minmax(130px, 0.7fr) minmax(120px, 0.7fr) minmax(160px, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: minmax(140px, 0.72fr) minmax(140px, 0.72fr) minmax(220px, 1fr) auto;
+  gap: 8px;
   align-items: end;
 }
 
 .branch-list {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .rule-graph {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel-soft);
-  padding: 12px;
+  padding: 10px;
 }
 
 .graph-stage {
@@ -12531,21 +12557,21 @@ button.graph-node:hover {
 .branch-card {
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px;
   background: var(--panel-soft);
 }
 
 .branch-head {
   display: grid;
   grid-template-columns: minmax(150px, 1fr) minmax(140px, 0.8fr) auto;
-  gap: 10px;
+  gap: 8px;
   align-items: end;
 }
 
 .branch-summary {
   display: grid;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 7px;
+  margin-top: 8px;
 }
 
 .branch-readable {
@@ -12555,10 +12581,10 @@ button.graph-node:hover {
   align-items: start;
   border: 1px solid rgba(20, 184, 166, 0.22);
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: rgba(20, 184, 166, 0.08);
   color: var(--ink);
-  line-height: 1.4;
+  line-height: 1.3;
 }
 
 .branch-readable span {
@@ -12570,7 +12596,7 @@ button.graph-node:hover {
 
 .branch-readable strong {
   min-width: 0;
-  font-size: 14px;
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
 
@@ -12583,13 +12609,13 @@ button.graph-node:hover {
 .branch-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 26px;
+  min-height: 24px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 4px 8px;
+  padding: 3px 8px;
   background: var(--panel);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   max-width: 100%;
   overflow-wrap: anywhere;
@@ -12604,8 +12630,8 @@ button.graph-node:hover {
 .branch-logic {
   display: grid;
   grid-template-columns: minmax(110px, 0.5fr) minmax(180px, 1fr) auto auto;
-  gap: 10px;
-  margin: 10px 0;
+  gap: 8px;
+  margin: 8px 0;
   align-items: end;
 }
 
@@ -12615,21 +12641,21 @@ button.graph-node:hover {
 
 .condition-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .condition-row {
   display: grid;
   grid-template-columns:
-    minmax(95px, 0.7fr)
-    minmax(120px, 1fr)
-    minmax(140px, 1fr)
-    minmax(120px, 1fr)
-    minmax(95px, 0.7fr)
-    minmax(110px, 0.8fr)
-    minmax(120px, 1fr)
+    minmax(88px, 0.62fr)
+    minmax(116px, 0.92fr)
+    minmax(124px, 0.95fr)
+    minmax(112px, 0.9fr)
+    minmax(86px, 0.62fr)
+    minmax(100px, 0.78fr)
+    minmax(112px, 0.92fr)
     auto;
-  gap: 8px;
+  gap: 6px;
   align-items: end;
 }
 
@@ -12651,11 +12677,11 @@ button.graph-node:hover {
 }
 
 .condition-readable {
-  padding: 9px 10px;
+  padding: 8px 10px;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 750;
-  line-height: 1.35;
+  line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
@@ -12663,7 +12689,7 @@ button.graph-node:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 7px;
+  padding: 6px;
 }
 
 .condition-schema-chip {
@@ -12734,13 +12760,13 @@ button.graph-node:hover {
 
 .output-field-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .output-field-row {
   display: grid;
-  grid-template-columns: minmax(120px, 0.8fr) minmax(110px, 0.55fr) minmax(180px, 1.2fr) auto;
-  gap: 8px;
+  grid-template-columns: minmax(112px, 0.78fr) minmax(98px, 0.5fr) minmax(170px, 1.15fr) auto;
+  gap: 6px;
   align-items: end;
   min-width: 0;
 }
