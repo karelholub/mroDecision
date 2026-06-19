@@ -10121,10 +10121,10 @@ header {
 .message-preview-pane {
   display: grid;
   gap: 0;
-  position: sticky;
-  top: 14px;
-  max-height: calc(100vh - 120px);
-  overflow: auto;
+  position: static;
+  top: auto;
+  max-height: none;
+  overflow: visible;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
@@ -10168,9 +10168,16 @@ header {
   display: grid;
   align-content: start;
   justify-items: center;
-  min-height: 0;
-  padding: 14px;
-  overflow: visible;
+  min-height: 360px;
+  max-height: min(620px, calc(100vh - 280px));
+  padding: 22px 18px;
+  overflow: auto;
+  border-bottom: 1px solid var(--line);
+  background:
+    linear-gradient(90deg, rgba(148, 163, 184, 0.14) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(148, 163, 184, 0.14) 1px, transparent 1px),
+    #ffffff;
+  background-size: 32px 32px;
 }
 
 .message-preview-pane .compact-status-panel {
