@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Meiro DEE</title>
-    <link rel="stylesheet" href="/styles.css?v=20260611-decision-stacks" />
+    <link rel="stylesheet" href="/styles.css?v=20260619-stack-workbench" />
   </head>
   <body>
     <aside>
@@ -1007,7 +1007,12 @@
         </header>
         <div class="stack-workbench">
           <div class="editor stack-list-pane">
-            <div class="editor-title">Journey Inventory</div>
+            <div class="stack-pane-head">
+              <div>
+                <div class="editor-title">Journey Inventory</div>
+                <p>Browse active journeys, then jump into the selected stack below.</p>
+              </div>
+            </div>
             <div id="stack-list" class="stack-list"></div>
           </div>
           <div class="editor stack-detail-pane">
@@ -1023,15 +1028,15 @@
               </div>
             </div>
             <div class="stack-form-grid">
-              <label>
+              <label class="stack-field-md">
                 Stack ID
                 <input id="stack-id" placeholder="homepage_journey" />
               </label>
-              <label>
+              <label class="stack-field-lg">
                 Name
                 <input id="stack-name" placeholder="Homepage journey" />
               </label>
-              <label>
+              <label class="stack-field-sm">
                 Status
                 <select id="stack-status">
                   <option value="draft">Draft</option>
@@ -1039,15 +1044,15 @@
                   <option value="archived">Archived</option>
                 </select>
               </label>
-              <label>
+              <label class="stack-field-md">
                 Surface
                 <input id="stack-surface" placeholder="homepage_hero" />
               </label>
-              <label>
+              <label class="stack-field-sm">
                 TTL seconds
                 <input id="stack-ttl" type="number" min="0" value="0" />
               </label>
-              <label>
+              <label class="stack-field-md">
                 Result policy
                 <select id="stack-result-policy">
                   <option value="last_evaluated">Last evaluated step</option>
@@ -1056,11 +1061,17 @@
                 </select>
               </label>
             </div>
-            <label>
+            <label class="stack-description-field">
               Description
               <textarea id="stack-description" rows="2" placeholder="What journey this stack coordinates"></textarea>
             </label>
             <div id="stack-readiness" class="stack-readiness-panel"></div>
+            <div class="stack-steps-head">
+              <div>
+                <div class="editor-title">Journey Steps</div>
+                <p>Sequence the rule evaluations and define when the journey should continue or stop.</p>
+              </div>
+            </div>
             <div id="stack-steps" class="stack-step-list"></div>
             <div class="stack-test-panel">
               <div class="stack-test-input">
@@ -2539,6 +2550,6 @@
     </div>
     <button type="button" id="assistant-fab" class="assistant-fab" aria-label="Open assistant">Assistant</button>
   <script src="/app-utils.js?v=20260609-visual-editor-overlay"></script>
-    <script src="/app.js?v=20260610-message-experiment-analytics"></script>
+    <script src="/app.js?v=20260619-stack-workbench" defer></script>
 </body>
 </html>

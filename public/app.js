@@ -902,16 +902,35 @@ async function loadDecisionStacks() {
 
 function renderDecisionStackList() {
   if (!stackList) return;
-  stackList.innerHTML = cachedDecisionStacks.length
-    ? cachedDecisionStacks.map((stack) => `
-      <button type="button" class="stack-card ${stack.id === selectedStackId ? "active" : ""}" data-stack-id="${escapeHtml(stack.id)}">
-        <span>${escapeHtml(stack.status || "draft")}</span>
-        <strong>${escapeHtml(stack.name || stack.id)}</strong>
-        <small>${escapeHtml(stack.id)} · ${formatNumber(stack.steps?.length || 0)} steps</small>
-        <small>${escapeHtml(stack.surface || "Any surface")}</small>
-      </button>
-    `).join("")
-    : `<div class="status-line">No decision stacks yet. Create a journey to coordinate multiple rule sets.</div>`;
+  const total = cachedDecisionStacks.length;
+  const active = cachedDecisionStacks.filter((stack) => stack.status === "active").length;
+  const draft = cachedDecisionStacks.filter((stack) => stack.status === "draft").length;
+  const archived = cachedDecisionStacks.filter((stack) => stack.status === "archived").length;
+  stackList.innerHTML = `
+    <div class="inventory-toolbar stack-inventory-toolbar">
+      <div class="inventory-summary">
+        <span>${formatNumber(total)} stacks</span>
+        <span>${formatNumber(active)} active</span>
+        <span>${formatNumber(draft)} draft</span>
+        <span>${formatNumber(archived)} archived</span>
+      </div>
+    </div>
+    <div class="stack-card-rail">
+      ${cachedDecisionStacks.length
+        ? cachedDecisionStacks.map((stack) => `
+          <button type="button" class="stack-card ${stack.id === selectedStackId ? "active" : ""}" data-stack-id="${escapeHtml(stack.id)}">
+            <div class="stack-card-top">
+              <span class="stack-card-status ${escapeHtml(stack.status || "draft")}">${escapeHtml(stack.status || "draft")}</span>
+              <em>${escapeHtml(formatNumber(stack.steps?.length || 0))} steps</em>
+            </div>
+            <strong>${escapeHtml(stack.name || stack.id)}</strong>
+            <small>${escapeHtml(stack.id)}</small>
+            <small>${escapeHtml(stack.surface || "Any surface")}</small>
+          </button>
+        `).join("")
+        : `<div class="status-line">No decision stacks yet. Create a journey to coordinate multiple rule sets.</div>`}
+    </div>
+  `;
   stackList.querySelectorAll("[data-stack-id]").forEach((button) => {
     button.addEventListener("click", () => selectDecisionStack(button.dataset.stackId));
   });
@@ -1081,10 +1100,21 @@ function stackStepCard(step = {}, index = 0) {
   const ruleOptions = cachedRuleSets.map((rule) =>
     `<option value="${escapeHtml(rule.decision_key)}" ${rule.decision_key === step.decision_key ? "selected" : ""}>${escapeHtml(rule.name || rule.decision_key)} (${escapeHtml(rule.decision_key)})</option>`
   ).join("");
+  const mode = step.mode || "always";
+  const stopResults = (step.stop_on_results || step.stop_on || ["ineligible", "suppressed"]).join(", ");
+  const requiredOutput = stableStringify(step.required_output || {});
   return `
     <div class="stack-step-card" data-stack-step-index="${index}">
-      <div class="stack-step-order">${index + 1}</div>
+      <div class="stack-step-order">Step ${index + 1}</div>
       <div class="stack-step-fields">
+        <div class="stack-step-summary">
+          <strong>${escapeHtml(step.id || `step_${index + 1}`)}</strong>
+          <div class="stack-step-chip-row">
+            <span>${escapeHtml(stackModeLabel(mode))}</span>
+            <span>${escapeHtml(step.decision_key || "Select rule")}</span>
+            <span>${escapeHtml(step.merge_outputs === false ? "Overwrite outputs" : "Merge outputs")}</span>
+          </div>
+        </div>
         <label>
           Step ID
           <input data-stack-field="id" value="${escapeHtml(step.id || `step_${index + 1}`)}" />
@@ -1112,11 +1142,11 @@ function stackStepCard(step = {}, index = 0) {
         </label>
         <label>
           Stop on results
-          <input data-stack-field="stop_on_results" value="${escapeHtml((step.stop_on_results || step.stop_on || ["ineligible", "suppressed"]).join(", "))}" />
+          <input data-stack-field="stop_on_results" value="${escapeHtml(stopResults)}" />
         </label>
-        <label>
+        <label class="stack-step-output-json">
           Required output JSON
-          <textarea data-stack-field="required_output" rows="2" placeholder='{"offer_id":"premium"}'>${escapeHtml(stableStringify(step.required_output || {}))}</textarea>
+          <textarea data-stack-field="required_output" rows="2" placeholder='{"offer_id":"premium"}'>${escapeHtml(requiredOutput)}</textarea>
         </label>
         <label>
           Merge outputs
