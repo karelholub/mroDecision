@@ -8401,7 +8401,7 @@ header {
 
 .eval-builder-row {
   display: grid;
-  grid-template-columns: minmax(120px, 0.9fr) minmax(104px, 0.8fr) 84px 28px;
+  grid-template-columns: minmax(120px, 0.9fr) minmax(104px, 0.8fr) 84px 34px;
   gap: 6px;
   align-items: center;
   min-width: 0;
@@ -8417,24 +8417,34 @@ header {
   font-size: 12px;
 }
 
-.eval-builder-row button {
+.eval-builder-row button,
+.eval-builder-remove {
   display: inline-grid;
   place-items: center;
-  width: 28px;
-  min-width: 28px;
-  min-height: 28px;
-  padding-inline: 0;
-  overflow: hidden;
-  color: transparent;
+  width: 34px;
+  min-width: 34px;
+  min-height: 32px;
+  padding: 0;
+  overflow: visible;
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
   white-space: nowrap;
   border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #ffffff;
 }
 
-.eval-builder-row button::before {
-  content: "×";
-  color: var(--muted);
-  font-size: 18px;
-  line-height: 1;
+.eval-builder-remove:hover {
+  color: var(--ink);
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.eval-builder-remove:focus-visible {
+  outline: 2px solid rgba(15, 118, 110, 0.2);
+  outline-offset: 1px;
 }
 
 .eval-builder-empty {
@@ -8507,7 +8517,7 @@ header {
   }
 
   .eval-builder-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 82px 30px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 82px 34px;
   }
 }
 

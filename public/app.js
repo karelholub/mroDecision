@@ -14659,7 +14659,7 @@ function evaluateBuilderRow(kind, key = "", rawValue = "", index = Date.now()) {
       <select data-eval-builder-type>
         ${["string", "number", "boolean", "json"].map((item) => `<option value="${item}"${item === type ? " selected" : ""}>${item}</option>`).join("")}
       </select>
-      <button type="button" data-eval-builder-remove>Remove</button>
+      <button type="button" class="eval-builder-remove" data-eval-builder-remove aria-label="Remove row" title="Remove row">×</button>
       ${graphDatalist(listId, evaluateBuilderKeySuggestions(kind))}
     </div>
   `;
