@@ -288,23 +288,27 @@ aside input {
 
 .settings-layout {
   display: grid;
-  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(188px, 220px) minmax(0, 1fr);
+  grid-template-areas:
+    "status status"
+    "tabs panel";
+  gap: 14px;
   align-items: start;
   min-height: calc(100vh - 160px);
   min-width: 0;
 }
 
 .settings-tabs {
+  grid-area: tabs;
   position: sticky;
-  top: 92px;
+  top: 16px;
   z-index: 2;
   align-self: start;
   display: grid;
-  gap: 6px;
+  gap: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 8px;
+  padding: 6px;
   background: var(--panel);
   box-shadow: var(--shadow);
 }
@@ -313,21 +317,23 @@ aside input {
   display: grid;
   gap: 2px;
   justify-content: flex-start;
-  min-height: 58px;
+  min-height: 48px;
   min-width: 0;
   border-color: transparent;
   background: transparent;
+  padding: 7px 9px;
   text-align: left;
 }
 
 .settings-tab span {
+  font-size: 13px;
   font-weight: 700;
   overflow-wrap: anywhere;
 }
 
 .settings-tab small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.25;
 }
 
@@ -789,30 +795,34 @@ aside input {
 }
 
 .settings-panel {
+  grid-area: panel;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 16px;
+  padding: 14px;
   background: var(--panel);
   box-shadow: var(--shadow);
 }
 
 .settings-summary-panel {
-  grid-column: 2;
+  grid-area: status;
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
+  max-height: 260px;
+  overflow: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 16px;
+  padding: 12px 14px;
   background: var(--panel);
   box-shadow: var(--shadow);
+  scrollbar-width: thin;
 }
 
 .settings-health-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr));
+  gap: 8px;
 }
 
 .settings-health-item {
@@ -820,10 +830,11 @@ aside input {
   gap: 3px;
   min-width: 0;
   align-content: start;
-  padding: 10px;
+  min-height: 58px;
+  padding: 9px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--panel-soft);
+  background: #ffffff;
 }
 
 .settings-health-item strong {
@@ -852,12 +863,12 @@ aside input {
 
 .settings-health-item.ok {
   border-color: #a7d7cd;
-  background: #f0faf7;
+  background: #f3fbf8;
 }
 
 .settings-health-item.warn {
   border-color: #f0cf75;
-  background: var(--warning-soft);
+  background: #fff8e7;
 }
 
 .settings-tab-panel {
@@ -865,7 +876,8 @@ aside input {
 }
 
 .settings-tab-panel.active {
-  display: block;
+  display: grid;
+  gap: 12px;
 }
 
 .settings-section-head {
@@ -873,7 +885,9 @@ aside input {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
 }
 
 .settings-section-head p {
@@ -888,12 +902,12 @@ aside input {
 .integration-workspace,
 .token-workspace {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 
 .settings-card-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
 }
 
 .settings-card-grid .wide,
@@ -905,8 +919,8 @@ aside input {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 14px;
-  background: var(--panel-soft);
+  padding: 12px;
+  background: #ffffff;
 }
 
 .settings-card label {
@@ -4323,33 +4337,33 @@ aside input {
 
 .settings-panel textarea,
 .settings-panel pre {
-  max-height: 420px;
+  max-height: 340px;
   overflow: auto;
 }
 
 .settings-panel textarea {
-  min-height: 220px;
+  min-height: 160px;
   resize: vertical;
 }
 
 .settings-panel pre {
-  min-height: 240px;
+  min-height: 180px;
 }
 
 @media (max-width: 1100px) {
   .settings-layout {
-    grid-template-columns: minmax(176px, 208px) minmax(0, 1fr);
-    gap: 12px;
+    grid-template-columns: minmax(156px, 188px) minmax(0, 1fr);
+    gap: 10px;
   }
 
   .settings-tabs {
-    top: 16px;
-    padding: 6px;
+    top: 12px;
+    padding: 5px;
   }
 
   .settings-tab {
-    min-height: 44px;
-    padding: 8px 10px;
+    min-height: 38px;
+    padding: 6px 8px;
   }
 
   .settings-tab small {
@@ -4358,7 +4372,7 @@ aside input {
 
   .settings-panel,
   .settings-summary-panel {
-    padding: 14px;
+    padding: 12px;
   }
 
   .condition-block-workspace {
@@ -13852,6 +13866,25 @@ pre {
   .settings-panel,
   .settings-summary-panel {
     overflow: visible;
+  }
+
+  .settings-layout {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "status"
+      "tabs"
+      "panel";
+  }
+
+  .settings-tabs {
+    position: static;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+  }
+
+  .settings-tab {
+    flex: 0 0 146px;
   }
 
   .branch-logic {
