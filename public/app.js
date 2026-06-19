@@ -16074,7 +16074,7 @@ function renderSchemaDiagnostics(diagnostics = null) {
 function renderSettingsSummary(settings, runtime, error = null) {
   if (!settingsHealthSummary) return;
   if (error) {
-    settingsHealthSummary.innerHTML = `<div class="settings-health-item warn"><strong>Settings unavailable</strong><span>${escapeHtml(error.message)}</span></div>`;
+    settingsHealthSummary.innerHTML = `<div class="settings-status-error"><strong>Settings unavailable</strong><span>${escapeHtml(error.message)}</span></div>`;
     return;
   }
   const schemaRuntime = runtime?.schema_sync || {};
@@ -16173,16 +16173,82 @@ function renderSettingsSummary(settings, runtime, error = null) {
       ok: true
     }
   ];
-  settingsHealthSummary.innerHTML = items
-    .map((item) => `
-      <div class="settings-health-item ${item.ok ? "ok" : "warn"} ${item.className || ""}">
-        <span>${escapeHtml(item.label)}</span>
-        <strong>${escapeHtml(item.value)}</strong>
-        <span>${escapeHtml(item.detail)}</span>
-        ${(item.meta || []).map((meta) => `<small>${escapeHtml(meta)}</small>`).join("")}
+  const itemByLabel = new Map(items.map((item) => [item.label, item]));
+  const groups = [
+    {
+      title: "Runtime",
+      caption: "Storage, tokens, and deployment posture",
+      labels: [
+        "Environment",
+        "Persistence",
+        "Store Adapter",
+        "Store: Persistent storage",
+        "Store: Multiple service replicas",
+        "Store: Online migrations",
+        "Store: Managed database",
+        "Bootstrap Tokens",
+        "Approval Workflow"
+      ]
+    },
+    {
+      title: "Meiro",
+      caption: "Collector, profile enrichment, and schema sync",
+      labels: [
+        "Meiro Collector",
+        "Feedback Endpoint",
+        "Profile API",
+        "Profile Cache",
+        "Meiro Metadata",
+        "Schema Sync"
+      ]
+    },
+    {
+      title: "Assistant",
+      caption: "Optional LLM planning provider",
+      labels: ["Assistant LLM"]
+    }
+  ];
+  const used = new Set();
+  const renderRow = (item) => {
+    if (!item) return "";
+    used.add(item.label);
+    return `
+      <div class="settings-status-row ${item.ok ? "ok" : "warn"}">
+        <span class="settings-status-dot" aria-hidden="true"></span>
+        <div class="settings-status-copy">
+          <strong>${escapeHtml(item.label)}</strong>
+          <small>${escapeHtml(item.detail)}</small>
+          ${(item.meta || []).map((meta) => `<small>${escapeHtml(meta)}</small>`).join("")}
+        </div>
+        <span class="settings-status-value">${escapeHtml(item.value)}</span>
       </div>
-    `)
-    .join("");
+    `;
+  };
+  const groupHtml = groups.map((group) => {
+    const groupItems = group.labels.map((label) => itemByLabel.get(label)).filter(Boolean);
+    const issueCount = groupItems.filter((item) => !item.ok).length;
+    return `
+      <section class="settings-status-group">
+        <div class="settings-status-group-head">
+          <div>
+            <strong>${escapeHtml(group.title)}</strong>
+            <span>${escapeHtml(group.caption)}</span>
+          </div>
+          <b class="${issueCount ? "warn" : "ok"}">${issueCount ? `${issueCount} review` : "Ready"}</b>
+        </div>
+        <div class="settings-status-list">
+          ${groupItems.map(renderRow).join("")}
+        </div>
+      </section>
+    `;
+  }).join("");
+  const ungroupedHtml = items.filter((item) => !used.has(item.label)).map(renderRow).join("");
+  settingsHealthSummary.innerHTML = `
+    <div class="settings-status-board">
+      ${groupHtml}
+      ${ungroupedHtml ? `<section class="settings-status-group settings-status-group-extra"><div class="settings-status-group-head"><div><strong>Other</strong><span>Additional runtime checks</span></div></div><div class="settings-status-list">${ungroupedHtml}</div></section>` : ""}
+    </div>
+  `;
 }
 
 function storeAdapterDetailItem(storeAdapter = {}, adapterInfo = {}, postgresRuntime = {}) {
