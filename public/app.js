@@ -8039,6 +8039,12 @@ function renderLookupList() {
   target.innerHTML += filtered.length
     ? filtered.map((item) => lookupCatalogRow(item)).join("")
     : row(["No reference tables match the current filters", "", "", "", "", ""]);
+  const summary = document.querySelector("#lookup-list-summary");
+  if (summary) {
+    const rowTotal = filtered.reduce((sum, item) => sum + (item.rows?.length || 0), 0);
+    const columnTotal = new Set(filtered.flatMap((item) => referenceColumnsFromRowsForTable(item))).size;
+    summary.textContent = `${formatNumber(filtered.length)} of ${formatNumber(cachedLookupTables.length)} tables · ${formatNumber(rowTotal)} rows · ${formatNumber(columnTotal)} fields`;
+  }
   target.querySelectorAll("[data-lookup-id]").forEach((element) => {
     element.addEventListener("click", () => loadLookup(element.dataset.lookupId, cachedLookupTables));
   });

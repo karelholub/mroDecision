@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Meiro DEE</title>
-    <link rel="stylesheet" href="/styles.css?v=20260619-sidebar-polish" />
+    <link rel="stylesheet" href="/styles.css?v=20260619-lookups-polish" />
   </head>
   <body>
     <aside class="app-sidebar" aria-label="Primary navigation">
@@ -1826,7 +1826,13 @@
         </header>
         <div class="lookup-workbench">
           <div class="lookup-list-pane editor">
-            <div class="editor-title">Reference Tables</div>
+            <div class="lookup-list-head">
+              <div>
+                <div class="editor-title">Reference Tables</div>
+                <p>Reusable mappings for outputs, validation, suppression, and enrichment.</p>
+              </div>
+              <div class="lookup-list-summary" id="lookup-list-summary">Select a table to edit rows and governance.</div>
+            </div>
             <div class="lookup-filter-bar">
               <label>
                 Search
@@ -1858,7 +1864,13 @@
             <div class="lookup-editor-pane">
               <div class="lookup-editor-main">
                 <div class="lookup-table-pane">
-                  <div class="editor-title">Table Editor</div>
+                  <div class="lookup-section-head">
+                    <div>
+                      <div class="editor-title">Table Editor</div>
+                      <p>Maintain keys and fields in a spreadsheet-like grid.</p>
+                    </div>
+                    <span>Rows sync to JSON for portability.</span>
+                  </div>
                   <div class="grid-three">
                     <label>
                       Table ID
@@ -1883,7 +1895,12 @@
                   </div>
                 </div>
                 <div class="lookup-inspector-pane">
-                  <div class="editor-title">Inspector</div>
+                  <div class="lookup-section-head">
+                    <div>
+                      <div class="editor-title">Inspector</div>
+                      <p>Usage hints, column checks, and save policy.</p>
+                    </div>
+                  </div>
                   <div id="lookup-inspector-summary" class="status-panel compact-status-panel"></div>
                   <div class="inspector-section">
                     <h3>How Rules Use It</h3>
