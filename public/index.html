@@ -1079,69 +1079,98 @@
         </header>
         <div class="evaluate-workbench">
           <div class="evaluate-controls editor">
-            <div class="editor-title">Request Setup</div>
-            <div class="eval-setup-grid">
-              <label class="eval-field-sm">
-                Request type
-                <select id="eval-request-kind">
-                  <option value="decision">Decision rule</option>
-                  <option value="surface">Client surface</option>
-                </select>
-              </label>
-              <label class="eval-field-lg">
-                Rule set
-                <select id="eval-rule-key"></select>
-              </label>
-              <label class="eval-field-lg">
-                Preset
-                <select id="eval-preset">
-                  <option value="rule_default">Selected rule default</option>
-                  <option value="nbo_green">NBO green energy</option>
-                  <option value="nbo_credit">NBO credit suppression</option>
-                  <option value="nbo_retention">NBO retention</option>
-                  <option value="nbo_premium">NBO premium upsell</option>
-                  <option value="nbo_fallback">NBO fallback</option>
-                  <option value="loan">Loan eligibility</option>
-                  <option value="experiment_holdout">Experiment holdout</option>
-                </select>
-              </label>
-              <label class="eval-field-sm">
-                Version
-                <select id="eval-mode">
-                  <option value="published">Published</option>
-                  <option value="draft">Current draft</option>
-                </select>
-              </label>
-              <label class="eval-field-lg">
-                Profile key
-                <input id="eval-profile-key" value="demo-profile" />
-              </label>
-              <label class="eval-field-lg">
-                Surface
-                <input id="eval-surface" value="homepage_hero" placeholder="homepage_hero" />
-              </label>
-              <label class="eval-field-xs">
-                Candidate limit
-                <input id="eval-limit" type="number" min="1" max="50" value="20" />
-              </label>
-              <label class="eval-field-md">
-                Saved profile
-                <select id="eval-saved-profile"></select>
-              </label>
+            <div class="eval-panel-head">
+              <div>
+                <div class="editor-title">Request Setup</div>
+                <p>Choose the rule route, tune the subject payload, and run a decision or client-surface simulation.</p>
+              </div>
+              <div class="eval-meta-strip">
+                <div class="eval-meta-card">
+                  <span>Endpoint</span>
+                  <strong id="eval-endpoint-label">/v1/evaluate</strong>
+                </div>
+                <div class="eval-meta-card">
+                  <span>Audit write</span>
+                  <strong id="eval-audit-label">Yes, published mode</strong>
+                </div>
+              </div>
+            </div>
+            <div class="eval-setup-band">
+              <div class="eval-setup-band-head">
+                <strong>Route</strong>
+                <span>Pick the exact decision path and preset to test.</span>
+              </div>
+              <div class="eval-setup-grid">
+                <label class="eval-field-sm">
+                  Request type
+                  <select id="eval-request-kind">
+                    <option value="decision">Decision rule</option>
+                    <option value="surface">Client surface</option>
+                  </select>
+                </label>
+                <label class="eval-field-lg">
+                  Rule set
+                  <select id="eval-rule-key"></select>
+                </label>
+                <label class="eval-field-lg">
+                  Preset
+                  <select id="eval-preset">
+                    <option value="rule_default">Selected rule default</option>
+                    <option value="nbo_green">NBO green energy</option>
+                    <option value="nbo_credit">NBO credit suppression</option>
+                    <option value="nbo_retention">NBO retention</option>
+                    <option value="nbo_premium">NBO premium upsell</option>
+                    <option value="nbo_fallback">NBO fallback</option>
+                    <option value="loan">Loan eligibility</option>
+                    <option value="experiment_holdout">Experiment holdout</option>
+                  </select>
+                </label>
+                <label class="eval-field-sm">
+                  Version
+                  <select id="eval-mode">
+                    <option value="published">Published</option>
+                    <option value="draft">Current draft</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div class="eval-setup-band">
+              <div class="eval-setup-band-head">
+                <strong>Subject</strong>
+                <span>Set the profile, surface, and reusable payload to run.</span>
+              </div>
+              <div class="eval-setup-grid">
+                <label class="eval-field-lg">
+                  Profile key
+                  <input id="eval-profile-key" value="demo-profile" />
+                </label>
+                <label class="eval-field-lg">
+                  Surface
+                  <input id="eval-surface" value="homepage_hero" placeholder="homepage_hero" />
+                </label>
+                <label class="eval-field-xs">
+                  Candidate limit
+                  <input id="eval-limit" type="number" min="1" max="50" value="20" />
+                </label>
+                <label class="eval-field-md">
+                  Saved profile
+                  <select id="eval-saved-profile"></select>
+                </label>
+              </div>
             </div>
             <div class="actions left eval-setup-actions">
               <button type="button" id="load-preset-secondary">Load Preset</button>
               <button type="button" id="toggle-eval-payload">Show Payload JSON</button>
               <button type="button" id="save-eval-profile">Save Profile</button>
               <button type="button" id="delete-eval-profile">Delete</button>
-              <button type="button" id="run-eval-secondary">Run</button>
               <button type="button" id="compare-eval">Compare Draft</button>
+              <button type="button" id="run-eval-secondary">Run</button>
             </div>
             <div id="eval-payload-panel" class="eval-payload-panel" hidden>
               <div class="builder-section-head">
                 <div>
                   <strong>Profile Payload JSON</strong>
-                  <span>Edit the raw request body used for this evaluation.</span>
+                  <span>Open the raw request only when you need low-level edits or want to paste a full payload.</span>
                 </div>
               </div>
               <textarea id="eval-input" spellcheck="false"></textarea>
@@ -1150,7 +1179,7 @@
               <div class="builder-section-head">
                 <div>
                   <strong>Profile Builder</strong>
-                  <span>Edit common request fields without opening JSON.</span>
+                  <span>Work with attributes, context, and segments in a denser grid, then sync them into the request payload.</span>
                 </div>
                 <div class="actions">
                   <button type="button" id="add-eval-attribute">Add Attribute</button>
@@ -1161,14 +1190,32 @@
               <div class="eval-builder-columns">
                 <div>
                   <h3>Attributes</h3>
+                  <div class="eval-builder-list-head">
+                    <span>Field</span>
+                    <span>Value</span>
+                    <span>Type</span>
+                    <span></span>
+                  </div>
                   <div id="eval-attribute-builder" class="eval-builder-list"></div>
                 </div>
                 <div>
                   <h3>Context</h3>
+                  <div class="eval-builder-list-head">
+                    <span>Field</span>
+                    <span>Value</span>
+                    <span>Type</span>
+                    <span></span>
+                  </div>
                   <div id="eval-context-builder" class="eval-builder-list"></div>
                 </div>
                 <div>
                   <h3>Segments</h3>
+                  <div class="eval-builder-list-head">
+                    <span>Field</span>
+                    <span>Value</span>
+                    <span>Type</span>
+                    <span></span>
+                  </div>
                   <div id="eval-segment-builder" class="eval-builder-list"></div>
                 </div>
               </div>
@@ -1178,20 +1225,40 @@
               </div>
             </div>
             <div id="eval-validation" class="eval-validation"></div>
-            <div class="inspector-section">
-              <h3>What This Runs</h3>
-              <div class="inspector-lines">
-                <div><span>Endpoint</span><strong id="eval-endpoint-label">/v1/evaluate</strong></div>
-                <div><span>Audit write</span><strong id="eval-audit-label">Yes, published mode</strong></div>
-              </div>
-            </div>
           </div>
           <div class="evaluate-response editor">
-            <div class="editor-title">Response</div>
-            <div id="eval-summary" class="status-panel compact-status-panel"></div>
-            <div id="eval-output-summary" class="eval-output-summary"></div>
-            <div id="eval-runtime-summary" class="eval-runtime-summary"></div>
-            <div class="evaluate-response-body">
+            <div class="eval-panel-head">
+              <div>
+                <div class="editor-title">Response</div>
+                <p>Review the outcome first, then inspect outputs, runtime behavior, trace, and raw payload.</p>
+              </div>
+            </div>
+            <div class="eval-response-block">
+              <div class="eval-response-block-head">
+                <strong>Outcome</strong>
+                <span>Status, mode, matched route, and selected result.</span>
+              </div>
+              <div id="eval-summary" class="status-panel compact-status-panel"></div>
+            </div>
+            <div class="eval-response-block">
+              <div class="eval-response-block-head">
+                <strong>Decision output</strong>
+                <span>Top-level outputs, matched rules, and profile enrichment source.</span>
+              </div>
+              <div id="eval-output-summary" class="eval-output-summary"></div>
+            </div>
+            <div class="eval-response-block">
+              <div class="eval-response-block-head">
+                <strong>Runtime diagnostics</strong>
+                <span>Surface readiness, suppression causes, and rendering contract signals.</span>
+              </div>
+              <div id="eval-runtime-summary" class="eval-runtime-summary"></div>
+            </div>
+            <div class="evaluate-response-body eval-response-block">
+              <div class="eval-response-block-head">
+                <strong>Trace & raw response</strong>
+                <span>Use the trace for reasoning and the raw payload for implementation checks.</span>
+              </div>
               <div id="eval-trace" class="eval-trace"></div>
               <pre id="eval-output"></pre>
             </div>
