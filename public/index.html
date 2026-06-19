@@ -4,28 +4,30 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Meiro DEE</title>
-    <link rel="stylesheet" href="/styles.css?v=20260619-message-polish" />
+    <link rel="stylesheet" href="/styles.css?v=20260619-sidebar-polish" />
   </head>
   <body>
-    <aside>
+    <aside class="app-sidebar" aria-label="Primary navigation">
       <div class="brand">
-        <h1>Meiro DEE</h1>
-        <span>Decision control plane</span>
+        <div class="brand-copy">
+          <h1>Meiro DEE</h1>
+          <span>Decision control plane</span>
+        </div>
       </div>
-      <nav>
+      <nav aria-label="Main sections">
         <span class="nav-section">Operations</span>
-        <button data-view="overview" class="active">Overview</button>
-        <button data-view="audit">Audit</button>
+        <button data-view="overview" class="active" aria-current="page"><span>Overview</span></button>
+        <button data-view="audit"><span>Audit</span></button>
         <span class="nav-section">Decisioning</span>
-        <button data-view="rules">Rule Sets</button>
-        <button data-view="experiments">Campaigns</button>
-        <button data-view="stacks">Decision Stacks</button>
-        <button data-view="test">Evaluate</button>
+        <button data-view="rules"><span>Rule Sets</span></button>
+        <button data-view="experiments"><span>Campaigns</span></button>
+        <button data-view="stacks"><span>Decision Stacks</span></button>
+        <button data-view="test"><span>Evaluate</span></button>
         <span class="nav-section">Content & Data</span>
-        <button data-view="messages">Messages</button>
-        <button data-view="lookups">Reference Data</button>
+        <button data-view="messages"><span>Messages</span></button>
+        <button data-view="lookups"><span>Reference Data</span></button>
         <span class="nav-section">Administration</span>
-        <button data-view="settings">Settings</button>
+        <button data-view="settings"><span>Settings</span></button>
       </nav>
     </aside>
     <div class="app-frame">

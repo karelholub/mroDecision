@@ -255,7 +255,9 @@ function switchView(viewName, options = {}) {
   const view = document.querySelector(`#${cssEscape(viewName)}`);
   if (!button || !view) return;
   document.querySelectorAll("nav button, .view").forEach((item) => item.classList.remove("active"));
+  document.querySelectorAll("nav button[aria-current]").forEach((item) => item.removeAttribute("aria-current"));
   button.classList.add("active");
+  button.setAttribute("aria-current", "page");
   document.body.dataset.currentView = viewName;
   view.classList.add("active");
   if (options.updateHash !== false && window.location.hash !== `#${viewName}`) {
