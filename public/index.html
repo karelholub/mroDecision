@@ -963,24 +963,32 @@
               <div class="campaign-workbench-title-row">
                 <div>
                   <div class="editor-title">Campaign Workbench</div>
-                  <p>Summary first, then linked experiments and assets.</p>
+                  <p>Selected campaign summary, linked assets, and experiment drilldown.</p>
                 </div>
               </div>
-              <div id="campaign-master-detail" class="campaign-master-detail"></div>
-              <div class="experiment-pane-head experiment-subsection-head">
-                <div>
-                  <div class="editor-title">Experiments</div>
-                  <p>Filtered by selected campaign unless all campaigns are shown.</p>
+              <div class="campaign-workbench-shell">
+                <div id="campaign-master-detail" class="campaign-master-detail"></div>
+                <div class="campaign-explorer-grid">
+                  <section class="campaign-explorer-rail">
+                    <div class="experiment-pane-head experiment-subsection-head">
+                      <div>
+                        <div class="editor-title">Experiments</div>
+                        <p>Filtered by selected campaign unless all campaigns are shown.</p>
+                      </div>
+                    </div>
+                    <div id="experiment-list" class="experiment-list"></div>
+                  </section>
+                  <section class="campaign-explorer-focus">
+                    <div class="experiment-pane-head experiment-subsection-head">
+                      <div>
+                        <div class="editor-title">Experiment Detail</div>
+                        <p>Open design, settings, results, or Evaluate for the selected experiment.</p>
+                      </div>
+                    </div>
+                    <div id="experiment-detail" class="experiment-detail"></div>
+                  </section>
                 </div>
               </div>
-              <div id="experiment-list" class="experiment-list"></div>
-              <div class="experiment-pane-head experiment-subsection-head">
-                <div>
-                  <div class="editor-title">Experiment Detail</div>
-                  <p>Open design, settings, results, or Evaluate for the selected experiment.</p>
-                </div>
-              </div>
-              <div id="experiment-detail" class="experiment-detail"></div>
             </div>
           </div>
         </div>
