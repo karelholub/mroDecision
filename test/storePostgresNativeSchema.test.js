@@ -24,6 +24,8 @@ test("native postgres schema covers core DEE tables", () => {
     "experiment_assignments",
     "api_tokens",
     "settings",
+    "runtime_state",
+    "runtime_rate_limits",
     "schema_items"
   ]) {
     assert.match(sql, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`));
@@ -40,5 +42,7 @@ test("native postgres schema uses postgres-native data types and indexes", () =>
   assert.match(sql, /ok BOOLEAN NOT NULL DEFAULT false/);
   assert.match(sql, /INSERT INTO dee_migrations/);
   assert.match(indexSql, /idx_client_events_decision_time/);
+  assert.match(indexSql, /idx_runtime_state_expires/);
+  assert.match(indexSql, /idx_runtime_rate_limits_reset/);
   assert.match(indexSql, /idx_assistant_provider_plan_events_time/);
 });

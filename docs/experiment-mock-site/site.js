@@ -540,6 +540,7 @@ function slugForEditor(value) {
 }
 
 function initializeSdk(options = {}) {
+  state.sdk?.destroy?.();
   applyPlacementSettings();
   const token = elements.token.value.trim();
   const baseUrl = elements.baseUrl.value.trim().replace(/\/$/, "");
@@ -716,7 +717,7 @@ function renderSurveyContent(content = {}) {
   return `
     <div class="message-survey">
       ${questions.slice(0, 6).map((question, index) => `
-        <fieldset data-dee-survey-fieldset data-dee-survey-required="${question.required ? "true" : "false"}">
+        <fieldset data-dee-survey-fieldset data-dee-survey-question-id="${escapeAttribute(surveyQuestionId(question, index))}" data-dee-survey-required="${question.required ? "true" : "false"}"${surveyShowIfAttributes(question)}>
           <legend>${escapeHtml(question.label || question.title || `Question ${index + 1}`)}</legend>
           <div>
             ${surveyOptions(question).length
@@ -728,6 +729,19 @@ function renderSurveyContent(content = {}) {
       `).join("")}
     </div>
   `;
+}
+
+function surveyQuestionId(question = {}, index = 0) {
+  return question.id || question.tracking_name || question.trackingName || `survey_question_${index + 1}`;
+}
+
+function surveyShowIfAttributes(question = {}) {
+  const showIf = question.show_if || question.showIf;
+  if (!showIf || typeof showIf !== "object") return "";
+  const sourceQuestion = showIf.question || showIf.question_id || showIf.questionId || "";
+  const value = showIf.value || showIf.equals || showIf.answer || "";
+  if (!sourceQuestion || value == null || value === "") return "";
+  return ` data-dee-survey-show-question="${escapeAttribute(sourceQuestion)}" data-dee-survey-show-value="${escapeAttribute(value)}" hidden`;
 }
 
 function surveyOptions(question = {}) {

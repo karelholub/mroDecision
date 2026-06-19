@@ -7,11 +7,16 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "check": "node --check src/*.js && node --check public/app-utils.js && node --check public/app.js && node --check scripts/benchmark.js && node --check scripts/postgres-migrate.js && node --check docs/dee-web-sdk/dee-web-sdk.js",
+    "check": "node --check src/*.js && node --check public/app-utils.js && node --check public/app.js && node --check scripts/benchmark.js && node --check scripts/postgres-migrate.js && node --check scripts/postgres-smoke.js && node --check scripts/launch-preflight.js && node --check docs/dee-web-sdk/dee-web-sdk.js",
     "test": "node --test",
     "bench": "node scripts/benchmark.js",
     "bench:client": "DEE_BENCH_ENDPOINT=/v1/client/evaluate node scripts/benchmark.js",
-    "postgres:migrate": "node scripts/postgres-migrate.js"
+    "bench:100": "DEE_BENCH_PROFILE=100rps DEE_BENCH_ENDPOINT=/v1/client/evaluate node scripts/benchmark.js",
+    "bench:500": "DEE_BENCH_PROFILE=500rps DEE_BENCH_ENDPOINT=/v1/client/evaluate node scripts/benchmark.js",
+    "bench:1000": "DEE_BENCH_PROFILE=1000rps DEE_BENCH_ENDPOINT=/v1/client/evaluate node scripts/benchmark.js",
+    "postgres:migrate": "node scripts/postgres-migrate.js",
+    "postgres:smoke": "node scripts/postgres-smoke.js",
+    "launch:preflight": "node scripts/launch-preflight.js"
   },
   "optionalDependencies": {
     "pg": "^8.13.1"

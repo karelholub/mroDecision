@@ -31,6 +31,7 @@ This initial implementation is dependency-light and runs on Node.js built-ins on
 - Meiro integration templates generated from runtime settings
 - Dockerfile and Compose example
 - SQLite persistence using Node's built-in `node:sqlite`
+- Kubernetes, Grafana, Prometheus, and launch-readiness artifacts for production deployment
 
 ## Quick Start
 
@@ -72,6 +73,15 @@ DEE_STORE_ADAPTER=postgres DEE_DATABASE_URL=postgres://user:pass@host:5432/db np
 ```
 
 Postgres snapshot mode persists the full DEE store into a managed Postgres JSONB table while keeping SQLite as the in-process execution engine. Use one active writer for this mode; native row-level Postgres remains the path for horizontal write scaling. Unsupported adapter values fail startup with a clear error so production deployments do not silently fall back to local-file storage.
+
+For high-volume or multi-replica deployments, use the native row-level Postgres adapter:
+
+```bash
+DEE_STORE_ADAPTER=postgres_native \
+DEE_RUNTIME_STATE_ADAPTER=postgres \
+DEE_DATABASE_URL=postgres://user:pass@host:5432/db \
+npm start
+```
 
 ## API
 
@@ -170,16 +180,9 @@ A reusable browser helper for declared website placements is available in [docs/
 
 ## Management UI
 
-The embedded UI supports the current MVP workflow:
+The embedded UI supports decisioning, campaigns, rules, messages, experiments, reference data, evaluation, audit, settings, and integration diagnostics. For marketing users, the next planned UI workstream is a simplification and scale refactor centered on Campaigns as the primary workspace. See [docs/marketing-ui-refactor-roadmap.md](docs/marketing-ui-refactor-roadmap.md).
 
-1. Create a rule set.
-2. Generate branch drafts, including lookup-backed output expressions, or edit the draft JSON directly.
-3. Save the draft.
-4. Publish the draft.
-5. Evaluate a sample profile against either the published version or the current draft.
-6. Inspect audit entries, reference data tables, API tokens, and Meiro Pipes request templates.
-
-The visual flow canvas described in the product spec is intentionally not part of this first implementation; advanced graphs are supported through JSON drafts.
+Advanced rule graphs, message templates, experiment operations, decision stacks, assistant-assisted draft creation, and website SDK testing are available, but some complex authoring screens still expose developer-oriented payload drawers for inspection and migration support.
 
 ## Operations
 
@@ -188,8 +191,10 @@ Use `GET /v1/health` for a lightweight process check and `GET /v1/ready` for rea
 For high-traffic websites, tune process guardrails with environment variables:
 
 - `DEE_CLIENT_RATE_LIMIT_WINDOW_MS` and `DEE_CLIENT_RATE_LIMIT_MAX` protect `/v1/client/*` endpoints per token, origin, action, and source IP. Responses include `x-ratelimit-*` headers and return `429` with `retry-after` when exhausted.
+- `DEE_RUNTIME_STATE_ADAPTER=memory|postgres` controls whether decision/profile caches and rate-limit buckets are local to one process or shared through native Postgres.
 - `DEE_REQUEST_BODY_LIMIT_BYTES` and `DEE_BATCH_REQUEST_BODY_LIMIT_BYTES` cap JSON payload size.
 - `DEE_REQUEST_TIMEOUT_MS`, `DEE_HEADERS_TIMEOUT_MS`, `DEE_KEEP_ALIVE_TIMEOUT_MS`, and `DEE_MAX_REQUESTS_PER_SOCKET` control Node HTTP socket behavior.
+- `DEE_LOAD_SHEDDING_MODE=monitor|shed|off` records or enforces pressure-based protection for browser decision endpoints. In `shed` mode, overloaded or degraded conditions return `503 load_shed` with `retry-after`.
 
 Monitor `/v1/metrics` for `runtime_requests`, `client_traffic`, `client_rate_limit`, `client_cache`, `profile_cache`, and `assistant_provider` before raising limits or enabling optional LLM planning broadly. Runtime request metrics include rolling p50/p95/p99 latency, status counts, error rate, and slow-route summaries. Client traffic metrics break website API calls down by endpoint, token, origin, environment, and app id. Assistant provider metrics include call/test counts, fallback/error rate, p95 latency, last provider status, and provider-reported token usage without storing prompts or API keys.
 
@@ -204,6 +209,29 @@ For Docker deployments, place the service behind an HTTPS reverse proxy and moun
 
 See [docs/deployment.md](docs/deployment.md) for production Compose, nginx, backup, token-hardening, and managed-database migration guidance.
 
+For Kubernetes and high-volume website readiness:
+
+- Kubernetes manifests: [deploy/kubernetes](deploy/kubernetes)
+- Grafana dashboard: [deploy/grafana/dee-overview-dashboard.json](deploy/grafana/dee-overview-dashboard.json)
+- Observability runbook: [docs/observability-runbook.md](docs/observability-runbook.md)
+- Alert response runbook: [docs/alert-response-runbook.md](docs/alert-response-runbook.md)
+- Production launch checklist: [docs/production-launch-checklist.md](docs/production-launch-checklist.md)
+- Production readiness roadmap: [docs/production-readiness-roadmap.md](docs/production-readiness-roadmap.md)
+
+Run the local launch artifact preflight with:
+
+```bash
+npm run launch:preflight
+```
+
+Probe a deployed staging environment with:
+
+```bash
+DEE_PREFLIGHT_URL=https://staging-dee.example.com \
+DEE_PREFLIGHT_TOKEN=replace-with-viewer-token \
+npm run launch:preflight
+```
+
 Run a simple local latency check against the Docker service with:
 
 ```bash
@@ -217,5 +245,13 @@ npm run bench:client
 ```
 
 Tune it with `DEE_BENCH_URL`, `DEE_BENCH_TOKEN`, `DEE_BENCH_ENDPOINT`, `DEE_BENCH_REQUESTS`, `DEE_BENCH_CONCURRENCY`, `DEE_BENCH_WARMUP_REQUESTS`, and `DEE_BENCH_DECISION_KEY`. Add SLO gates with `DEE_BENCH_MAX_P95_MS`, `DEE_BENCH_MAX_P99_MS`, `DEE_BENCH_MAX_ERROR_RATE`, and `DEE_BENCH_MIN_RPS`; the command exits non-zero when a configured gate fails.
+
+For staging load gates, use the named browser profiles:
+
+```bash
+npm run bench:100
+npm run bench:500
+npm run bench:1000
+```
 
 Pull requests and pushes to `main` run GitHub Actions checks for JavaScript syntax, the Node test suite, and a Docker image build.

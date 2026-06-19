@@ -25,7 +25,99 @@ It follows the recommended production pattern:
 </script>
 ```
 
+Production defaults should keep the original page stable if DEE is slow or unavailable:
+
+```html
+<script src="https://cdn.example.com/dee-web-sdk.js" defer></script>
+<script>
+  window.addEventListener("DOMContentLoaded", function () {
+    window.dee = DEEWebSDK.createClient({
+      baseUrl: "https://dee.example.com",
+      token: "client-token-with-client-scope",
+      profileKey: function () {
+        return window.meiroProfileId || localStorage.getItem("meiro_user_id") || "";
+      },
+      identifier: window.meiroEmail ? { typeId: "email", value: window.meiroEmail } : null,
+      profileEnrichment: "auto",
+      requestTimeoutMs: 3000,
+      eventTimeoutMs: 2000,
+      eventRetryQueue: true,
+      eventRetryMaxItems: 50,
+      botPolicy: "skip_known",
+      debug: false
+    });
+    window.dee.init();
+  });
+</script>
+```
+
 By default the SDK sends an `impression` event after a placement renders. Experiment variants still send `exposure` when `autoExposure` is enabled. When a placement or decision is blocked by URL/device targeting, consent, SDK conditions, display frequency, or dismiss policy, the SDK dispatches `dee:skipped` and sends `/v1/client/skipped` with `event.reason` and `event.category` when `autoSkipped` is enabled. Interruptive message templates (`modal`, `toast`, and `alert`) render an accessible dismiss button; dismissals are sent as `conversion` events with `event.name: "dismiss"` and are stored in browser storage according to the message dismiss policy (`suppress`, `cooldown`, or `ignore`).
+
+## Google Tag Manager
+
+Use a Custom HTML tag that loads the SDK once and reinitializes safely on SPA route changes or tag re-fires.
+
+```html
+<script>
+(function () {
+  var SDK_URL = "https://cdn.example.com/dee-web-sdk.js";
+  var DEE_URL = "https://dee.example.com";
+  var DEE_TOKEN = "client-token-with-client-scope";
+
+  function boot() {
+    if (!window.DEEWebSDK) return;
+    if (window.dee && window.dee.destroy) window.dee.destroy();
+    window.dee = window.DEEWebSDK.createClient({
+      baseUrl: DEE_URL,
+      token: DEE_TOKEN,
+      profileKey: function () {
+        return window.meiroProfileId || localStorage.getItem("meiro_user_id") || "";
+      },
+      identifier: window.meiroEmail ? { typeId: "email", value: window.meiroEmail } : null,
+      profileEnrichment: "auto",
+      consentProvider: function () {
+        return window.__DEE_CONSENT__ || {
+          personalization: window.dataLayer?.some(function (item) { return item.event === "personalization_consent_granted"; }) === true
+        };
+      },
+      requestTimeoutMs: 3000,
+      eventTimeoutMs: 2000,
+      eventRetryQueue: true,
+      eventRetryMaxItems: 50,
+      botPolicy: "skip_known",
+      debug: false
+    });
+    window.dee.init();
+  }
+
+  if (window.DEEWebSDK) {
+    boot();
+    return;
+  }
+  var script = document.createElement("script");
+  script.src = SDK_URL;
+  script.async = true;
+  script.onload = boot;
+  document.head.appendChild(script);
+})();
+</script>
+```
+
+For single-page apps, fire the tag on the initial page view and on route-change events after the new placements are in the DOM. The SDK `destroy()` method removes SDK-managed listeners and placement wiring before reinitialization.
+
+## Production Controls
+
+Key options for high-traffic websites:
+
+- `requestTimeoutMs`: evaluation timeout. Default `3000`.
+- `eventTimeoutMs`: feedback event timeout. Default `2000`.
+- `eventRetryQueue`: stores failed feedback events in local storage and retries them on the next SDK init. Default `true`.
+- `eventRetryMaxItems`: maximum queued feedback events. Default `50`.
+- `botPolicy`: `skip_known` by default. Use `allow` for test crawlers, `allow_automation` for Playwright/Cypress, or `skip_all` for controlled QA pages.
+- `debug`: off by default. Set `debug: true` only for QA.
+- `allowDebugQuery`: allows `?dee_debug=1` to enable SDK console logs without changing the tag. Default `true`.
+- `consentProvider`: synchronous function returning consent flags such as `{ personalization: true, marketing: false }`.
+- `profileEnrichment`: usually `auto` when the page sends identifiers and DEE is configured to call Meiro Profile API.
 
 ## Carousel Placement
 
@@ -297,16 +389,25 @@ Survey messages can be question-first. A `survey` payload does not need title or
     "template_type": "survey",
     "questions": [
       {
+        "id": "q1",
         "label": "How useful is this offer?",
         "tracking_name": "survey_usefulness",
         "options": ["Low", "Medium", "High"]
+      },
+      {
+        "id": "q1_followup",
+        "label": "What should we improve?",
+        "type": "text",
+        "required": true,
+        "tracking_name": "survey_improvement",
+        "show_if": { "question": "q1", "value": "Low" }
       }
     ]
   }
 }
 ```
 
-Survey option clicks are sent as conversion events with `event.type: "survey_response"`, `event.survey_question`, `event.survey_question_label`, `event.survey_value`, and `event.value`. Free-text survey questions render a textarea plus a submit button and send the entered response through the same event fields. Required free-text questions are blocked client-side until the visitor enters an answer. After a successful response, the SDK marks the selected answer and shows a compact acknowledgement. When DEE accepts the conversion, it also forwards an `inapp_survey_response` event to the configured Meiro collector or feedback endpoint so Pipes can store the answer in profile attributes.
+Survey option clicks are sent as conversion events with `event.type: "survey_response"`, `event.survey_question`, `event.survey_question_label`, `event.survey_value`, and `event.value`. Free-text survey questions render a textarea plus a submit button and send the entered response through the same event fields. Required free-text questions are blocked client-side until the visitor enters an answer. Follow-up questions can use `show_if` to reveal a question only after a previous question records the matching value. After a successful response, the SDK marks the selected answer and shows a compact acknowledgement. When DEE accepts the conversion, it also forwards an `inapp_survey_response` event to the configured Meiro collector or feedback endpoint so Pipes can store the answer in profile attributes.
 
 Message experiments can return inline variant content without creating a separate message record for every variant. The SDK treats `message_content`, `message_id`, and `message_variant` as a message render target even when `outputs.template` is a concrete message template such as `banner`, `modal`, or `card`:
 
@@ -331,7 +432,9 @@ Message experiments can return inline variant content without creating a separat
 }
 ```
 
-Exposure, click, and conversion feedback uses the experiment `variant_key` when present and also includes `message_variant` in the event/context payload so message-content experiments can be analyzed from both experiment and message views.
+Exposure, click, and conversion feedback uses the experiment `variant_key` when present and also includes `message_variant` in the event/context payload so message-content experiments can be analyzed from both experiment and message views. Decisions produced by graph experiment split nodes also send `graph_experiments` with each client event, making the assigned graph node, experiment key, strategy, and variant visible in audit and downstream Meiro feedback.
+
+Feedback events use stable `event_id` values and DEE stores them idempotently. If a browser is offline or DEE returns a transient server/network error, the SDK queues the event in local storage and retries it on the next initialization. Permanent 4xx responses are dropped from the retry queue so invalid tokens or malformed payloads do not retry forever.
 
 ## Triggers
 

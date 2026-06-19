@@ -103,8 +103,17 @@ test("native postgres read store maps catalogs and filtered reads", async () => 
 });
 
 test("native postgres read store reports health probe status", async () => {
-  const okStore = new PostgresNativeReadStore(fakeClient([], { "SELECT 1 AS ok": [{ ok: 1 }] }));
-  assert.equal((await okStore.health()).ok, true);
+  const poolInfo = {
+    max: 12,
+    idle_timeout_ms: 30000,
+    connection_timeout_ms: 5000,
+    statement_timeout_ms: 15000
+  };
+  const okStore = new PostgresNativeReadStore(fakeClient([], { "SELECT 1 AS ok": [{ ok: 1 }] }), { poolInfo });
+  const okHealth = await okStore.health();
+  assert.equal(okHealth.ok, true);
+  assert.deepEqual(okHealth.postgres.pool, poolInfo);
+  assert.ok(okHealth.deployment.checks.some((check) => check.key === "postgres_pool"));
 
   const failingStore = new PostgresNativeReadStore({
     async query() {
@@ -479,6 +488,8 @@ test("native postgres experiment operations report variants and assignments", as
   assert.ok(experiment.variants.find((variant) => variant.key === "destination_focus").lift_vs_baseline > 0);
   assert.equal(experiment.assignment_history.total, 2);
   assert.equal(experiment.assignment_history.by_variant[0].key, "destination_focus");
+  assert.equal(experiment.assignment_history.by_graph_node[0].key, "homepage_split");
+  assert.equal(experiment.assignment_history.by_graph_node[0].graph_node_id, "split_1");
   assert.equal(experiment.assignment_history.recent.length, 2);
   assert.ok(calls.some((call) => call.sql.includes("GROUP BY variant_key, event_type")));
   assert.ok(calls.some((call) => call.sql.includes("date_trunc('hour'")));
@@ -500,6 +511,7 @@ test("native postgres campaign operations report assets and conflicts", async ()
   assert.equal(campaign.conversion_rate, 0.5);
   assert.equal(campaign.dependencies[0].message_id, "hero_message");
   assert.equal(campaign.conflict_count, 1);
+  assert.equal(campaign.recent_events[0].graph_experiments[0].graph_node_id, "split_1");
   assert.equal(conflicts.count, 1);
   assert.equal(conflicts.conflicts[0].type, "cross_surface_eligibility");
   assert.deepEqual(conflicts.by_rule.web_rule.map((item) => item.type), ["cross_surface_eligibility"]);
@@ -598,6 +610,43 @@ test("native postgres content writes upsert messages with version history", asyn
   assert.equal(firstVersion.default_content.title, "Welcome");
   assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO messages")));
   assert.ok(calls.some((call) => call.sql.startsWith("INSERT INTO message_versions")));
+});
+
+test("native postgres content writes can restore a saved message version", async () => {
+  const { client, messages, messageVersions } = nativeContentClient();
+  const store = new PostgresNativeReadStore(client);
+
+  await store.upsertMessage(
+    "homepage_banner",
+    {
+      name: "Homepage banner",
+      surface: "homepage",
+      content_schema: { fields: ["title", "cta_url"] },
+      default_content: { title: "Welcome", cta_url: "https://example.com" },
+      metadata: { template_type: "banner" }
+    },
+    "editor"
+  );
+  await store.upsertMessage(
+    "homepage_banner",
+    {
+      name: "Homepage banner",
+      surface: "homepage",
+      content_schema: { fields: ["title", "cta_url"] },
+      default_content: { title: "Welcome back", cta_url: "https://example.com/offer" },
+      metadata: { template_type: "banner" }
+    },
+    "editor"
+  );
+
+  const restored = await store.restoreMessageVersion("homepage_banner", 1, "publisher");
+  const versions = await store.listMessageVersions("homepage_banner");
+
+  assert.equal(restored.version, 3);
+  assert.equal(restored.default_content.title, "Welcome");
+  assert.equal(messages.get("homepage_banner").default_content_json.title, "Welcome");
+  assert.equal(messageVersions.get("homepage_banner").length, 3);
+  assert.deepEqual(versions.map((item) => item.version), [3, 2, 1]);
 });
 
 test("native postgres content writes manage message assets and usage guards", async () => {
@@ -1319,7 +1368,10 @@ function campaignEvent(decisionKey, eventType, profileKey, occurredAt) {
     profile_key: profileKey,
     variant_key: "",
     message_id: "hero_message",
-    surface: decisionKey === "web_rule" ? "homepage" : "mobile_app"
+    surface: decisionKey === "web_rule" ? "homepage" : "mobile_app",
+    graph_experiments: decisionKey === "web_rule"
+      ? [{ experiment_key: "summer_split", graph_node_id: "split_1", variant_key: "hero_message" }]
+      : []
   };
 }
 
@@ -1367,10 +1419,12 @@ function assignmentRow(id, variantKey, assignedAt) {
     profile_key: `profile-${id}`,
     rule_version: 1,
     variant_key: variantKey,
-    strategy: "fixed",
-    reason: "bucket",
+    strategy: id === "assign-1" ? "graph_split" : "fixed",
+    reason: id === "assign-1" ? "graph_split" : "bucket",
     bucket: variantKey === "control" ? 20 : 80,
-    assignment_json: {}
+    assignment_json: id === "assign-1"
+      ? { graph: { experiment_key: "homepage_split", node_id: "split_1", mode: "fixed" } }
+      : {}
   };
 }
 

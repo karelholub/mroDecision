@@ -32,11 +32,12 @@ export async function readJson(req, limitBytes = 1024 * 1024) {
   }
 }
 
-export function sendJson(res, statusCode, payload) {
+export function sendJson(res, statusCode, payload, headers = {}) {
   const body = JSON.stringify(payload, null, 2);
   res.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
+    ...headers,
     ...responseHeaders(res)
   });
   res.end(body);

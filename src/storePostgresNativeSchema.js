@@ -16,7 +16,7 @@ export const nativePostgresAdapterInfo = {
   requirements: ["DEE_DATABASE_URL", "pg package"]
 };
 
-export const nativePostgresMigrationVersion = 1;
+export const nativePostgresMigrationVersion = 2;
 
 const nativePostgresTables = [
   "dee_migrations",
@@ -36,6 +36,8 @@ const nativePostgresTables = [
   "experiment_assignments",
   "api_tokens",
   "settings",
+  "runtime_state",
+  "runtime_rate_limits",
   "assistant_provider_config_events",
   "assistant_provider_plan_events",
   "schema_items",
@@ -235,6 +237,20 @@ export function nativePostgresSchemaSql() {
       updated_at TIMESTAMPTZ NOT NULL,
       updated_by TEXT NOT NULL
     )`,
+    `CREATE TABLE IF NOT EXISTS runtime_state (
+      namespace TEXT NOT NULL,
+      cache_key TEXT NOT NULL,
+      value_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      expires_at TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (namespace, cache_key)
+    )`,
+    `CREATE TABLE IF NOT EXISTS runtime_rate_limits (
+      bucket_key TEXT PRIMARY KEY,
+      count INTEGER NOT NULL DEFAULT 0,
+      reset_at TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`,
     `CREATE TABLE IF NOT EXISTS assistant_provider_config_events (
       id TEXT PRIMARY KEY,
       changed_at TIMESTAMPTZ NOT NULL,
@@ -310,6 +326,8 @@ export function nativePostgresIndexSql() {
     "CREATE INDEX IF NOT EXISTS idx_experiment_assignments_rule_time ON experiment_assignments(decision_key, assigned_at)",
     "CREATE INDEX IF NOT EXISTS idx_experiment_assignments_variant_time ON experiment_assignments(decision_key, variant_key, assigned_at)",
     "CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash)",
+    "CREATE INDEX IF NOT EXISTS idx_runtime_state_expires ON runtime_state(expires_at)",
+    "CREATE INDEX IF NOT EXISTS idx_runtime_rate_limits_reset ON runtime_rate_limits(reset_at)",
     "CREATE INDEX IF NOT EXISTS idx_schema_items_kind ON schema_items(kind, name)",
     "CREATE INDEX IF NOT EXISTS idx_lookup_table_versions ON lookup_table_versions(id, version)",
     "CREATE INDEX IF NOT EXISTS idx_messages_surface_status ON messages(surface, status)",

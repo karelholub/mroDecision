@@ -173,6 +173,41 @@ test("evaluates contains operators for promotion history arrays", () => {
   assert.equal(result.outputs.offer_id, "solar_green_energy");
 });
 
+test("unwraps Meiro profile metric objects during evaluation", () => {
+  const result = evaluateDecision({
+    now: new Date("2026-06-11T00:00:00.000Z"),
+    lookupTables: [],
+    request: {
+      decision_key: "inapp_eligibility",
+      profile_key: "9885d5c6-1be6-400a-a67b-3fa8c1c382b1",
+      identifiers: [{ typeId: "email", value: "user@example.com" }],
+      attributes: {
+        lead_score: [{ score: 1015 }]
+      },
+      segments: {},
+      context: {}
+    },
+    version: {
+      version: 1,
+      definition: {
+        fallback: { result: "ineligible", outputs: { reason: "low_score" } },
+        branches: [
+          {
+            id: "high_lead_score",
+            when: { source: "attribute", key: "lead_score", operator: "greater_than_or_equal", value: 1000 },
+            result: "eligible",
+            outputs: { message_id: "homepage_hero" }
+          }
+        ]
+      }
+    }
+  });
+
+  assert.equal(result.result, "eligible");
+  assert.equal(result.outputs.message_id, "homepage_hero");
+  assert.deepEqual(result.errors, []);
+});
+
 test("evaluates value-source comparisons", () => {
   const result = evaluateDecision({
     now: new Date("2026-05-28T00:00:00.000Z"),
@@ -313,4 +348,55 @@ test("evaluates graph frequency cap nodes with async client event counter", asyn
 
   assert.equal(result.result, "suppressed");
   assert.equal(result.trace.find((item) => item.node_id === "cap").event_count, 2);
+});
+
+test("evaluates graph experiment split nodes with forced variant routing", () => {
+  const result = evaluateDecision({
+    now: new Date("2026-06-11T00:00:00.000Z"),
+    lookupTables: [],
+    request: {
+      decision_key: "homepage_experiment",
+      profile_key: "profile-1",
+      identifiers: [{ typeId: "email", value: "user@example.com" }],
+      attributes: {},
+      segments: {},
+      context: {
+        forced_variants: {
+          homepage_hero: "variant_a"
+        }
+      }
+    },
+    version: {
+      version: 1,
+      definition: {
+        graph: {
+          entry: "split",
+          nodes: [
+            {
+              id: "split",
+              type: "experiment_split",
+              experiment_key: "homepage_hero",
+              mode: "fixed",
+              output_key: "assigned_variant",
+              variants: [
+                { key: "control", weight: 50, route: "control_output" },
+                { key: "variant_a", weight: 50, route: "variant_output" }
+              ],
+              fallback: "fallback"
+            },
+            { id: "control_output", type: "output", result: "eligible", outputs: { variant: "control" } },
+            { id: "variant_output", type: "output", result: "eligible", outputs: { variant: '=context("assigned_variant")' } },
+            { id: "fallback", type: "output", result: "deferred", outputs: {} }
+          ]
+        }
+      }
+    }
+  });
+
+  assert.equal(result.result, "eligible");
+  assert.equal(result.outputs.variant, "variant_a");
+  const splitTrace = result.trace.find((item) => item.node_id === "split");
+  assert.equal(splitTrace.variant_key, "variant_a");
+  assert.equal(splitTrace.forced, true);
+  assert.equal(splitTrace.next, "variant_output");
 });

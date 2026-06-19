@@ -52,6 +52,7 @@ export class PostgresNativeReadStore {
     this.client = client;
     this.adapter = "postgres_native";
     this.adapterInfo = options.adapterInfo || nativePostgresAdapterInfo;
+    this.poolInfo = options.poolInfo || null;
   }
 
   async health() {
@@ -61,14 +62,16 @@ export class PostgresNativeReadStore {
         ok: result.rows?.[0]?.ok === 1,
         adapter: this.adapter,
         adapter_info: this.adapterInfo,
-        deployment: nativeReadDeploymentReadiness()
+        postgres: this.poolInfo ? { pool: this.poolInfo } : undefined,
+        deployment: nativeReadDeploymentReadiness(null, this.poolInfo)
       };
     } catch (error) {
       return {
         ok: false,
         adapter: this.adapter,
         adapter_info: this.adapterInfo,
-        deployment: nativeReadDeploymentReadiness(error),
+        postgres: this.poolInfo ? { pool: this.poolInfo } : undefined,
+        deployment: nativeReadDeploymentReadiness(error, this.poolInfo),
         error: error.message
       };
     }
@@ -733,14 +736,16 @@ export class PostgresNativeReadStore {
        ORDER BY bucket ASC, variant_key ASC`,
       [decisionKey, since]
     );
+    const recentAssignments = recent.rows.map(rowToExperimentAssignment);
     return {
       window_hours: windowHours,
       total: Number(total.rows[0]?.count || 0),
       by_variant: await this.assignmentGroup(decisionKey, since, "variant_key"),
       by_strategy: await this.assignmentGroup(decisionKey, since, "strategy"),
       by_reason: await this.assignmentGroup(decisionKey, since, "reason"),
+      by_graph_node: graphExperimentAssignmentGroup(recentAssignments),
       trend: assignmentTrend(trendRows.rows, start, windowHours),
-      recent: recent.rows.map(rowToExperimentAssignment).slice(0, 12)
+      recent: recentAssignments.slice(0, 12)
     };
   }
 
@@ -866,7 +871,8 @@ export class PostgresNativeReadStore {
         variant_key: event.variant_key || "",
         message_id: event.message_id || "",
         surface: event.surface || "",
-        object_key: event.variant_key || event.message_id || ""
+        object_key: event.variant_key || event.message_id || "",
+        graph_experiments: eventGraphExperiments(event)
       });
     }
     return [...campaigns.values()]
@@ -1199,6 +1205,19 @@ export class PostgresNativeReadStore {
     const row = result.rows[0];
     if (!row) throw new Error(`Message version not found: ${requestedVersion}`);
     return rowToMessage(row);
+  }
+
+  async restoreMessageVersion(id, requestedVersion, author = "system") {
+    if (!(await this.getMessage(id))) throw new Error(`Message not found: ${id}`);
+    const version = await this.getMessageVersion(id, requestedVersion);
+    return this.upsertMessage(id, {
+      name: version.name,
+      surface: version.surface,
+      status: version.status,
+      content_schema: structuredClone(version.content_schema || {}),
+      default_content: structuredClone(version.default_content || {}),
+      metadata: structuredClone(version.metadata || {})
+    }, author);
   }
 
   async listMessageAssets() {
@@ -1796,10 +1815,17 @@ export async function loadNativePostgresStore() {
     throw new Error("DEE_STORE_ADAPTER=postgres_native requires DEE_DATABASE_URL.");
   }
   const { Pool } = await loadPg();
-  const pool = new Pool({ connectionString: config.databaseUrl });
+  const poolInfo = nativePostgresPoolInfo();
+  const pool = new Pool({
+    connectionString: config.databaseUrl,
+    max: poolInfo.max,
+    idleTimeoutMillis: poolInfo.idle_timeout_ms,
+    connectionTimeoutMillis: poolInfo.connection_timeout_ms,
+    statement_timeout: poolInfo.statement_timeout_ms
+  });
   try {
     await applyNativePostgresSchema(pool);
-    const store = new PostgresNativeReadStore(pool);
+    const store = new PostgresNativeReadStore(pool, { poolInfo });
     store.close = async () => {
       await pool.end();
     };
@@ -2048,6 +2074,46 @@ function rowToExperimentAssignment(row) {
     bucket: row.bucket == null ? null : Number(row.bucket),
     assignment: parseJson(row.assignment_json, {})
   };
+}
+
+function eventGraphExperiments(event = {}) {
+  return [event.graph_experiments, event.event?.graph_experiments, event.event_payload?.graph_experiments]
+    .find((items) => Array.isArray(items)) || [];
+}
+
+function graphExperimentAssignmentGroup(assignments = []) {
+  const groups = new Map();
+  for (const assignment of assignments) {
+    const graph = assignment.assignment?.graph;
+    const nodeId = graph?.node_id || assignment.assignment?.graph_node_id || "";
+    if (!nodeId) continue;
+    const key = graph?.experiment_key || assignment.assignment?.experiment_key || nodeId;
+    const groupKey = `${key}::${nodeId}`;
+    const group = groups.get(groupKey) || {
+      key,
+      graph_node_id: nodeId,
+      mode: graph?.mode || assignment.assignment?.mode || "",
+      strategy: assignment.strategy || "",
+      count: 0,
+      variants: new Map(),
+      last_assigned_at: ""
+    };
+    group.count += 1;
+    if (assignment.assigned_at && (!group.last_assigned_at || assignment.assigned_at > group.last_assigned_at)) {
+      group.last_assigned_at = assignment.assigned_at;
+    }
+    const variantKey = assignment.variant_key || "(empty)";
+    group.variants.set(variantKey, (group.variants.get(variantKey) || 0) + 1);
+    groups.set(groupKey, group);
+  }
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      variants: [...group.variants.entries()]
+        .map(([key, count]) => ({ key, count }))
+        .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key))
+    }))
+    .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key));
 }
 
 function assignmentTrend(rows = [], start, windowHours) {
@@ -2812,7 +2878,16 @@ function assistantProviderSettingValue(key, value) {
   return String(value);
 }
 
-function nativeReadDeploymentReadiness(error = null) {
+function nativePostgresPoolInfo() {
+  return {
+    max: config.postgresPoolMax,
+    idle_timeout_ms: config.postgresIdleTimeoutMs,
+    connection_timeout_ms: config.postgresConnectionTimeoutMs,
+    statement_timeout_ms: config.postgresStatementTimeoutMs
+  };
+}
+
+function nativeReadDeploymentReadiness(error = null, poolInfo = null) {
   return {
     status: error ? "not_ready" : "production_ready",
     summary: error
@@ -2834,6 +2909,15 @@ function nativeReadDeploymentReadiness(error = null) {
         level: "ok",
         label: "Native row store",
         detail: "Reads use row-level Postgres tables instead of snapshot JSON."
+      },
+      {
+        key: "postgres_pool",
+        ok: true,
+        level: "info",
+        label: "Postgres pool",
+        detail: poolInfo
+          ? `Max ${poolInfo.max} connections per DEE replica; statement timeout ${poolInfo.statement_timeout_ms}ms.`
+          : "Pool limits are configured by the active pg client."
       }
     ]
   };

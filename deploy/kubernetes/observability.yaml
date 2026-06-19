@@ -1,0 +1,121 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: dee
+  labels:
+    app.kubernetes.io/name: meiro-dee
+    app.kubernetes.io/component: observability
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: meiro-dee
+  endpoints:
+    - port: http
+      path: /v1/metrics/prometheus
+      interval: 30s
+      scrapeTimeout: 10s
+      bearerTokenSecret:
+        name: dee-metrics-token
+        key: token
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: dee
+  labels:
+    app.kubernetes.io/name: meiro-dee
+    app.kubernetes.io/component: observability
+spec:
+  groups:
+    - name: meiro-dee.slo
+      rules:
+        - alert: DeeDatabaseNotReady
+          expr: dee_database_ready == 0
+          for: 2m
+          labels:
+            severity: page
+          annotations:
+            summary: DEE database is not ready
+            description: One or more DEE replicas report database readiness failure.
+            runbook_url: https://github.com/karelholub/mroDecision/blob/main/docs/alert-response-runbook.md#deedatabasenotready
+        - alert: DeeRuntimeErrorRateHigh
+          expr: dee_runtime_error_rate > 0.02
+          for: 5m
+          labels:
+            severity: page
+          annotations:
+            summary: DEE runtime error rate is high
+            description: Runtime HTTP error rate is above 2% for 5 minutes.
+            runbook_url: https://github.com/karelholub/mroDecision/blob/main/docs/alert-response-runbook.md#deeruntimeerrorratehigh
+        - alert: DeeClientErrorRateHigh
+          expr: dee_client_error_rate > 0.02
+          for: 5m
+          labels:
+            severity: page
+          annotations:
+            summary: DEE client endpoint error rate is high
+            description: Browser/client API error rate is above 2% for 5 minutes.
+            runbook_url: https://github.com/karelholub/mroDecision/blob/main/docs/alert-response-runbook.md#deeclienterrorratehigh
+        - alert: DeeRuntimeP99High
+          expr: dee_runtime_latency_p99_ms > 1000
+          for: 5m
+          labels:
+            severity: page
+          annotations:
+            summary: DEE runtime p99 latency is high
+            description: Runtime p99 latency is above 1000ms for 5 minutes.
+            runbook_url: https://github.com/karelholub/mroDecision/blob/main/docs/alert-response-runbook.md#deeruntimep99high
+        - alert: DeeLoadSheddingActive
+          expr: dee_load_shedding_active == 1
+          for: 5m
+          labels:
+            severity: warn
+          annotations:
+            summary: DEE load shedding pressure is active
+            description: Load shedding pressure is active. Inspect the reason label and dependency health before enabling or relaxing enforcement.
+            runbook_url: https://github.com/karelholub/mroDecision/blob/main/docs/alert-response-runbook.md#deeloadsheddingactive
+        - alert: DeeLoadSheddingEnforced
+          expr: increase(dee_load_shedding_shed_total[5m]) > 0
+          for: 0m
+          labels:
+            severity: page
+          annotations:
+            summary: DEE is shedding browser decision traffic
+            description: DEE rejected client decision traffic with 503 load_shed in the last 5 minutes.
+            runbook_url: https://github.com/karelholub/mroDecision/blob/main/docs/alert-response-runbook.md#deeloadsheddingenforced
+        - alert: DeeRuntimeStateNotShared
+          expr: dee_runtime_state_postgres == 0
+          for: 15m
+          labels:
+            severity: warn
+          annotations:
+            summary: DEE runtime state is not shared through Postgres
+            description: Multi-replica production deployments should use DEE_RUNTIME_STATE_ADAPTER=postgres.
+            runbook_url: https://github.com/karelholub/mroDecision/blob/main/docs/alert-response-runbook.md#deeruntimestatenotshared
+        - alert: DeeProfileCircuitOpen
+          expr: dee_meiro_circuit_open{dependency="profile"} == 1
+          for: 5m
+          labels:
+            severity: page
+          annotations:
+            summary: DEE profile enrichment circuit is open
+            description: Meiro Profile API enrichment is circuit-open while client traffic may still be evaluated with local payloads.
+            runbook_url: https://github.com/karelholub/mroDecision/blob/main/docs/alert-response-runbook.md#deeprofilecircuitopen
+        - alert: DeeFeedbackCircuitOpen
+          expr: dee_meiro_circuit_open{dependency=~"feedback|collector"} == 1
+          for: 15m
+          labels:
+            severity: warn
+          annotations:
+            summary: DEE feedback delivery circuit is open
+            description: Meiro feedback or collector delivery is degraded; inspect /v1/meiro-deliveries.
+            runbook_url: https://github.com/karelholub/mroDecision/blob/main/docs/alert-response-runbook.md#deefeedbackcircuitopen
+        - alert: DeeClientRateLimitPressure
+          expr: dee_client_rate_limit_block_rate > 0.01
+          for: 15m
+          labels:
+            severity: warn
+          annotations:
+            summary: DEE client rate-limit pressure is elevated
+            description: More than 1% of client endpoint calls are being blocked by application rate limits.
+            runbook_url: https://github.com/karelholub/mroDecision/blob/main/docs/alert-response-runbook.md#deeclientratelimitpressure

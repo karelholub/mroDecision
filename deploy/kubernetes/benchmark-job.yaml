@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dee-benchmark-100rps
+  labels:
+    app.kubernetes.io/name: meiro-dee
+    app.kubernetes.io/component: benchmark
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: meiro-dee
+        app.kubernetes.io/component: benchmark
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: benchmark
+          image: meiro-decision-engine:latest
+          imagePullPolicy: IfNotPresent
+          command: ["npm", "run", "bench:client"]
+          env:
+            - name: DEE_BENCH_URL
+              value: http://dee.meiro-dee.svc.cluster.local
+            - name: DEE_BENCH_PROFILE
+              value: 100rps
+            - name: DEE_BENCH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: dee-benchmark-token
+                  key: token
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi

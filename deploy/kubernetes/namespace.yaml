@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: meiro-dee
+  labels:
+    app.kubernetes.io/name: meiro-dee
+    app.kubernetes.io/part-of: meiro-decision-engine

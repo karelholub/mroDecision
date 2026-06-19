@@ -1,3 +1,5 @@
+import { validateDependencyFailurePolicy } from "./failurePolicy.js";
+
 const slugPattern = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
 const allowedSources = new Set(["attribute", "segment", "context", "score"]);
 const allowedRuleSetTypes = new Set(["decision", "inapp_message", "experiment"]);
@@ -46,6 +48,7 @@ export function validateRuleSetPayload(body, { partial = false } = {}) {
   optionalObject(body, "input_schema");
   optionalObject(body, "output_schema");
   optionalObject(body, "cache_policy");
+  if (body.cache_policy != null) validateDependencyFailurePolicy(body.cache_policy, badRequest);
   optionalObject(body, "metadata");
   if (body.type != null && !allowedRuleSetTypes.has(body.type)) badRequest("type must be decision, inapp_message, or experiment");
   if (body.metadata?.experiment) validateExperimentMetadata(body.metadata.experiment);
@@ -472,12 +475,32 @@ function validateGraphNodeRoutes(node, ids) {
     requiredString(node, "false", `Graph condition ${node.id} needs a false route`);
   } else if (type === "frequency_cap") {
     requiredString(node, "next", `Graph frequency cap ${node.id} needs a next route`);
+  } else if (type === "experiment_split") {
+    validateGraphExperimentSplitNode(node);
   } else {
     requiredString(node, "next", `Graph node ${node.id} needs a next route`);
   }
   for (const target of graphNodeTargets(node)) {
     if (!ids.has(target)) validationError(`Graph node ${node.id} routes to missing node: ${target}`);
   }
+}
+
+function validateGraphExperimentSplitNode(node) {
+  const variants = Array.isArray(node.variants) ? node.variants : [];
+  if (variants.length < 2) validationError(`Graph experiment split ${node.id} needs at least two variants`);
+  const keys = new Set();
+  let totalWeight = 0;
+  for (const variant of variants) {
+    if (!isPlainObject(variant)) validationError(`Graph experiment split ${node.id} variants must be objects`);
+    requiredString(variant, "key", `Graph experiment split ${node.id} has a variant without a key`);
+    if (keys.has(variant.key)) validationError(`Graph experiment split ${node.id} has duplicate variant key: ${variant.key}`);
+    keys.add(variant.key);
+    const weight = Number(variant.weight ?? variant.allocation ?? 0);
+    if (!Number.isFinite(weight) || weight < 0) validationError(`Graph experiment split ${node.id} variant ${variant.key} has invalid weight`);
+    totalWeight += weight;
+    requiredString(variant, "route", `Graph experiment split ${node.id} variant ${variant.key} needs a route`);
+  }
+  if (totalWeight <= 0) validationError(`Graph experiment split ${node.id} needs positive variant weight`);
 }
 
 function visitGraphNode(id, nodes, visited, visiting, memo) {
@@ -497,8 +520,13 @@ function visitGraphNode(id, nodes, visited, visiting, memo) {
 }
 
 function graphNodeTargets(node) {
-  return ["next", "true", "false", "capped", "fallback"]
-    .map((key) => node[key])
+  const variantRoutes = node.type === "experiment_split" && Array.isArray(node.variants)
+    ? node.variants.map((variant) => variant.route || variant.next)
+    : [];
+  return [
+    ...variantRoutes,
+    ...["next", "true", "false", "capped", "fallback"].map((key) => node[key])
+  ]
     .filter((value) => typeof value === "string" && value.trim() !== "");
 }
 

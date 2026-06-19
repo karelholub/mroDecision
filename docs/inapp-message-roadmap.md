@@ -24,7 +24,7 @@ Status: started. The message editor and SDK now recognize the full template voca
 - Keep JSON tabs for advanced users, but make business fields the primary editing surface.
 - Add mobile/tablet/desktop previews, personalization token previews, and audience comparison cards.
 
-Status: started. Survey messages render from structured JSON and now have a visual Survey Builder for question text, type, required flag, tracking name, answer option labels/values, add/remove, and reorder controls. The builder syncs to `questions` and `survey.questions` so SDK and external payloads can use either structure. The SDK and mock site now enforce required free-text answers, mark selected choice answers, and show response acknowledgement states. Next: add richer survey response analytics, branching questions, and reusable survey blocks.
+Status: started. Survey messages render from structured JSON and now have a visual Survey Builder for question text, type, required flag, tracking name, answer option labels/values, add/remove, reorder controls, and conditional follow-up fields. The builder syncs to `questions` and `survey.questions` so SDK and external payloads can use either structure. The SDK and mock site now enforce required free-text answers, mark selected choice answers, show response acknowledgement states, and reveal follow-up questions via `show_if` branching conditions. Next: add reusable survey blocks and deeper path/funnel analytics.
 
 ### 3. Delivery Policy
 
@@ -50,7 +50,7 @@ Status: started. Message performance now includes delivery diagnostics from SDK 
 - Enforce display policy in browser storage when available, while keeping server-side suppression as the source of truth.
 - Add accessibility defaults for close buttons, focus management, ARIA labels, and keyboard dismissal.
 
-Status: started. The SDK renders the full message template set, sends automatic impression events after successful render, keeps experiment exposure events, records skipped delivery events for targeting/consent/frequency/dismiss blocks, adds accessible dismiss controls for modal/toast/alert messages, sends dismissals as conversion events, enforces survey response validation/acknowledgement states, and enforces browser-side display and dismiss suppression/cooldown policies.
+Status: started. The SDK renders the full message template set, sends automatic impression events after successful render, keeps experiment exposure events, records skipped delivery events for targeting/consent/frequency/dismiss blocks, adds accessible dismiss controls for modal/toast/alert messages, sends dismissals as conversion events, enforces survey response validation/acknowledgement states, and enforces browser-side display and dismiss suppression/cooldown policies. Client responses now also expose a normalized message rendering contract and top-level message delivery envelope so future native mobile SDKs can consume the same API contract without depending on web-only conventions. See `docs/mobile-inapp-readiness-roadmap.md`.
 
 ### 6. Message Experiments
 
@@ -78,6 +78,8 @@ Status: started. Message detail now has a launch readiness panel that summarizes
 
 - Add draft/review/published/paused/archived lifecycle where needed.
 - Add version diffs, rollback, preview links, validation summary, and optional approval gating behind the existing feature flag.
+
+Status: started. Message versions can already be inspected from the editor, compared visually against the current draft, previewed as saved snapshots, and restored as a new latest draft version for safe rollback without overwriting history.
 
 ### 10. Conflict Detection
 

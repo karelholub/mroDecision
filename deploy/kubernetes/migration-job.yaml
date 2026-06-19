@@ -1,0 +1,34 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dee-postgres-migrate
+  labels:
+    app.kubernetes.io/name: meiro-dee
+    app.kubernetes.io/component: migration
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: meiro-dee
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: meiro-decision-engine:latest
+          imagePullPolicy: IfNotPresent
+          command: ["npm", "run", "postgres:migrate", "--", "--apply"]
+          env:
+            - name: DEE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: dee-secrets
+                  key: DEE_DATABASE_URL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

@@ -173,6 +173,23 @@ async function evaluateGraphAsync(graph, env, matchedRules, errors, trace) {
         next: next || null
       });
       current = next;
+    } else if (node.type === "experiment_split") {
+      const assignment = selectGraphExperimentVariant(node, env);
+      if (assignment.output_key) env.setContext(assignment.output_key, assignment.variant_key);
+      env.setContext("experiment_key", assignment.experiment_key);
+      env.setContext("variant_key", assignment.variant_key);
+      trace.push({
+        type: "graph_node",
+        node_id: node.id,
+        node_type: node.type,
+        experiment_key: assignment.experiment_key,
+        mode: assignment.mode,
+        variant_key: assignment.variant_key,
+        forced: assignment.forced,
+        variants: assignment.variants,
+        next: assignment.next || null
+      });
+      current = assignment.next;
     } else if (node.type === "sub-decision") {
       errors.push(`Sub-decision node ${node.id} is declared but external dependency execution is not enabled in this runtime`);
       trace.push({ type: "graph_node", node_id: node.id, node_type: node.type, next: node.fallback || node.next || null });
@@ -271,6 +288,23 @@ function evaluateGraph(graph, env, matchedRules, errors, trace) {
         next: next || null
       });
       current = next;
+    } else if (node.type === "experiment_split") {
+      const assignment = selectGraphExperimentVariant(node, env);
+      if (assignment.output_key) env.setContext(assignment.output_key, assignment.variant_key);
+      env.setContext("experiment_key", assignment.experiment_key);
+      env.setContext("variant_key", assignment.variant_key);
+      trace.push({
+        type: "graph_node",
+        node_id: node.id,
+        node_type: node.type,
+        experiment_key: assignment.experiment_key,
+        mode: assignment.mode,
+        variant_key: assignment.variant_key,
+        forced: assignment.forced,
+        variants: assignment.variants,
+        next: assignment.next || null
+      });
+      current = assignment.next;
     } else if (node.type === "sub-decision") {
       errors.push(`Sub-decision node ${node.id} is declared but external dependency execution is not enabled in this runtime`);
       trace.push({ type: "graph_node", node_id: node.id, node_type: node.type, next: node.fallback || node.next || null });
@@ -392,8 +426,15 @@ function buildEnv(request, lookupTables, scores, errors, now, clientEventCounter
 }
 
 function normalizeAttributeValue(raw) {
-  if (Array.isArray(raw)) return normalizeAttributeValue(raw[0]);
-  if (raw && typeof raw === "object" && "value" in raw) return raw.value;
+  if (Array.isArray(raw)) return raw.length ? normalizeAttributeValue(raw[0]) : [];
+  if (raw && typeof raw === "object") {
+    if ("value" in raw) return raw.value;
+    const entries = Object.entries(raw).filter(([, value]) => value != null);
+    if (entries.length === 1) return entries[0][1];
+    for (const key of ["score", "count", "ltv", "total_spent", "tier", "segment", "language_code", "balance"]) {
+      if (key in raw) return raw[key];
+    }
+  }
   return raw;
 }
 
@@ -404,6 +445,82 @@ function resolveOutputs(outputs, env) {
       typeof value === "string" && value.startsWith("=") ? evaluateExpression(value.slice(1), env) : value
     ])
   );
+}
+
+function selectGraphExperimentVariant(node, env) {
+  const variants = normalizeGraphExperimentVariants(node.variants);
+  const experimentKey = node.experiment_key || node.experimentKey || node.id;
+  const forcedKey = forcedGraphExperimentVariantKey(node, env, experimentKey);
+  const forcedVariant = forcedKey ? variants.find((variant) => variant.key === forcedKey) : null;
+  const selected = forcedVariant || weightedGraphExperimentVariant(variants, graphExperimentSeed(node, env, experimentKey));
+  const mode = node.mode || "fixed";
+  const next = selected?.route || selected?.next || node[selected?.key] || node.fallback || node.next || "";
+  return {
+    experiment_key: experimentKey,
+    mode,
+    variant_key: selected?.key || "",
+    next,
+    output_key: node.output_key || "variant_key",
+    forced: Boolean(forcedVariant),
+    variants: variants.map((variant) => ({ key: variant.key, weight: variant.weight }))
+  };
+}
+
+function normalizeGraphExperimentVariants(variants = []) {
+  const source = Array.isArray(variants) && variants.length
+    ? variants
+    : [
+      { key: "control", weight: 50 },
+      { key: "variant_a", weight: 50 }
+    ];
+  return source
+    .map((variant, index) => ({
+      key: String(variant.key || variant.id || variant.name || `variant_${index + 1}`).trim(),
+      weight: Math.max(0, Number(variant.weight ?? variant.allocation ?? 0)),
+      route: variant.route || variant.next || ""
+    }))
+    .filter((variant) => variant.key);
+}
+
+function forcedGraphExperimentVariantKey(node, env, experimentKey) {
+  const context = env.request.context || {};
+  const forcedVariants = context.forced_variants || context.experiment_overrides || {};
+  return context.force_variant || context.forceVariant || forcedVariants[experimentKey] || forcedVariants[node.id] || "";
+}
+
+function weightedGraphExperimentVariant(variants, seed) {
+  const total = variants.reduce((sum, variant) => sum + variant.weight, 0);
+  if (!total) {
+    const index = Math.min(variants.length - 1, Math.floor(graphHashUnit(seed) * variants.length));
+    return variants[index] || variants[0];
+  }
+  let bucket = graphHashUnit(seed) * total;
+  for (const variant of variants) {
+    bucket -= variant.weight;
+    if (bucket <= 0) return variant;
+  }
+  return variants[variants.length - 1];
+}
+
+function graphExperimentSeed(node, env, experimentKey) {
+  const unit = node.unit || node.assignment_unit || "profile";
+  const firstIdentifier = Array.isArray(env.request.identifiers) ? env.request.identifiers.find((item) => item?.value)?.value : "";
+  const identifier = unit === "session"
+    ? env.context("session_id") || env.context("sessionId")
+    : unit === "identifier"
+      ? firstIdentifier
+      : env.request.profile_key;
+  return [env.request.decision_key, experimentKey, identifier || env.request.profile_key || "anonymous"].join(":");
+}
+
+function graphHashUnit(value) {
+  let hash = 2166136261;
+  const input = String(value || "");
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967296;
 }
 
 function applyDefaults(defaults, env) {

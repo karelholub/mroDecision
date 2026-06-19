@@ -40,6 +40,9 @@ test("decision feedback payload includes decision, request, and surface metadata
       cache: { hit: false },
       profile_cache: { status: "miss", hit: false },
       experiment: { key: "homepage_hero", variant_key: "destination_focus" },
+      graph_experiments: [
+        { experiment_key: "homepage_graph", variant_key: "variant_a", strategy: "graph_split", graph_node_id: "split_1" }
+      ],
       matched_rules: ["branch_1"],
       errors: [],
       evaluated_at: "2026-06-08T10:00:00.000Z"
@@ -65,6 +68,7 @@ test("decision feedback payload includes decision, request, and surface metadata
   assert.equal(payload.delivery.request_id, "req-1");
   assert.equal(payload.delivery.surface, "homepage_hero");
   assert.equal(payload.delivery.sync_id, "sync-1");
+  assert.equal(payload.graph_experiments[0].strategy, "graph_split");
   assert.equal(payload.surface_result.candidate_count, 2);
 });
 
@@ -76,6 +80,9 @@ test("decision collector payload wraps decisions as Meiro event envelopes", () =
       result: "eligible",
       outputs: { offer_id: "solar" },
       rule_version: 1,
+      graph_experiments: [
+        { experiment_key: "offer_graph", variant_key: "solar_a", strategy: "graph_split" }
+      ],
       matched_rules: ["solar_branch"],
       errors: [],
       evaluated_at: "2026-06-08T10:00:00.000Z"
@@ -95,6 +102,7 @@ test("decision collector payload wraps decisions as Meiro event envelopes", () =
   assert.equal(payload.identifiers[0].value, "karel.holub@meiro.io");
   assert.equal(payload.event_payload.decision_key, "next_best_offer");
   assert.equal(payload.event_payload.outputs.offer_id, "solar");
+  assert.equal(payload.event_payload.graph_experiments[0].variant_key, "solar_a");
   assert.equal(payload.event_payload.context.surface, "homepage");
   assert.equal(payload.event_payload.delivery.endpoint, "https://example.test/collect/decision-engine-feedback");
 });

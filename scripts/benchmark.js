@@ -1,13 +1,54 @@
+const benchmarkProfiles = {
+  smoke: {
+    requests: 100,
+    concurrency: 10,
+    warmupRequests: 0,
+    minRps: null,
+    maxP95Ms: null,
+    maxP99Ms: null,
+    maxErrorRate: 0
+  },
+  "100rps": {
+    requests: 3000,
+    concurrency: 50,
+    warmupRequests: 300,
+    minRps: 100,
+    maxP95Ms: 150,
+    maxP99Ms: 300,
+    maxErrorRate: 0.001
+  },
+  "500rps": {
+    requests: 10000,
+    concurrency: 250,
+    warmupRequests: 1000,
+    minRps: 500,
+    maxP95Ms: 200,
+    maxP99Ms: 500,
+    maxErrorRate: 0.001
+  },
+  "1000rps": {
+    requests: 20000,
+    concurrency: 500,
+    warmupRequests: 2000,
+    minRps: 1000,
+    maxP95Ms: 250,
+    maxP99Ms: 750,
+    maxErrorRate: 0.002
+  }
+};
+
+const profileName = String(process.env.DEE_BENCH_PROFILE || "smoke").trim().toLowerCase();
+const profile = benchmarkProfiles[profileName] || {};
 const baseUrl = process.env.DEE_BENCH_URL || "http://127.0.0.1:8090";
 const token = process.env.DEE_BENCH_TOKEN || "dev-admin-token";
-const count = Number(process.env.DEE_BENCH_REQUESTS || 100);
-const concurrency = Number(process.env.DEE_BENCH_CONCURRENCY || 10);
+const count = numberEnv("DEE_BENCH_REQUESTS", profile.requests || 100);
+const concurrency = numberEnv("DEE_BENCH_CONCURRENCY", profile.concurrency || 10);
 const endpoint = process.env.DEE_BENCH_ENDPOINT || "/v1/evaluate";
-const warmupRequests = Number(process.env.DEE_BENCH_WARMUP_REQUESTS || 0);
-const maxP95Ms = optionalNumber(process.env.DEE_BENCH_MAX_P95_MS);
-const maxP99Ms = optionalNumber(process.env.DEE_BENCH_MAX_P99_MS);
-const maxErrorRate = optionalNumber(process.env.DEE_BENCH_MAX_ERROR_RATE, 0);
-const minRps = optionalNumber(process.env.DEE_BENCH_MIN_RPS);
+const warmupRequests = numberEnv("DEE_BENCH_WARMUP_REQUESTS", profile.warmupRequests || 0);
+const maxP95Ms = optionalNumber(process.env.DEE_BENCH_MAX_P95_MS, profile.maxP95Ms ?? null);
+const maxP99Ms = optionalNumber(process.env.DEE_BENCH_MAX_P99_MS, profile.maxP99Ms ?? null);
+const maxErrorRate = optionalNumber(process.env.DEE_BENCH_MAX_ERROR_RATE, profile.maxErrorRate ?? 0);
+const minRps = optionalNumber(process.env.DEE_BENCH_MIN_RPS, profile.minRps ?? null);
 
 const payload = {
   decision_key: process.env.DEE_BENCH_DECISION_KEY || "next_best_offer",
@@ -47,6 +88,7 @@ const failed = timings.length - ok;
 const errorRate = timings.length ? failed / timings.length : 0;
 const rps = timings.length ? timings.length / (durationMs / 1000) : 0;
 const summary = {
+  profile: benchmarkProfiles[profileName] ? profileName : "custom",
   url: baseUrl,
   endpoint,
   decision_key: payload.decision_key,
@@ -137,6 +179,14 @@ function optionalNumber(value, fallback = null) {
   if (value == null || value === "") return fallback;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) throw new Error(`Invalid numeric benchmark threshold: ${value}`);
+  return parsed;
+}
+
+function numberEnv(name, fallback) {
+  const value = process.env[name];
+  if (value == null || value === "") return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Error(`Invalid numeric benchmark value for ${name}: ${value}`);
   return parsed;
 }
 

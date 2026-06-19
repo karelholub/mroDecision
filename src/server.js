@@ -7,11 +7,13 @@ import { createAssistantPlanWithProvider, testAssistantProviderConnection } from
 import { assistantProviderMetrics } from "./assistantProviderMetrics.js";
 import { applyAssistantPlan, rollbackAssistantPlan } from "./assistantPlanner.js";
 import { config } from "./config.js";
-import { createClientResultCache } from "./clientCache.js";
 import { decisionStackReadiness, evaluateDecisionStack } from "./decisionStacks.js";
+import { createCircuitBreaker } from "./circuitBreaker.js";
 import { createClientTrafficMetrics } from "./clientTrafficMetrics.js";
 import { evaluateDecision, evaluateDecisionAsync } from "./evaluator.js";
+import { dependencyFailurePolicyDecision } from "./failurePolicy.js";
 import { notFound, readJson, sendBuffer, sendError, sendJson, sendText, serveStatic } from "./http.js";
+import { createLoadShedding } from "./loadShedding.js";
 import {
   buildClientEventCollectorPayload,
   buildDecisionCollectorEventPayload,
@@ -19,9 +21,14 @@ import {
   meiroCollectorEndpoint,
   meiroFeedbackEndpoint
 } from "./meiroFeedback.js";
-import { createProfileCache, profileCacheKey } from "./profileCache.js";
+import {
+  mergeMessageDeliveryIntoClientDelivery,
+  messageRenderingContract,
+  surfaceCandidateSummary
+} from "./messageRendering.js";
+import { profileCacheKey } from "./profileCache.js";
 import { profileCacheWithDiagnostics } from "./profileDiagnostics.js";
-import { createRateLimiter } from "./rateLimiter.js";
+import { createRuntimeState } from "./runtimeState.js";
 import { createRequestMetrics } from "./requestMetrics.js";
 import { listStoreAdapters, loadStoreAdapter } from "./storeAdapter.js";
 import {
@@ -38,19 +45,42 @@ import {
 } from "./validation.js";
 
 const store = await loadStoreAdapter();
-const clientResultCache = createClientResultCache();
-const meiroProfileCache = createProfileCache();
-const clientRateLimiter = createRateLimiter({
-  windowMs: config.clientRateLimitWindowMs,
-  max: config.clientRateLimitMax
-});
+const runtimeState = await createRuntimeState({ config, store });
+const clientResultCache = runtimeState.clientResultCache;
+const meiroProfileCache = runtimeState.profileCache;
+const clientRateLimiter = runtimeState.rateLimiter;
 const requestMetrics = createRequestMetrics();
 const clientTrafficMetrics = createClientTrafficMetrics();
+const loadShedding = createLoadShedding({
+  mode: config.loadSheddingMode,
+  minSamples: config.loadSheddingMinSamples,
+  runtimeP95Ms: config.loadSheddingRuntimeP95Ms,
+  clientErrorRate: config.loadSheddingClientErrorRate,
+  profileErrorThreshold: config.loadSheddingProfileErrorThreshold,
+  retryAfterSeconds: config.loadSheddingRetryAfterSeconds,
+  shedOnOpenCircuit: config.loadSheddingShedOnOpenCircuit
+});
+const meiroCircuitBreakers = {
+  profile: createCircuitBreaker("meiro_profile_api", {
+    failureThreshold: config.meiroCircuitFailureThreshold,
+    cooldownMs: config.meiroCircuitCooldownMs
+  }),
+  feedback: createCircuitBreaker("meiro_feedback", {
+    failureThreshold: config.meiroCircuitFailureThreshold,
+    cooldownMs: config.meiroCircuitCooldownMs
+  }),
+  collector: createCircuitBreaker("meiro_collector", {
+    failureThreshold: config.meiroCircuitFailureThreshold,
+    cooldownMs: config.meiroCircuitCooldownMs
+  })
+};
 const experimentEditorSessions = new Map();
 const experimentPreviewSessions = new Map();
 setAuthStore(store);
 let schemaSyncTimer = null;
 let schemaSyncNextRunAt = "";
+let shuttingDown = false;
+let loadSheddingDatabaseHealth = { checked_at: 0, database: null };
 
 const server = http.createServer(async (req, res) => {
   const startedAt = Date.now();
@@ -83,6 +113,8 @@ server.listen(config.port, () => {
   console.log(`DEE listening on http://localhost:${config.port}`);
 });
 scheduleSchemaSync();
+process.once("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.once("SIGINT", () => gracefulShutdown("SIGINT"));
 
 function maybeAwait(value) {
   return value && typeof value.then === "function" ? value : Promise.resolve(value);
@@ -98,6 +130,34 @@ async function storeCall(method, ...args) {
     throw new Error(`Store adapter does not support ${method}`);
   }
   return maybeAwait(store[method](...args));
+}
+
+async function clearClientResultCache() {
+  await maybeAwait(clientResultCache.clear());
+}
+
+async function buildOperationalMetrics(url) {
+  const runtimeRequests = requestMetrics.metrics();
+  const clientTraffic = clientTrafficMetrics.metrics();
+  const profileCache = await maybeAwait(meiroProfileCache.metrics());
+  const meiroCircuitMetrics = meiroCircuitBreakerMetrics();
+  return {
+    ...await storeCall("getMetrics", { window_hours: url.searchParams.get("window_hours") }),
+    runtime_state: runtimeState.metrics(),
+    client_cache: await maybeAwait(clientResultCache.metrics()),
+    profile_cache: profileCache,
+    client_rate_limit: await maybeAwait(clientRateLimiter.metrics()),
+    client_traffic: clientTraffic,
+    runtime_requests: runtimeRequests,
+    load_shedding: loadShedding.metrics({
+      runtime: runtimeRequests,
+      clientTraffic,
+      profileCache,
+      breakers: meiroCircuitMetrics
+    }),
+    assistant_provider: assistantProviderMetrics.metrics(),
+    meiro_circuit_breakers: meiroCircuitMetrics
+  };
 }
 
 async function routeApi(req, res, url) {
@@ -118,6 +178,15 @@ async function routeApi(req, res, url) {
   }
 
   if (req.method === "GET" && pathname === "/v1/ready") {
+    if (shuttingDown) {
+      sendJson(res, 503, {
+        status: "not_ready",
+        service: "meiro-decision-engine",
+        now: new Date().toISOString(),
+        reason: "shutdown_in_progress"
+      });
+      return;
+    }
     const database = await storeCall("health");
     sendJson(res, database.ok ? 200 : 503, {
       status: database.ok ? "ready" : "not_ready",
@@ -236,7 +305,8 @@ async function routeApi(req, res, url) {
 
   if (req.method === "POST" && pathname === "/v1/client/evaluate") {
     requireScope(req, "client");
-    enforceClientRateLimit(req, res, "evaluate");
+    await enforceClientRateLimit(req, res, "evaluate");
+    if (await enforceClientLoadShedding(req, res, "evaluate")) return;
     const body = await readJson(req, config.requestBodyLimitBytes);
     validateClientEvaluateRequest(body);
     enforceClientTokenContext(req, body);
@@ -260,7 +330,8 @@ async function routeApi(req, res, url) {
 
   if (req.method === "POST" && pathname === "/v1/client/surface") {
     requireScope(req, "client");
-    enforceClientRateLimit(req, res, "surface");
+    await enforceClientRateLimit(req, res, "surface");
+    if (await enforceClientLoadShedding(req, res, "surface")) return;
     const body = await readJson(req, config.requestBodyLimitBytes);
     validateClientSurfaceRequest(body);
     enforceClientTokenContext(req, body);
@@ -276,7 +347,8 @@ async function routeApi(req, res, url) {
 
   if (req.method === "POST" && pathname === "/v1/client/surface/batch") {
     requireScope(req, "client");
-    enforceClientRateLimit(req, res, "surface_batch");
+    await enforceClientRateLimit(req, res, "surface_batch");
+    if (await enforceClientLoadShedding(req, res, "surface_batch")) return;
     const body = await readJson(req, config.batchRequestBodyLimitBytes);
     validateClientSurfaceBatchRequest(body);
     enforceClientTokenContext(req, body);
@@ -313,7 +385,7 @@ async function routeApi(req, res, url) {
     const event = await storeCall("addClientEvent", clientEventFromRequest(clientEventMatch[1], body, req));
     if (event.accepted) {
       await saveStore();
-      clientResultCache.clear();
+      await clearClientResultCache();
       if (isMeiroForwardableSurveyEvent(event)) {
         queueClientEventFeedbackDelivery(event, {
           source: body.context?.request_source || "client_event",
@@ -372,7 +444,7 @@ async function routeApi(req, res, url) {
       approved_action_ids: body.approved_action_ids
     });
     await saveStore();
-    clientResultCache.clear();
+    await clearClientResultCache();
     sendJson(res, 200, applied);
     return;
   }
@@ -382,23 +454,24 @@ async function routeApi(req, res, url) {
     const body = await readJson(req, config.requestBodyLimitBytes);
     const result = rollbackAssistantPlan(body.rollback, store, req.auth.name);
     await saveStore();
-    clientResultCache.clear();
+    await clearClientResultCache();
     sendJson(res, 200, result);
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/v1/metrics/prometheus") {
+    requireScope(req, "viewer");
+    const metrics = await buildOperationalMetrics(url);
+    const database = await storeCall("health");
+    sendText(res, 200, metricsToPrometheus(metrics, database), "text/plain; version=0.0.4; charset=utf-8");
     return;
   }
 
   if (req.method === "GET" && pathname === "/v1/metrics") {
     requireScope(req, "viewer");
+    const metrics = await buildOperationalMetrics(url);
     sendJson(res, 200, {
-      metrics: {
-        ...await storeCall("getMetrics", { window_hours: url.searchParams.get("window_hours") }),
-        client_cache: clientResultCache.metrics(),
-        profile_cache: meiroProfileCache.metrics(),
-        client_rate_limit: clientRateLimiter.metrics(),
-        client_traffic: clientTrafficMetrics.metrics(),
-        runtime_requests: requestMetrics.metrics(),
-        assistant_provider: assistantProviderMetrics.metrics()
-      }
+      metrics
     });
     return;
   }
@@ -492,7 +565,7 @@ async function routeApi(req, res, url) {
     requireScope(req, "editor");
     const result = await applyCampaignAction(await readJson(req, config.requestBodyLimitBytes), req.auth.name);
     await saveStore();
-    clientResultCache.clear();
+    await clearClientResultCache();
     sendJson(res, 200, result);
     return;
   }
@@ -502,7 +575,7 @@ async function routeApi(req, res, url) {
     const result = await moveCampaignAssets(await readJson(req, config.requestBodyLimitBytes), req.auth.name);
     if (!result.dry_run) {
       await saveStore();
-      clientResultCache.clear();
+      await clearClientResultCache();
     }
     sendJson(res, 200, result);
     return;
@@ -515,7 +588,7 @@ async function routeApi(req, res, url) {
     validateRuleDefinition(body.draft || body.definition || {}, body.input_schema || {});
     const ruleSet = await storeCall("createRuleSet", body, req.auth.name);
     await saveStore();
-    clientResultCache.clear();
+    await clearClientResultCache();
     sendJson(res, 201, { rule_set: publicRuleSet(ruleSet) });
     return;
   }
@@ -532,7 +605,7 @@ async function routeApi(req, res, url) {
     validateBundle(body);
     const imported = store.importBundle(body, req.auth.name);
     await saveStore();
-    clientResultCache.clear();
+    await clearClientResultCache();
     sendJson(res, 200, { imported });
     return;
   }
@@ -572,11 +645,12 @@ async function routeApi(req, res, url) {
         db_path: config.dbPath,
         store_adapter: await storeCall("health"),
         store_adapters: listStoreAdapters(),
-        client_rate_limit: clientRateLimiter.metrics(),
+        runtime_state: runtimeState.metrics(),
+        client_rate_limit: await maybeAwait(clientRateLimiter.metrics()),
         client_traffic: clientTrafficMetrics.metrics(),
         runtime_requests: requestMetrics.metrics(),
         schema_sync: schemaSyncRuntime(),
-        profile_cache: meiroProfileCache.metrics(),
+        profile_cache: await maybeAwait(meiroProfileCache.metrics()),
         assistant_provider: assistantProviderMetrics.metrics(),
         assistant_provider_config_events: store.listAssistantProviderConfigEvents({ limit: 8 }),
         assistant_provider_plan_events: store.listAssistantProviderPlanEvents({ limit: 8 }),
@@ -744,6 +818,16 @@ async function routeApi(req, res, url) {
     return;
   }
 
+  const messageVersionRestoreMatch = pathname.match(/^\/v1\/messages\/([^/]+)\/versions\/(\d+)\/restore$/);
+  if (messageVersionRestoreMatch && req.method === "POST") {
+    requireScope(req, "editor");
+    const message = await storeCall("restoreMessageVersion", decodeURIComponent(messageVersionRestoreMatch[1]), Number(messageVersionRestoreMatch[2]), req.auth.name);
+    await saveStore();
+    await clearClientResultCache();
+    sendJson(res, 200, { message });
+    return;
+  }
+
   const messageVersionDiffMatch = pathname.match(/^\/v1\/messages\/([^/]+)\/versions\/(\d+)\/diff$/);
   if (messageVersionDiffMatch && req.method === "GET") {
     requireScope(req, "viewer");
@@ -765,7 +849,7 @@ async function routeApi(req, res, url) {
     requireScope(req, "editor");
     const message = await storeCall("upsertMessage", decodeURIComponent(messageMatch[1]), await readJson(req, config.requestBodyLimitBytes), req.auth.name);
     await saveStore();
-    clientResultCache.clear();
+    await clearClientResultCache();
     sendJson(res, 200, { message });
     return;
   }
@@ -800,7 +884,7 @@ async function routeApi(req, res, url) {
     requireScope(req, "editor");
     const table = await storeCall("replaceLookupTable", decodeURIComponent(lookupMatch[1]), await readJson(req, config.requestBodyLimitBytes), req.auth.name);
     await saveStore();
-    clientResultCache.clear();
+    await clearClientResultCache();
     sendJson(res, 200, { lookup_table: table });
     return;
   }
@@ -868,6 +952,155 @@ async function routeApi(req, res, url) {
   }
 
   notFound(res);
+}
+
+function gracefulShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  if (schemaSyncTimer) clearTimeout(schemaSyncTimer);
+  console.log(`DEE received ${signal}; draining HTTP server.`);
+  const timeout = setTimeout(() => {
+    console.error(`DEE shutdown exceeded ${config.shutdownGraceMs}ms; exiting.`);
+    process.exit(1);
+  }, config.shutdownGraceMs);
+  timeout.unref?.();
+  server.close(async () => {
+    try {
+      if (typeof store.close === "function") await store.close();
+      clearTimeout(timeout);
+      process.exit(0);
+    } catch (error) {
+      console.error(`DEE shutdown failed: ${error.message}`);
+      clearTimeout(timeout);
+      process.exit(1);
+    }
+  });
+}
+
+function metricsToPrometheus(metrics = {}, database = {}) {
+  const lines = [];
+  const add = (name, help, value, labels = {}) => {
+    if (!Number.isFinite(Number(value))) return;
+    if (!lines.some((line) => line === `# HELP ${name} ${help}`)) {
+      lines.push(`# HELP ${name} ${help}`);
+      lines.push(`# TYPE ${name} gauge`);
+    }
+    lines.push(`${name}${prometheusLabels(labels)} ${Number(value)}`);
+  };
+
+  const requests = metrics.requests || {};
+  const runtime = metrics.runtime_requests || {};
+  const clientTraffic = metrics.client_traffic || {};
+  const clientCache = metrics.client_cache || {};
+  const profileCache = metrics.profile_cache || {};
+  const rateLimit = metrics.client_rate_limit || {};
+  const runtimeStateMetrics = metrics.runtime_state || {};
+  const shedding = metrics.load_shedding || {};
+  const rules = metrics.rules || {};
+  const schema = metrics.schema || {};
+  const precompute = metrics.precompute || {};
+  const breakers = metrics.meiro_circuit_breakers || {};
+
+  add("dee_up", "DEE process is serving metrics.", 1);
+  add("dee_database_ready", "DEE database readiness probe status.", database.ok ? 1 : 0, {
+    adapter: database.adapter || "unknown",
+    deployment: database.deployment?.status || "unknown"
+  });
+  add("dee_runtime_requests_total", "Total HTTP requests observed by DEE runtime metrics.", runtime.total || 0);
+  add("dee_runtime_errors_total", "Total runtime HTTP 5xx or network-style errors.", runtime.errors || 0);
+  add("dee_runtime_error_rate", "Runtime HTTP error rate.", runtime.error_rate || 0);
+  add("dee_runtime_latency_p50_ms", "Runtime HTTP p50 latency in milliseconds.", runtime.p50_ms || 0);
+  add("dee_runtime_latency_p95_ms", "Runtime HTTP p95 latency in milliseconds.", runtime.p95_ms || 0);
+  add("dee_runtime_latency_p99_ms", "Runtime HTTP p99 latency in milliseconds.", runtime.p99_ms || 0);
+  add("dee_runtime_state_postgres", "Runtime state uses shared Postgres storage.", runtimeStateMetrics.adapter === "postgres" ? 1 : 0, {
+    adapter: runtimeStateMetrics.adapter || "memory"
+  });
+  for (const [status, count] of Object.entries(runtime.statuses || {})) {
+    add("dee_runtime_requests_by_status_total", "Runtime HTTP requests by status code.", count, { status });
+  }
+  for (const route of (runtime.slow_routes || []).slice(0, 10)) {
+    add("dee_runtime_route_avg_ms", "Average latency for top runtime routes.", route.avg_ms || 0, { route: route.route || "unknown" });
+    add("dee_runtime_route_requests_total", "Request count for top runtime routes.", route.requests || 0, { route: route.route || "unknown" });
+  }
+
+  add("dee_decision_requests_total", "Total persisted decision evaluations.", requests.total || 0);
+  add("dee_decision_requests_window_total", "Decision evaluations in the selected metrics window.", requests.window || 0);
+  add("dee_decision_requests_24h_total", "Decision evaluations in the last 24 hours.", requests.last_24h || 0);
+  add("dee_decision_unique_profiles_total", "Unique profiles seen in persisted decision evaluations.", requests.unique_profiles || 0);
+  for (const item of metrics.result_distribution || []) {
+    add("dee_decision_results_window_total", "Decision results in the selected metrics window.", item.count || 0, { result: item.result || "unknown" });
+  }
+  for (const item of metrics.rule_usage || []) {
+    add("dee_rule_requests_window_total", "Decision evaluations by rule in the selected metrics window.", item.requests_window || item.requests || 0, {
+      decision_key: item.decision_key || "unknown"
+    });
+  }
+
+  for (const status of ["published", "draft", "archived"]) {
+    add("dee_rules_total", "Rule inventory by status.", rules[status] || 0, { status });
+  }
+  add("dee_schema_items_total", "Imported schema item count.", schema.total || 0);
+  add("dee_schema_sync_ok", "Last schema sync status as a boolean.", schema.last_sync_status === "ok" ? 1 : 0);
+
+  add("dee_client_requests_total", "Total browser/client API calls observed by DEE.", clientTraffic.total || 0);
+  add("dee_client_errors_total", "Total browser/client API calls with non-2xx/3xx status.", clientTraffic.errors || 0);
+  add("dee_client_error_rate", "Browser/client API error rate.", clientTraffic.error_rate || 0);
+  add("dee_client_latency_p95_ms", "Browser/client API p95 latency in milliseconds.", clientTraffic.p95_ms || 0);
+  for (const item of clientTraffic.by_action || []) {
+    add("dee_client_requests_by_action_total", "Browser/client API requests by endpoint action.", item.requests || 0, { action: item.key || "unknown" });
+    add("dee_client_errors_by_action_total", "Browser/client API errors by endpoint action.", item.errors || 0, { action: item.key || "unknown" });
+  }
+  for (const item of clientTraffic.by_environment || []) {
+    add("dee_client_requests_by_environment_total", "Browser/client API requests by environment label.", item.requests || 0, {
+      environment: item.key || "unspecified"
+    });
+  }
+
+  add("dee_client_rate_limit_block_rate", "Client endpoint rate-limit block rate.", rateLimit.block_rate || 0);
+  add("dee_client_rate_limit_blocked_total", "Client endpoint requests blocked by application rate limit.", rateLimit.blocked || 0);
+  add("dee_client_rate_limit_active_buckets", "Active application rate-limit buckets.", rateLimit.active_buckets || 0);
+  add("dee_load_shedding_active", "Load shedding pressure signal active state.", shedding.active ? 1 : 0, { mode: shedding.mode || "unknown", reason: shedding.reason || "unknown" });
+  add("dee_load_shedding_enforced", "Load shedding enforcement state.", shedding.enforced ? 1 : 0, { mode: shedding.mode || "unknown" });
+  add("dee_load_shedding_allowed_total", "Client decisions allowed by load shedding guard.", shedding.decisions?.allowed || 0);
+  add("dee_load_shedding_monitored_total", "Client decisions monitored under pressure without shedding.", shedding.decisions?.monitored || 0);
+  add("dee_load_shedding_shed_total", "Client decisions rejected by load shedding guard.", shedding.decisions?.shed || 0);
+  add("dee_client_cache_entries", "Client decision cache entries in this replica.", clientCache.entries || 0);
+  add("dee_client_cache_hit_rate", "Client decision cache hit rate in this replica.", clientCache.hit_rate || 0);
+  add("dee_profile_cache_entries", "Meiro profile cache entries in this replica.", profileCache.entries || 0);
+  add("dee_profile_cache_hit_rate", "Meiro profile cache hit rate in this replica.", profileCache.hit_rate || 0);
+  add("dee_profile_cache_errors_total", "Meiro profile cache/API lookup errors recorded in this replica.", profileCache.errors || 0);
+  add("dee_profile_cache_not_found_total", "Meiro profile API not-found lookups recorded in this replica.", profileCache.not_found || 0);
+  for (const [dependency, breaker] of Object.entries(breakers)) {
+    add("dee_meiro_circuit_open", "Meiro dependency circuit breaker open state.", breaker.open ? 1 : 0, { dependency });
+    add("dee_meiro_circuit_failures", "Consecutive Meiro dependency failures in this replica.", breaker.failures || 0, { dependency });
+    add("dee_meiro_circuit_successes_total", "Successful Meiro dependency calls in this replica.", breaker.successes || 0, { dependency });
+  }
+
+  for (const item of metrics.client_events?.by_type || []) {
+    add("dee_client_events_window_total", "Client-side events in the selected metrics window.", item.count || 0, {
+      event_type: item.event_type || "unknown"
+    });
+  }
+  add("dee_precompute_runs_total", "Pipes in-app precompute runs in the selected metrics window.", precompute.run_count || 0);
+  add("dee_precompute_profiles_total", "Profiles received by Pipes in-app precompute in the selected metrics window.", precompute.profile_count || 0);
+  add("dee_precompute_eligible_profiles_total", "Eligible profiles from Pipes in-app precompute in the selected metrics window.", precompute.eligible_profiles || 0);
+  add("dee_precompute_error_profiles_total", "Profiles with precompute errors in the selected metrics window.", precompute.error_profiles || 0);
+
+  return `${lines.join("\n")}\n`;
+}
+
+function prometheusLabels(labels = {}) {
+  const entries = Object.entries(labels).filter(([, value]) => value != null && value !== "");
+  if (!entries.length) return "";
+  return `{${entries.map(([key, value]) => `${prometheusLabelKey(key)}="${prometheusEscape(value)}"`).join(",")}}`;
+}
+
+function prometheusLabelKey(key) {
+  return String(key || "label").replace(/[^a-zA-Z0-9_]/g, "_");
+}
+
+function prometheusEscape(value) {
+  return String(value).replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/"/g, '\\"').slice(0, 200);
 }
 
 async function syncSchemaFromMeiroProfile(input, author) {
@@ -1241,6 +1474,26 @@ async function testMeiroFeedbackConnection(input = {}) {
 async function deliverMeiroPayload(target, endpoint, payload, description = "test payload") {
   const startedAt = Date.now();
   let text = "";
+  const breaker = meiroDeliveryBreaker(target);
+  const breakerState = breaker?.canRequest();
+  if (breakerState && !breakerState.allowed) {
+    const result = {
+      target,
+      ok: false,
+      status: 0,
+      endpoint,
+      message: `${target} circuit is open; delivery skipped until ${breakerState.next_retry_at || "next retry window"}`,
+      circuit_open: true
+    };
+    await recordMeiroDeliverySafe({
+      ...result,
+      duration_ms: Date.now() - startedAt,
+      error: "circuit_open",
+      response_preview: "",
+      payload
+    });
+    return result;
+  }
   try {
     const response = await fetchWithTimeout(endpoint, {
       method: "POST",
@@ -1255,6 +1508,11 @@ async function deliverMeiroPayload(target, endpoint, payload, description = "tes
       endpoint,
       message: response.ok ? `${target} accepted ${description}` : text.slice(0, 300) || `${target} returned an error`
     };
+    if (response.ok) {
+      breaker?.recordSuccess();
+    } else {
+      breaker?.recordFailure(new Error(result.message));
+    }
     await recordMeiroDeliverySafe({
       ...result,
       duration_ms: Date.now() - startedAt,
@@ -1270,6 +1528,7 @@ async function deliverMeiroPayload(target, endpoint, payload, description = "tes
       endpoint,
       message: error.message
     };
+    breaker?.recordFailure(error);
     await recordMeiroDeliverySafe({
       ...result,
       duration_ms: Date.now() - startedAt,
@@ -1279,6 +1538,12 @@ async function deliverMeiroPayload(target, endpoint, payload, description = "tes
     });
     return result;
   }
+}
+
+function meiroDeliveryBreaker(target) {
+  if (target === "collector") return meiroCircuitBreakers.collector;
+  if (target === "feedback") return meiroCircuitBreakers.feedback;
+  return null;
 }
 
 async function recordMeiroDeliverySafe(input) {
@@ -1581,8 +1846,8 @@ function clientTrafficAction(method, path) {
   return "client";
 }
 
-function enforceClientRateLimit(req, res, action) {
-  const result = clientRateLimiter.check(clientRateLimitKey(req, action));
+async function enforceClientRateLimit(req, res, action) {
+  const result = await maybeAwait(clientRateLimiter.check(clientRateLimitKey(req, action)));
   if (result.limit) {
     res.setHeader("x-ratelimit-limit", String(result.limit));
     res.setHeader("x-ratelimit-remaining", String(result.remaining));
@@ -1595,6 +1860,49 @@ function enforceClientRateLimit(req, res, action) {
   error.statusCode = 429;
   error.code = "rate_limited";
   throw error;
+}
+
+async function enforceClientLoadShedding(req, res, action) {
+  const runtime = requestMetrics.metrics();
+  const clientTraffic = clientTrafficMetrics.metrics();
+  const profileCache = await maybeAwait(meiroProfileCache.metrics());
+  const breakers = meiroCircuitBreakerMetrics();
+  const database = await cachedLoadSheddingDatabaseHealth();
+  const decision = loadShedding.check({ runtime, clientTraffic, profileCache, breakers, database });
+  if (decision.allowed) return false;
+
+  sendJson(res, 503, {
+    error: "load_shed",
+    message: "DEE is temporarily shedding browser decision traffic. Retry after the requested interval.",
+    action,
+    mode: decision.mode,
+    reason: decision.reason,
+    reason_detail: decision.reason_detail,
+    retry_after_seconds: decision.retry_after_seconds
+  }, {
+    "retry-after": String(decision.retry_after_seconds)
+  });
+  return true;
+}
+
+async function cachedLoadSheddingDatabaseHealth() {
+  const now = Date.now();
+  if (loadSheddingDatabaseHealth.database && now - loadSheddingDatabaseHealth.checked_at < 5000) {
+    return loadSheddingDatabaseHealth.database;
+  }
+  try {
+    const database = await storeCall("health");
+    loadSheddingDatabaseHealth = { checked_at: now, database };
+    return database;
+  } catch (error) {
+    const database = { ok: false, error: error.message };
+    loadSheddingDatabaseHealth = { checked_at: now, database };
+    return database;
+  }
+}
+
+function meiroCircuitBreakerMetrics() {
+  return Object.fromEntries(Object.entries(meiroCircuitBreakers).map(([key, breaker]) => [key, breaker.metrics()]));
 }
 
 function clientRateLimitKey(req, action) {
@@ -1980,7 +2288,7 @@ async function routeRuleSet(req, res, key, suffix) {
     requireScope(req, "editor");
     const ruleSet = await storeCall("rollbackDraftToVersion", key, Number(versionRollbackMatch[1]), req.auth.name);
     await saveStore();
-    clientResultCache.clear();
+    await clearClientResultCache();
     sendJson(res, 200, { rule_set: publicRuleSet(ruleSet), draft: ruleSet.draft });
     return;
   }
@@ -1997,7 +2305,7 @@ async function routeRuleSet(req, res, key, suffix) {
     validateRuleDefinition(body.draft || body.definition || {}, body.input_schema || existing.input_schema || {});
     const ruleSet = await storeCall("updateDraft", key, body, req.auth.name);
     await saveStore();
-    clientResultCache.clear();
+    await clearClientResultCache();
     sendJson(res, 200, { rule_set: publicRuleSet(ruleSet), draft: ruleSet.draft });
     return;
   }
@@ -2010,7 +2318,7 @@ async function routeRuleSet(req, res, key, suffix) {
     if (await approvalWorkflowEnabled()) requireApprovedDraft(ruleSet);
     const version = await storeCall("publish", key, req.auth.name);
     await saveStore();
-    clientResultCache.clear();
+    await clearClientResultCache();
     sendJson(res, 200, { version, conflicts: ruleConflictsFor(key) });
     return;
   }
@@ -2056,7 +2364,7 @@ async function routeRuleSet(req, res, key, suffix) {
     requireScope(req, "editor");
     const ruleSet = await storeCall("archiveRuleSet", key, req.auth.name);
     await saveStore();
-    clientResultCache.clear();
+    await clearClientResultCache();
     sendJson(res, 200, { rule_set: publicRuleSet(ruleSet) });
     return;
   }
@@ -2073,7 +2381,7 @@ async function routeRuleSet(req, res, key, suffix) {
     );
     const ruleSet = await storeCall("duplicateRuleSet", key, body, req.auth.name);
     await saveStore();
-    clientResultCache.clear();
+    await clearClientResultCache();
     sendJson(res, 201, { rule_set: publicRuleSet(ruleSet), draft: ruleSet.draft });
     return;
   }
@@ -2370,7 +2678,7 @@ async function saveExperimentEditorDraft(key, body = {}) {
   validateRuleDefinition(ruleSet.draft || {}, ruleSet.input_schema || {});
   const updated = await storeCall("updateDraft", key, { metadata }, "visual_editor");
   await saveStore();
-  clientResultCache.clear();
+  await clearClientResultCache();
   return {
     rule_set: publicRuleSet(updated),
     draft: updated.draft,
@@ -2788,11 +3096,23 @@ async function evaluateClientRequest(body) {
   const hydrated = await hydrateClientProfile(baseRequest);
   const request = hydrated.request;
   const schemaItems = await storeCall("listSchemaItems");
+  const dependencyPolicyDecision = dependencyFailurePolicyDecision(ruleSet, hydrated.cache);
+  if (dependencyPolicyDecision) {
+    return await dependencyFailureResponse({
+      ruleSet,
+      version,
+      baseRequest,
+      request,
+      hydrated,
+      schemaItems,
+      policyDecision: dependencyPolicyDecision
+    });
+  }
   const adaptiveExperiment = isAdaptiveExperiment(ruleSet, version);
-  const cached = adaptiveExperiment ? { hit: false, cache_key: null, skipped: true } : clientResultCache.get(request, ruleSet, version);
+  const cached = adaptiveExperiment ? { hit: false, cache_key: null, skipped: true } : await maybeAwait(clientResultCache.get(request, ruleSet, version));
   if (!adaptiveExperiment && cached.hit) {
     const profileCache = profileCacheWithDiagnostics(hydrated.cache, baseRequest, request, schemaItems, cached.value.errors || []);
-    return {
+    const cachedResponse = {
       ...cached.value,
       ttl_seconds: cached.ttl_seconds,
       cache: {
@@ -2802,6 +3122,8 @@ async function evaluateClientRequest(body) {
       },
       profile_cache: profileCache
     };
+    cachedResponse.delivery = mergeMessageDeliveryIntoClientDelivery(cachedResponse.delivery, cachedResponse.outputs);
+    return cachedResponse;
   }
   const evaluated = await evaluateDecisionAsync({
     request,
@@ -2810,6 +3132,8 @@ async function evaluateClientRequest(body) {
     clientEventCounter: (params) => storeCall("countClientEvents", params)
   });
   const assigned = assignExperimentVariant(ruleSet, request, evaluated);
+  const graphAssignments = graphExperimentAssignments(evaluated);
+  const primaryExperiment = assigned || graphAssignments[0] || null;
   const messageResolved = await resolveMessageOutputs(
     assigned && !assigned.holdout ? { ...evaluated.outputs, ...(assigned.outputs || {}) } : evaluated.outputs,
     ruleSet,
@@ -2846,12 +3170,30 @@ async function evaluateClientRequest(body) {
       assignment: {}
     });
   }
+  for (const graphAssignment of graphAssignments) {
+    await storeCall("addExperimentAssignment", {
+      assigned_at: evaluated.evaluated_at,
+      decision_key: evaluated.decision_key,
+      profile_key: evaluated.profile_key,
+      rule_version: evaluated.rule_version,
+      variant_key: graphAssignment.key,
+      strategy: graphAssignment.strategy,
+      reason: graphAssignment.reason,
+      bucket: graphAssignment.bucket,
+      assignment: graphAssignment.assignment || {}
+    });
+  }
   await storeCall("addAudit", {
     ...evaluated,
     result: finalResult,
     outputs: finalOutputs,
     errors: finalErrors,
-    experiment: assigned ? auditExperimentAssignment(assigned) : undefined,
+    profile_cache: profileCache,
+    delivery: mergeMessageDeliveryIntoClientDelivery(clientDeliverySettings(ruleSet, evaluated), finalOutputs),
+    ttl_seconds: Number.isFinite(ttlSeconds) && ttlSeconds > 0 ? ttlSeconds : 0,
+    cache_scope: ruleSet.cache_policy?.scope || null,
+    experiment: primaryExperiment ? auditExperimentAssignment(primaryExperiment) : undefined,
+    graph_experiments: graphAssignments.map(auditExperimentAssignment),
     inputs: {
       identifiers_count: Array.isArray(request.identifiers) ? request.identifiers.length : 0,
       attribute_keys: Object.keys(request.attributes || {}),
@@ -2877,17 +3219,86 @@ async function evaluateClientRequest(body) {
       expires_at: null
     },
     profile_cache: profileCache,
-    experiment: assigned ? clientExperimentAssignment(assigned) : null,
-    delivery: clientDeliverySettings(ruleSet, evaluated),
+    experiment: primaryExperiment ? clientExperimentAssignment(primaryExperiment) : null,
+    graph_experiments: graphAssignments.map(clientExperimentAssignment),
+    delivery: mergeMessageDeliveryIntoClientDelivery(clientDeliverySettings(ruleSet, evaluated), finalOutputs),
     matched_rules: evaluated.matched_rules,
     errors: finalErrors
   };
-  response.cache.expires_at = response.errors.length || adaptiveExperiment ? null : clientResultCache.set(cached.cache_key, response, ruleSet);
+  response.cache.expires_at = response.errors.length || adaptiveExperiment ? null : await maybeAwait(clientResultCache.set(cached.cache_key, response, ruleSet));
   if (adaptiveExperiment) {
     response.cache.scope = null;
     response.cache.reason = "adaptive_experiment_not_cached";
   }
   return response;
+}
+
+async function dependencyFailureResponse({ ruleSet, version, baseRequest, request, hydrated, schemaItems, policyDecision }) {
+  const evaluatedAt = createdAtIso();
+  const profileCache = profileCacheWithDiagnostics(
+    hydrated.cache,
+    baseRequest,
+    request,
+    schemaItems,
+    [policyDecision.message]
+  );
+  const errors = [
+    `Dependency failure policy: ${policyDecision.mode}`,
+    policyDecision.message
+  ];
+  const matchedRules = ["dependency_failure_policy"];
+  const evaluated = {
+    decision_key: ruleSet.decision_key,
+    profile_key: request.profile_key,
+    result: policyDecision.result,
+    outputs: policyDecision.outputs,
+    rule_version: version.version,
+    matched_rules: matchedRules,
+    errors,
+    evaluated_at: evaluatedAt
+  };
+  await storeCall("addAudit", {
+    ...evaluated,
+    profile_cache: profileCache,
+    delivery: mergeMessageDeliveryIntoClientDelivery(clientDeliverySettings(ruleSet, evaluated), policyDecision.outputs),
+    inputs: {
+      identifiers_count: Array.isArray(request.identifiers) ? request.identifiers.length : 0,
+      attribute_keys: Object.keys(request.attributes || {}),
+      segment_keys: Object.keys(request.segments || {}),
+      context_keys: Object.keys(request.context || {}),
+      request_source: request.context?.request_source || "client",
+      surface: request.context?.surface || request.surface || ruleSet.surface || "",
+      sync_id: request.context?.sync_id || "",
+      profile_enrichment: hydrated.cache?.status || "not_used",
+      dependency_failure_mode: policyDecision.mode
+    }
+  });
+  return {
+    decision_key: ruleSet.decision_key,
+    profile_key: request.profile_key,
+    result: policyDecision.result,
+    outputs: policyDecision.outputs,
+    rule_version: version.version,
+    ttl_seconds: 0,
+    cache_scope: null,
+    cache: {
+      hit: false,
+      scope: null,
+      expires_at: null,
+      reason: "dependency_failure_policy"
+    },
+    profile_cache: profileCache,
+    experiment: null,
+    graph_experiments: [],
+    delivery: mergeMessageDeliveryIntoClientDelivery(clientDeliverySettings(ruleSet, evaluated), policyDecision.outputs),
+    failover: {
+      mode: policyDecision.mode,
+      reason: policyDecision.reason,
+      dependency: "meiro_profile_api"
+    },
+    matched_rules: matchedRules,
+    errors
+  };
 }
 
 async function hydrateClientProfile(request) {
@@ -2919,7 +3330,7 @@ async function hydrateClientProfile(request) {
     profile_key: request.profile_key,
     identifiers: [{ typeId: identifier.type, value: identifier.value }]
   });
-  const cached = meiroProfileCache.get(cacheKey, ttlSeconds);
+  const cached = await maybeAwait(meiroProfileCache.get(cacheKey, ttlSeconds));
   if (cached.hit) {
     return {
       request: mergeProfileIntoRequest(request, cached.value),
@@ -2933,10 +3344,26 @@ async function hydrateClientProfile(request) {
     };
   }
 
+  const breakerState = meiroCircuitBreakers.profile.canRequest();
+  if (!breakerState.allowed) {
+    await maybeAwait(meiroProfileCache.recordError());
+    return {
+      request,
+      cache: {
+        status: "circuit_open",
+        hit: false,
+        identifier_type: identifier.type,
+        reason: "Profile API circuit is open after repeated lookup failures.",
+        next_retry_at: breakerState.next_retry_at
+      }
+    };
+  }
+
   try {
     const profile = await fetchMeiroProfile(endpoint, token, identifier);
+    meiroCircuitBreakers.profile.recordSuccess();
     const normalized = normalizeProfileForEvaluation(profile);
-    const expiresAt = meiroProfileCache.set(cacheKey, normalized, ttlSeconds);
+    const expiresAt = await maybeAwait(meiroProfileCache.set(cacheKey, normalized, ttlSeconds));
     return {
       request: mergeProfileIntoRequest(request, normalized),
       cache: {
@@ -2950,7 +3377,8 @@ async function hydrateClientProfile(request) {
     };
   } catch (error) {
     if (isProfileNotFoundError(error)) {
-      meiroProfileCache.recordNotFound();
+      await maybeAwait(meiroProfileCache.recordNotFound());
+      meiroCircuitBreakers.profile.recordSuccess();
       return {
         request,
         cache: {
@@ -2961,7 +3389,8 @@ async function hydrateClientProfile(request) {
         }
       };
     }
-    meiroProfileCache.recordError();
+    await maybeAwait(meiroProfileCache.recordError());
+    meiroCircuitBreakers.profile.recordFailure(error);
     return {
       request,
       cache: {
@@ -3118,21 +3547,22 @@ async function resolveMessageOutputs(outputs, ruleSet, request, evaluatedAt) {
   if (!messageId) return { outputs, available: null, errors: [] };
   const message = await storeCall("getMessage", String(messageId));
   if (!message) {
-    return unavailableMessage(outputs, "message_not_found", `Message not found: ${messageId}`);
+    return unavailableMessage(outputs, "message_not_found", `Message not found: ${messageId}`, null, request);
   }
   const availability = await messageAvailability(message, ruleSet, request, evaluatedAt);
   if (!availability.available) {
-    return unavailableMessage(outputs, availability.reason, availability.message, message);
+    return unavailableMessage(outputs, availability.reason, availability.message, message, request);
   }
   return {
-    outputs: attachMessage(outputs, message, availability),
+    outputs: attachMessage(outputs, message, availability, request),
     available: true,
     errors: []
   };
 }
 
-function attachMessage(outputs, message, availability) {
+function attachMessage(outputs, message, availability, request = {}) {
   const delivery = messageDeliverySettings(message);
+  const rendering = messageRenderingContract(message, outputs, request, availability);
   return {
     ...outputs,
     message: {
@@ -3145,7 +3575,8 @@ function attachMessage(outputs, message, availability) {
       },
       metadata: message.metadata,
       delivery,
-      availability
+      availability,
+      rendering
     },
     delivery: {
       ...(outputs.delivery && typeof outputs.delivery === "object" ? outputs.delivery : {}),
@@ -3154,7 +3585,7 @@ function attachMessage(outputs, message, availability) {
   };
 }
 
-function unavailableMessage(outputs, reason, message, messageRecord = null) {
+function unavailableMessage(outputs, reason, message, messageRecord = null, request = {}) {
   return {
     outputs: {
       ...outputs,
@@ -3163,7 +3594,8 @@ function unavailableMessage(outputs, reason, message, messageRecord = null) {
         id: messageRecord.id,
         name: messageRecord.name,
         surface: messageRecord.surface,
-        availability: { available: false, reason, message }
+        availability: { available: false, reason, message },
+        rendering: messageRenderingContract(messageRecord, outputs, request, { available: false, reason, message })
       } : undefined
     },
     available: false,
@@ -3321,15 +3753,7 @@ async function evaluateClientSurface(body, auth) {
         surface: body.surface
       }
     });
-    const candidate = {
-      decision_key: result.decision_key,
-      priority: ruleSetSummary.priority,
-      result: result.result,
-      message_id: result.outputs?.message_id || result.outputs?.message?.id || "",
-      matched_rules: result.matched_rules,
-      cache: result.cache,
-      profile_cache: result.profile_cache
-    };
+    const candidate = surfaceCandidateSummary(result, ruleSetSummary.priority);
     candidates.push(candidate);
     if (!selected && result.result === "eligible") {
       selected = {
@@ -3514,6 +3938,10 @@ function surfaceNoCandidateReason({ allPublishedInApp, allowed, matchingBeforeLi
 }
 
 function clientEventFromRequest(eventType, body, req) {
+  const event = body.event && typeof body.event === "object" ? { ...body.event } : {};
+  if (Array.isArray(body.graph_experiments) && !Array.isArray(event.graph_experiments)) {
+    event.graph_experiments = body.graph_experiments;
+  }
   return {
     event_type: eventType,
     event_id: body.event_id || idempotencyKey(req),
@@ -3525,7 +3953,7 @@ function clientEventFromRequest(eventType, body, req) {
     message_id: body.message_id || "",
     surface: body.surface || "",
     context: body.context || {},
-    event: body.event || {}
+    event
   };
 }
 
@@ -3933,10 +4361,39 @@ function isForcedHoldout(request, decisionKey) {
   return value === true || value === "true" || value === 1 || value === "1";
 }
 
+function graphExperimentAssignments(evaluated = {}) {
+  return (evaluated.trace || [])
+    .filter((item) => item?.node_type === "experiment_split" && item.variant_key)
+    .map((item) => {
+      const mode = item.mode === "bandit" ? "bandit" : "fixed";
+      const strategy = mode === "bandit" ? "graph_bandit" : "graph_split";
+      return {
+        key: item.variant_key,
+        bucket: item.bucket == null ? null : item.bucket,
+        strategy,
+        reason: item.forced ? "forced" : "graph_split",
+        experiment_key: item.experiment_key || item.node_id || "",
+        graph_node_id: item.node_id || "",
+        mode,
+        assignment: {
+          graph: {
+            experiment_key: item.experiment_key || item.node_id || "",
+            node_id: item.node_id || "",
+            mode,
+            forced: Boolean(item.forced),
+            variants: Array.isArray(item.variants) ? item.variants : []
+          }
+        }
+      };
+    });
+}
+
 function auditExperimentAssignment(assigned) {
   if (assigned.holdout) return { holdout: true, reason: assigned.reason || "holdout" };
   return {
     key: assigned.key,
+    experiment_key: assigned.experiment_key || "",
+    graph_node_id: assigned.graph_node_id || "",
     bucket: assigned.bucket,
     strategy: assigned.strategy || "fixed",
     reason: assigned.reason || "",
@@ -3948,6 +4405,8 @@ function clientExperimentAssignment(assigned) {
   if (assigned.holdout) return { variant_key: null, bucket: null, holdout: true, reason: assigned.reason || "holdout" };
   return {
     variant_key: assigned.key,
+    experiment_key: assigned.experiment_key || "",
+    graph_node_id: assigned.graph_node_id || "",
     bucket: assigned.bucket,
     holdout: false,
     strategy: assigned.strategy || "fixed",

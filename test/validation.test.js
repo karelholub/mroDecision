@@ -54,6 +54,32 @@ test("validates basic rule definition conditions", () => {
   );
 });
 
+test("validates rule set dependency failure policy", () => {
+  assert.doesNotThrow(() =>
+    validateRuleSetPayload({
+      name: "Hero Message",
+      decision_key: "hero_message",
+      cache_policy: {
+        dependency_failure_mode: "fail_open",
+        dependency_failure_outputs: { message_id: "fallback" }
+      },
+      draft: { fallback: { result: "eligible" } }
+    })
+  );
+  assert.throws(
+    () =>
+      validateRuleSetPayload({
+        name: "Hero Message",
+        decision_key: "hero_message",
+        cache_policy: {
+          dependency_failure_mode: "maybe"
+        },
+        draft: { fallback: { result: "eligible" } }
+      }),
+    /dependency_failure_mode/
+  );
+});
+
 test("blocks undeclared input references when an input schema is provided", () => {
   assert.throws(
     () =>
@@ -137,6 +163,70 @@ test("validates graph routes and reachability", () => {
         }
       }),
     /unreachable/
+  );
+});
+
+test("validates graph experiment split variants and routes", () => {
+  assert.doesNotThrow(() =>
+    validateRuleDefinition({
+      graph: {
+        entry: "split",
+        nodes: [
+          {
+            id: "split",
+            type: "experiment_split",
+            variants: [
+              { key: "control", weight: 50, route: "control_output" },
+              { key: "treatment", weight: 50, route: "treatment_output" }
+            ],
+            fallback: "fallback"
+          },
+          { id: "control_output", type: "output", result: "eligible" },
+          { id: "treatment_output", type: "output", result: "eligible" },
+          { id: "fallback", type: "output", result: "deferred" }
+        ]
+      }
+    })
+  );
+  assert.throws(
+    () =>
+      validateRuleDefinition({
+        graph: {
+          entry: "split",
+          nodes: [
+            {
+              id: "split",
+              type: "experiment_split",
+              variants: [
+                { key: "control", weight: 50, route: "control_output" },
+                { key: "treatment", weight: 50 }
+              ]
+            },
+            { id: "control_output", type: "output", result: "eligible" }
+          ]
+        }
+      }),
+    /variant treatment needs a route/
+  );
+  assert.throws(
+    () =>
+      validateRuleDefinition({
+        graph: {
+          entry: "split",
+          nodes: [
+            {
+              id: "split",
+              type: "experiment_split",
+              variants: [
+                { key: "control", weight: 50, route: "control_output" },
+                { key: "control", weight: 50, route: "control_output" }
+              ]
+            },
+            { id: "control_output", type: "output", result: "eligible" }
+          ]
+        }
+      }),
+    /duplicate variant key/
   );
 });
 

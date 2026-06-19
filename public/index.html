@@ -300,6 +300,21 @@
                 </div>
                 <div class="grid-two">
                   <label>
+                    Dependency failure mode
+                    <select id="rule-dependency-failure-mode">
+                      <option value="evaluate">Evaluate with available data</option>
+                      <option value="fail_open">Fail open</option>
+                      <option value="fail_closed">Fail closed</option>
+                    </select>
+                    <small class="field-note">Used when Meiro Profile API enrichment fails or its circuit is open.</small>
+                  </label>
+                  <label>
+                    Dependency failure outputs JSON
+                    <input id="rule-dependency-failure-outputs" placeholder='{"suppression_reason":"profile_unavailable"}' />
+                  </label>
+                </div>
+                <div class="grid-two">
+                  <label>
                     Campaign
                     <input id="rule-campaign" placeholder="retention_q3" />
                   </label>
@@ -578,22 +593,11 @@
                   <div id="branch-editor" class="branch-list"></div>
                   <datalist id="message-output-options"></datalist>
                   <div id="graph-editor" class="graph-editor" hidden>
-                    <div class="graph-toolbar">
+                    <div class="graph-toolbar graph-settings-panel">
                       <label>
                         Entry node
                         <input id="graph-entry" value="input" />
                       </label>
-                      <label>
-                        New node type
-                        <select id="graph-new-node-type">
-                          <option value="condition">Condition</option>
-                          <option value="score">Score</option>
-                          <option value="lookup">Reference lookup</option>
-                          <option value="frequency_cap">Frequency cap</option>
-                          <option value="output">Output</option>
-                        </select>
-                      </label>
-                      <button type="button" id="add-graph-node">Add Node</button>
                       <button type="button" id="create-graph-template">Create Template</button>
                       <button type="button" id="reset-graph-layout">Reset Layout</button>
                       <label class="graph-snap-toggle">
@@ -605,7 +609,7 @@
                         <input id="graph-snap-size" type="number" min="8" max="80" step="4" value="24" />
                       </label>
                     </div>
-                    <div id="graph-minimap" class="graph-minimap" aria-live="polite"></div>
+                    <div id="graph-minimap" class="graph-minimap" aria-live="polite" hidden></div>
                     <div class="frequency-cap-helper">
                       <div class="builder-section-head">
                         <div>
@@ -656,6 +660,22 @@
                       <datalist id="frequency-cap-surface-options"></datalist>
                     </div>
                     <div id="graph-node-editor" class="graph-node-editor"></div>
+                  </div>
+                  <div id="graph-node-picker" class="graph-node-picker" hidden>
+                    <div class="graph-node-picker-dialog">
+                      <div class="graph-node-picker-head">
+                        <div>
+                          <strong>Add node</strong>
+                          <span>Choose a node to place into the current graph canvas.</span>
+                        </div>
+                        <button type="button" id="close-graph-node-picker" aria-label="Close add node">Close</button>
+                      </div>
+                      <label class="graph-node-picker-search">
+                        Search nodes
+                        <input id="graph-node-picker-search" placeholder="Condition, output, lookup..." />
+                      </label>
+                      <div id="graph-node-picker-list" class="graph-node-picker-list"></div>
+                    </div>
                   </div>
                 </div>
                 <div class="rule-builder-footer">
@@ -876,11 +896,11 @@
           <div class="experiment-filter-bar">
             <div class="experiment-filter-controls">
               <label class="compact-filter">
-                Campaign
-                <input id="experiment-filter-campaign" placeholder="Any campaign" />
+                Find campaign
+                <input id="campaign-filter-search" placeholder="Campaign, surface, asset" />
               </label>
               <label class="compact-filter">
-                Search
+                Find experiment
                 <input id="experiment-filter-search" placeholder="Name or key" />
               </label>
               <label class="compact-filter">
@@ -903,24 +923,55 @@
                   <option value="name">Name</option>
                 </select>
               </label>
+              <label class="compact-filter">
+                Campaign sort
+                <select id="campaign-sort">
+                  <option value="traffic">Traffic</option>
+                  <option value="recent">Recent activity</option>
+                  <option value="conflicts">Needs attention</option>
+                  <option value="assets">Asset count</option>
+                  <option value="name">Name</option>
+                </select>
+              </label>
+              <label class="compact-filter hidden-filter">
+                Campaign
+                <input id="experiment-filter-campaign" placeholder="Any campaign" />
+              </label>
             </div>
             <div id="experiment-kpis" class="experiment-kpi-strip"></div>
-            <div id="campaign-master-list" class="campaign-master-list" aria-label="Campaign focus"></div>
+          </div>
+          <div class="editor campaign-list-pane campaign-list-pane-wide">
+            <div class="experiment-pane-head">
+              <div>
+                <div class="editor-title">Campaign Inventory</div>
+                <p>Select a campaign to inspect assets, readiness, and performance.</p>
+              </div>
+              <button type="button" id="clear-campaign-selection">All campaigns</button>
+            </div>
+            <div id="campaign-master-list" class="campaign-master-list" aria-label="Campaign inventory"></div>
           </div>
           <div class="experiment-ops-grid">
-            <div class="editor experiment-list-pane">
-              <div class="experiment-pane-head">
+            <div class="editor experiment-detail-pane experiment-detail-pane-wide">
+              <div class="campaign-workbench-title-row">
                 <div>
-                  <div class="editor-title">Experiment Inventory</div>
-                  <p>Pick an experiment to inspect setup, design, and results.</p>
+                  <div class="editor-title">Campaign Workbench</div>
+                  <p>Summary first, then linked experiments and assets.</p>
                 </div>
-                <button type="button" id="clear-campaign-selection">All</button>
+              </div>
+              <div id="campaign-master-detail" class="campaign-master-detail"></div>
+              <div class="experiment-pane-head experiment-subsection-head">
+                <div>
+                  <div class="editor-title">Experiments</div>
+                  <p>Filtered by selected campaign unless all campaigns are shown.</p>
+                </div>
               </div>
               <div id="experiment-list" class="experiment-list"></div>
-            </div>
-            <div class="editor experiment-detail-pane">
-              <div class="editor-title">Experiment Workbench</div>
-              <div id="campaign-master-detail" class="campaign-master-detail"></div>
+              <div class="experiment-pane-head experiment-subsection-head">
+                <div>
+                  <div class="editor-title">Experiment Detail</div>
+                  <p>Open design, settings, results, or Evaluate for the selected experiment.</p>
+                </div>
+              </div>
               <div id="experiment-detail" class="experiment-detail"></div>
             </div>
           </div>
@@ -1029,12 +1080,19 @@
         <div class="evaluate-workbench">
           <div class="evaluate-controls editor">
             <div class="editor-title">Request Setup</div>
-            <div class="audit-filter-grid">
-              <label>
+            <div class="eval-setup-grid">
+              <label class="eval-field-sm">
+                Request type
+                <select id="eval-request-kind">
+                  <option value="decision">Decision rule</option>
+                  <option value="surface">Client surface</option>
+                </select>
+              </label>
+              <label class="eval-field-lg">
                 Rule set
                 <select id="eval-rule-key"></select>
               </label>
-              <label>
+              <label class="eval-field-lg">
                 Preset
                 <select id="eval-preset">
                   <option value="rule_default">Selected rule default</option>
@@ -1047,23 +1105,31 @@
                   <option value="experiment_holdout">Experiment holdout</option>
                 </select>
               </label>
-              <label>
+              <label class="eval-field-sm">
                 Version
                 <select id="eval-mode">
                   <option value="published">Published</option>
                   <option value="draft">Current draft</option>
                 </select>
               </label>
-              <label>
+              <label class="eval-field-lg">
                 Profile key
                 <input id="eval-profile-key" value="demo-profile" />
               </label>
-              <label>
+              <label class="eval-field-lg">
+                Surface
+                <input id="eval-surface" value="homepage_hero" placeholder="homepage_hero" />
+              </label>
+              <label class="eval-field-xs">
+                Candidate limit
+                <input id="eval-limit" type="number" min="1" max="50" value="20" />
+              </label>
+              <label class="eval-field-md">
                 Saved profile
                 <select id="eval-saved-profile"></select>
               </label>
             </div>
-            <div class="actions left">
+            <div class="actions left eval-setup-actions">
               <button type="button" id="load-preset-secondary">Load Preset</button>
               <button type="button" id="toggle-eval-payload">Show Payload JSON</button>
               <button type="button" id="save-eval-profile">Save Profile</button>
@@ -1124,6 +1190,7 @@
             <div class="editor-title">Response</div>
             <div id="eval-summary" class="status-panel compact-status-panel"></div>
             <div id="eval-output-summary" class="eval-output-summary"></div>
+            <div id="eval-runtime-summary" class="eval-runtime-summary"></div>
             <div class="evaluate-response-body">
               <div id="eval-trace" class="eval-trace"></div>
               <pre id="eval-output"></pre>
@@ -1145,7 +1212,20 @@
         </header>
         <div class="audit-workbench">
           <div class="audit-filter-pane editor">
-            <div class="editor-title">Filters</div>
+            <div class="audit-filter-head">
+              <div>
+                <div class="editor-title">Filters</div>
+                <span id="audit-filter-summary">Latest 7 days · updates automatically</span>
+              </div>
+              <div class="audit-filter-shortcuts">
+                <div class="audit-range-chips">
+                  <button type="button" data-audit-range="1">24h</button>
+                  <button type="button" data-audit-range="7" class="active">7d</button>
+                  <button type="button" data-audit-range="30">30d</button>
+                </div>
+                <div id="audit-preset-chips" class="audit-preset-chips"></div>
+              </div>
+            </div>
             <div class="audit-filter-grid">
               <label>
                 Audit mode
@@ -1177,6 +1257,7 @@
                   <option value="exposure">Exposure</option>
                   <option value="impression">Impression</option>
                   <option value="conversion">Conversion</option>
+                  <option value="skipped">Skipped</option>
                 </select>
               </label>
               <label data-audit-client-field>
@@ -1208,7 +1289,9 @@
                 <input id="audit-limit" type="number" min="1" max="1000" value="100" />
               </label>
             </div>
-            <div class="actions left">
+            <div class="actions left audit-filter-actions">
+              <span>Filters refresh the event stream automatically.</span>
+              <button type="button" id="apply-audit-filters">Refresh now</button>
               <button type="button" id="clear-audit-filters">Clear</button>
             </div>
           </div>
@@ -1225,7 +1308,9 @@
           </div>
           <div class="audit-detail-pane editor">
             <div class="editor-title">Detail</div>
+            <div id="audit-detail-meta" class="audit-detail-meta">Select an event to inspect its decision path, runtime diagnostics, and payload.</div>
             <div id="audit-detail-summary" class="status-panel compact-status-panel"></div>
+            <div id="audit-detail-extra"></div>
             <details class="raw-payload-drawer">
               <summary>Show raw payload</summary>
               <pre id="audit-detail"></pre>
@@ -1293,14 +1378,20 @@
             <div class="message-detail-head">
               <div>
                 <div class="editor-title">Message Editor</div>
-                <p>Edit content, schema, metadata, and preview.</p>
+                <p>Author content first, then preview it, then tune delivery and governance.</p>
               </div>
             </div>
             <div class="message-editor-pane">
-              <div class="message-editor-main">
+              <div class="message-workspace-tabs" role="tablist" aria-label="Message editor workspace">
+                <button type="button" class="active" data-message-workspace-tab="content" role="tab" aria-selected="true">Content</button>
+                <button type="button" data-message-workspace-tab="preview" role="tab" aria-selected="false">Preview</button>
+                <button type="button" data-message-workspace-tab="metadata" role="tab" aria-selected="false">Delivery &amp; Metadata</button>
+              </div>
+
+              <div class="message-workspace-panel active" data-message-workspace-panel="content" role="tabpanel">
                 <div class="message-form-pane">
                   <div class="message-editor-section">
-                    <div class="editor-title">Message Settings</div>
+                    <div class="editor-title">Message Identity</div>
                     <div class="grid-two">
                       <label>
                         Message ID
@@ -1309,21 +1400,6 @@
                       <label>
                         Name
                         <input id="message-name" required />
-                      </label>
-                      <label>
-                        Application
-                        <input id="message-application" list="message-application-options" placeholder="web-storefront" />
-                      </label>
-                      <label>
-                        Surface
-                        <input id="message-surface" list="message-surface-options" placeholder="homepage_hero" />
-                      </label>
-                      <label>
-                        Status
-                        <select id="message-status">
-                          <option value="active">Active</option>
-                          <option value="archived">Archived</option>
-                        </select>
                       </label>
                       <label>
                         Template type
@@ -1339,18 +1415,6 @@
                           <option value="recommendation">Recommendation</option>
                           <option value="html_fragment">HTML fragment</option>
                         </select>
-                      </label>
-                      <label>
-                        Placement
-                        <input id="message-placement" placeholder="homepage.hero.top" />
-                      </label>
-                      <label>
-                        Campaign
-                        <input id="message-campaign" placeholder="retention_q3" />
-                      </label>
-                      <label>
-                        Folder
-                        <input id="message-folder" placeholder="Retention / Web" />
                       </label>
                     </div>
                   </div>
@@ -1448,6 +1512,88 @@
                       </label>
                     </div>
                   </div>
+                </div>
+                <div class="message-advanced-card">
+                  <div class="message-advanced-head">
+                    <span class="message-advanced-summary">Raw JSON and schema for advanced edits</span>
+                    <button type="button" class="message-advanced-toggle" data-message-advanced-toggle aria-expanded="false">
+                      Show advanced
+                    </button>
+                  </div>
+                  <div class="message-subpanel-card" id="message-advanced-panel" hidden>
+                    <div class="drawer-tabs message-subtabs">
+                      <div>
+                        <button type="button" class="active" data-message-content-tab="content_json">Content JSON</button>
+                        <button type="button" data-message-content-tab="schema_json">Schema</button>
+                      </div>
+                      <button type="button" id="format-message-json" class="drawer-action">Format JSON</button>
+                    </div>
+                    <div class="drawer-panel active" data-message-content-panel="content_json">
+                      <textarea id="message-content" spellcheck="false"></textarea>
+                    </div>
+                    <div class="drawer-panel" data-message-content-panel="schema_json">
+                      <textarea id="message-schema" spellcheck="false"></textarea>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="message-workspace-panel" data-message-workspace-panel="preview" role="tabpanel" hidden>
+                <div class="message-preview-pane">
+                  <div class="message-preview-head">
+                    <div class="editor-title">Preview</div>
+                    <div class="message-device-switch" aria-label="Preview device">
+                      <button type="button" class="active" data-message-preview-device="desktop">Desktop</button>
+                      <button type="button" data-message-preview-device="tablet">Tablet</button>
+                      <button type="button" data-message-preview-device="mobile">Mobile</button>
+                    </div>
+                  </div>
+                  <div class="message-preview-stage">
+                    <div id="message-preview" class="message-preview-card"></div>
+                  </div>
+                  <div id="message-preview-health" class="message-preview-health"></div>
+                  <div id="message-readiness-panel" class="message-readiness-panel"></div>
+                  <div id="message-runtime-contract" class="message-runtime-contract"></div>
+                  <div id="message-inspector-summary" class="status-panel compact-status-panel"></div>
+                  <div id="message-performance-summary" class="message-performance-summary"></div>
+                  <div id="message-rule-links" class="message-rule-links"></div>
+                </div>
+              </div>
+
+              <div class="message-workspace-panel" data-message-workspace-panel="metadata" role="tabpanel" hidden>
+                <div class="message-form-pane">
+                  <div class="message-editor-section">
+                    <div class="editor-title">Routing & Ownership</div>
+                    <div class="grid-two">
+                      <label>
+                        Application
+                        <input id="message-application" list="message-application-options" placeholder="web-storefront" />
+                      </label>
+                      <label>
+                        Surface
+                        <input id="message-surface" list="message-surface-options" placeholder="homepage_hero" />
+                      </label>
+                      <label>
+                        Placement
+                        <input id="message-placement" placeholder="homepage.hero.top" />
+                      </label>
+                      <label>
+                        Status
+                        <select id="message-status">
+                          <option value="active">Active</option>
+                          <option value="archived">Archived</option>
+                        </select>
+                      </label>
+                      <label>
+                        Campaign
+                        <input id="message-campaign" placeholder="retention_q3" />
+                      </label>
+                      <label>
+                        Folder
+                        <input id="message-folder" placeholder="Retention / Web" />
+                      </label>
+                    </div>
+                  </div>
                   <div class="message-editor-section">
                     <div class="editor-title">Delivery & TTL</div>
                     <div class="message-field-grid">
@@ -1516,51 +1662,46 @@
                     </div>
                   </div>
                 </div>
-                <div class="message-preview-pane">
-                  <div class="message-preview-head">
-                    <div class="editor-title">Preview</div>
-                    <div class="message-device-switch" aria-label="Preview device">
-                      <button type="button" class="active" data-message-preview-device="desktop">Desktop</button>
-                      <button type="button" data-message-preview-device="tablet">Tablet</button>
-                      <button type="button" data-message-preview-device="mobile">Mobile</button>
+                <div class="message-subpanel-card">
+                  <div class="drawer-tabs message-subtabs">
+                    <div>
+                      <button type="button" class="active" data-message-meta-tab="versions">Versions</button>
+                      <button type="button" data-message-meta-tab="output">Output</button>
+                    </div>
+                    <button type="button" class="drawer-action" data-message-meta-action="show-output">Show Output</button>
+                  </div>
+                  <div class="drawer-panel active" data-message-meta-panel="versions">
+                    <div id="message-version-list" class="table"></div>
+                    <div id="message-version-preview" class="message-version-preview"></div>
+                  </div>
+                  <div class="drawer-panel" data-message-meta-panel="output">
+                    <pre id="message-output"></pre>
+                  </div>
+                </div>
+                <div class="message-advanced-card">
+                  <div class="message-advanced-head">
+                    <span class="message-advanced-summary">Raw metadata JSON for advanced edits and migration support</span>
+                    <button
+                      type="button"
+                      class="message-advanced-toggle"
+                      data-message-advanced-toggle
+                      data-message-advanced-target="message-metadata-advanced-panel"
+                      aria-expanded="false"
+                    >
+                      Show advanced
+                    </button>
+                  </div>
+                  <div class="message-subpanel-card" id="message-metadata-advanced-panel" hidden>
+                    <div class="drawer-tabs message-subtabs">
+                      <div>
+                        <button type="button" data-message-meta-tab="metadata_json">Metadata JSON</button>
+                      </div>
+                      <button type="button" id="format-message-metadata-json" class="drawer-action">Format JSON</button>
+                    </div>
+                    <div class="drawer-panel" data-message-meta-panel="metadata_json">
+                      <textarea id="message-metadata" spellcheck="false"></textarea>
                     </div>
                   </div>
-                  <div class="message-preview-stage">
-                    <div id="message-preview" class="message-preview-card"></div>
-                  </div>
-                  <div id="message-preview-health" class="message-preview-health"></div>
-                  <div id="message-readiness-panel" class="message-readiness-panel"></div>
-                  <div id="message-inspector-summary" class="status-panel compact-status-panel"></div>
-                  <div id="message-performance-summary" class="message-performance-summary"></div>
-                  <div id="message-rule-links" class="message-rule-links"></div>
-                </div>
-              </div>
-              <div class="rule-bottom-drawer message-bottom-drawer">
-                <div class="drawer-tabs">
-                  <div>
-                    <button type="button" class="active" data-message-drawer-tab="content">Content JSON</button>
-                    <button type="button" data-message-drawer-tab="schema">Schema</button>
-                    <button type="button" data-message-drawer-tab="metadata">Metadata</button>
-                    <button type="button" data-message-drawer-tab="versions">Versions</button>
-                    <button type="button" data-message-drawer-tab="output">Output</button>
-                  </div>
-                  <button type="button" id="format-message-json" class="drawer-action">Format JSON</button>
-                </div>
-                <div class="drawer-panel active" data-message-drawer-panel="content">
-                  <textarea id="message-content" spellcheck="false"></textarea>
-                </div>
-                <div class="drawer-panel" data-message-drawer-panel="schema">
-                  <textarea id="message-schema" spellcheck="false"></textarea>
-                </div>
-                <div class="drawer-panel" data-message-drawer-panel="metadata">
-                  <textarea id="message-metadata" spellcheck="false"></textarea>
-                </div>
-                <div class="drawer-panel" data-message-drawer-panel="versions">
-                  <div id="message-version-list" class="table"></div>
-                  <div id="message-version-preview" class="message-version-preview"></div>
-                </div>
-                <div class="drawer-panel" data-message-drawer-panel="output">
-                  <pre id="message-output"></pre>
                 </div>
               </div>
             </div>

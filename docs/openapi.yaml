@@ -673,6 +673,31 @@ paths:
                 properties:
                   metrics:
                     $ref: "#/components/schemas/Metrics"
+  /v1/metrics/prometheus:
+    get:
+      summary: Get operational metrics in Prometheus text format
+      parameters:
+        - name: window_hours
+          in: query
+          schema:
+            type: number
+            default: 24
+      responses:
+        "200":
+          description: Prometheus text exposition
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                sample:
+                  value: |
+                    # HELP dee_up DEE process is serving metrics.
+                    # TYPE dee_up gauge
+                    dee_up 1
+                    # HELP dee_database_ready DEE database readiness probe status.
+                    # TYPE dee_database_ready gauge
+                    dee_database_ready{adapter="postgres_native",deployment="production_ready"} 1
   /v1/metrics/rule/{key}:
     get:
       summary: Get operational usage metrics for one rule set
@@ -1412,6 +1437,78 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/MessageVersionSummary"
+  /v1/messages/{id}/versions/{version}:
+    get:
+      summary: Fetch a saved message version
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Saved message version
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    $ref: "#/components/schemas/Message"
+  /v1/messages/{id}/versions/{version}/diff:
+    get:
+      summary: Diff a saved message version against current or another saved version
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: compare_to
+          in: query
+          schema:
+            oneOf:
+              - type: string
+                enum: [current]
+              - type: integer
+      responses:
+        "200":
+          description: Message diff
+  /v1/messages/{id}/versions/{version}/restore:
+    post:
+      summary: Restore a saved message version as the latest editable message draft
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Restored message
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    $ref: "#/components/schemas/Message"
   /v1/messages/{id}/versions/{version}:
     get:
       summary: Get a durable message version snapshot
@@ -2406,6 +2503,7 @@ components:
           type: string
         outputs:
           type: object
+          description: Generic decision outputs. In-app message evaluations include a resolved `message` object with merged content, availability, delivery policy, and a normalized `rendering` contract intended for web or native SDKs.
           additionalProperties: true
         steps:
           type: array
@@ -2629,6 +2727,10 @@ components:
           type: object
           nullable: true
           properties:
+            experiment_key:
+              type: string
+            graph_node_id:
+              type: string
             variant_key:
               type: string
             bucket:
@@ -2636,11 +2738,35 @@ components:
               nullable: true
             holdout:
               type: boolean
+            strategy:
+              type: string
             reason:
               type: string
+        graph_experiments:
+          type: array
+          description: Graph experiment-split assignments recorded during advanced graph evaluation.
+          items:
+            type: object
+            properties:
+              experiment_key:
+                type: string
+              graph_node_id:
+                type: string
+              variant_key:
+                type: string
+              bucket:
+                type: number
+                nullable: true
+              holdout:
+                type: boolean
+              strategy:
+                type: string
+                enum: [graph_split, graph_bandit, fixed, bandit, holdout]
+              reason:
+                type: string
         delivery:
           type: object
-          description: Browser delivery hints derived from experiment metadata for SDK-side targeting, display frequency, triggers, consent, and conversion goals.
+          description: Client delivery hints derived from experiment or message metadata for SDK-side targeting, display frequency, triggers, consent, and conversion goals.
           properties:
             display:
               type: object
@@ -2662,6 +2788,8 @@ components:
               type: object
               nullable: true
               additionalProperties: true
+            message:
+              $ref: "#/components/schemas/ClientMessageDelivery"
         matched_rules:
           type: array
           items:
@@ -2769,28 +2897,140 @@ components:
         candidates:
           type: array
           items:
-            type: object
-            properties:
-              decision_key:
-                type: string
-              priority:
-                type: integer
-              result:
-                type: string
-              message_id:
-                type: string
-              matched_rules:
-                type: array
-                items:
-                  type: string
-              cache:
-                type: object
-                additionalProperties: true
-              profile_cache:
-                type: object
-                additionalProperties: true
+            $ref: "#/components/schemas/ClientSurfaceCandidate"
         diagnostics:
           $ref: "#/components/schemas/ClientSurfaceDiagnostics"
+    ClientSurfaceCandidate:
+      type: object
+      properties:
+        decision_key:
+          type: string
+        priority:
+          type: integer
+        result:
+          type: string
+        message_id:
+          type: string
+        message:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            surface:
+              type: string
+            availability:
+              $ref: "#/components/schemas/ClientMessageAvailability"
+            rendering:
+              $ref: "#/components/schemas/ClientMessageRendering"
+        delivery:
+          $ref: "#/components/schemas/ClientMessageDelivery"
+        matched_rules:
+          type: array
+          items:
+            type: string
+        cache:
+          type: object
+          additionalProperties: true
+        profile_cache:
+          type: object
+          additionalProperties: true
+        errors:
+          type: array
+          items:
+            type: string
+    ClientMessageDelivery:
+      type: object
+      nullable: true
+      description: Message-level delivery policy normalized for client SDKs, including native mobile SDKs.
+      properties:
+        display:
+          type: object
+          nullable: true
+          additionalProperties: true
+        frequency:
+          type: object
+          nullable: true
+          additionalProperties: true
+        targeting:
+          type: object
+          nullable: true
+          additionalProperties: true
+        trigger:
+          type: object
+          nullable: true
+          additionalProperties: true
+        consent:
+          type: object
+          nullable: true
+          additionalProperties: true
+        dismiss:
+          type: object
+          nullable: true
+          additionalProperties: true
+        availability:
+          $ref: "#/components/schemas/ClientMessageAvailability"
+        rendering:
+          $ref: "#/components/schemas/ClientMessageRendering"
+    ClientMessageAvailability:
+      type: object
+      nullable: true
+      additionalProperties: true
+      description: Message selection or suppression details after lifecycle and frequency checks.
+    ClientMessageRendering:
+      type: object
+      nullable: true
+      description: Cross-platform message rendering contract derived from message content and metadata.
+      properties:
+        template_type:
+          type: string
+        content_type:
+          type: string
+        surface:
+          type: string
+        placement:
+          type: string
+        application:
+          type: object
+          properties:
+            id:
+              type: string
+            key:
+              type: string
+            name:
+              type: string
+        locale:
+          type: string
+        interruptive:
+          type: boolean
+        supports_rich_media:
+          type: boolean
+        actions:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        media:
+          type: object
+          additionalProperties: true
+        survey:
+          type: object
+          nullable: true
+          additionalProperties: true
+        layout:
+          type: object
+          additionalProperties: true
+        theme:
+          type: object
+          additionalProperties: true
+        fallback_text:
+          type: object
+          additionalProperties: true
+        platform_hints:
+          type: object
+          additionalProperties: true
     ClientSurfaceBatchResponse:
       type: object
       required: [surface, evaluated_at, count, summary, results]
@@ -2986,7 +3226,7 @@ components:
           type: integer
           nullable: true
         cache_policy:
-          type: object
+          $ref: "#/components/schemas/CachePolicy"
         tags:
           type: array
           items:
@@ -3017,7 +3257,7 @@ components:
         surface:
           type: string
         cache_policy:
-          type: object
+          $ref: "#/components/schemas/CachePolicy"
         metadata:
           $ref: "#/components/schemas/RuleSetMetadata"
         author:
@@ -3064,7 +3304,7 @@ components:
         surface:
           type: string
         cache_policy:
-          type: object
+          $ref: "#/components/schemas/CachePolicy"
         metadata:
           $ref: "#/components/schemas/RuleSetMetadata"
         tags:
@@ -3073,6 +3313,34 @@ components:
             type: string
         draft:
           $ref: "#/components/schemas/RuleDefinition"
+    CachePolicy:
+      type: object
+      additionalProperties: true
+      properties:
+        client_ttl:
+          type: integer
+          minimum: 0
+          description: Client-side response TTL in seconds.
+        scope:
+          type: string
+          enum: [profile, session, global, request]
+        dependency_failure_mode:
+          type: string
+          enum: [evaluate, fail_open, fail_closed]
+          default: evaluate
+          description: Controls client decision behavior when Meiro Profile API enrichment fails or its circuit is open.
+        dependency_failure_result:
+          type: string
+          description: Optional result override for fail-open or fail-closed decisions.
+        dependency_failure_outputs:
+          type: object
+          description: Outputs returned when dependency failure policy activates.
+        fail_open_outputs:
+          type: object
+          description: Outputs returned for fail-open mode. Overrides dependency_failure_outputs.
+        fail_closed_outputs:
+          type: object
+          description: Outputs returned for fail-closed mode. Overrides dependency_failure_outputs.
     RuleDefinition:
       type: object
       additionalProperties: true

@@ -354,11 +354,12 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   store.addExperimentAssignment({
     assigned_at: "2026-05-27T02:01:00.000Z",
     decision_key: "hero_experiment",
-    profile_key: "bandit-profile-2",
+    profile_key: "graph-profile-2",
     rule_version: 1,
     variant_key: "control",
-    strategy: "bandit",
-    reason: "exploration"
+    strategy: "graph_split",
+    reason: "graph_split",
+    assignment: { graph: { experiment_key: "hero_split", node_id: "split_1", mode: "fixed" } }
   });
   const originalDateNowForAssignments = Date.now;
   Date.now = () => Date.parse("2026-05-27T03:00:00.000Z");
@@ -369,11 +370,14 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
     assert.equal(history.by_strategy[0].key, "bandit");
     assert.equal(history.by_reason.find((item) => item.key === "exploitation").count, 1);
     assert.equal(history.by_variant.find((item) => item.key === "treatment").count, 1);
+    assert.equal(history.by_graph_node[0].key, "hero_split");
+    assert.equal(history.by_graph_node[0].graph_node_id, "split_1");
+    assert.equal(history.by_graph_node[0].variants[0].key, "control");
     assert.equal(history.trend.length, 24);
     const activeBucket = history.trend.find((item) => item.bucket === "2026-05-27T02:00:00.000Z");
     assert.equal(activeBucket.total, 2);
     assert.equal(activeBucket.variants.find((item) => item.key === "treatment").share, 0.5);
-    assert.equal(history.recent[0].profile_key, "bandit-profile-2");
+    assert.equal(history.recent[0].profile_key, "graph-profile-2");
   } finally {
     Date.now = originalDateNowForAssignments;
   }
@@ -407,6 +411,21 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(message.status, "active");
   assert.equal(store.getMessage("hero_offer").default_content.title, "Hello");
   assert.equal(store.listMessages({ surface: "homepage" })[0].id, "hero_offer");
+  store.upsertMessage(
+    "hero_offer",
+    {
+      name: "Hero Offer",
+      surface: "homepage",
+      default_content: { title: "Hello again", body: "Updated body" },
+      content_schema: { title: "string", body: "string" }
+    },
+    "tester"
+  );
+  const restoredMessage = store.restoreMessageVersion("hero_offer", 1, "tester");
+  assert.equal(restoredMessage.default_content.title, "Hello");
+  assert.equal(restoredMessage.version, 3);
+  assert.equal(store.getMessageVersion("hero_offer", 1).default_content.title, "Hello");
+  assert.equal(store.getMessageVersion("hero_offer", 3).default_content.title, "Hello");
   const asset = store.createMessageAsset(
     {
       filename: "hero.png",
@@ -506,7 +525,12 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
     profile_key: "p-campaign",
     rule_version: 0,
     message_id: "campaign_message",
-    surface: "homepage"
+    surface: "homepage",
+    event: {
+      graph_experiments: [
+        { experiment_key: "campaign_split", graph_node_id: "split_1", variant_key: "campaign_message" }
+      ]
+    }
   });
   const campaignDetail = store.listCampaignOperations({ window_hours: 300 }).find((item) => item.campaign === "Spring Launch / Web");
   assert.equal(campaignDetail.experiments, 1);
@@ -516,6 +540,7 @@ test("sqlite store persists rule versions, audits, lookups, and bundles", async 
   assert.equal(campaignDetail.assets.messages[0].id, "campaign_message");
   assert.equal(campaignDetail.dependencies[0].resolved, true);
   assert.equal(campaignDetail.recent_events[0].message_id, "campaign_message");
+  assert.equal(campaignDetail.recent_events[0].graph_experiments[0].graph_node_id, "split_1");
   store.setRuleCampaign("campaign_experiment", { campaign: "Spring Refresh", folder: "App" }, "tester");
   store.setMessageCampaign("campaign_message", { campaign: "Spring Refresh", folder: "App" }, "tester");
   const movedCampaignDetail = store.listCampaignOperations({ window_hours: 300 }).find((item) => item.campaign === "Spring Refresh / App");

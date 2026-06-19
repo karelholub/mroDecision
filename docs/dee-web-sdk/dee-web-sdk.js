@@ -14,6 +14,13 @@
     autoImpression: true,
     autoSkipped: true,
     debug: false,
+    allowDebugQuery: true,
+    debugParam: "dee_debug",
+    requestTimeoutMs: 3000,
+    eventTimeoutMs: 2000,
+    eventRetryQueue: true,
+    eventRetryMaxItems: 50,
+    botPolicy: "skip_known",
     maxItems: 10,
     fallback: "keep",
     consentProvider: null,
@@ -25,8 +32,10 @@
 
   function createClient(options) {
     const config = { ...defaults, ...(options || {}) };
+    config.debug = debugEnabled(config);
     const state = {
-      decisions: new WeakMap()
+      decisions: new WeakMap(),
+      cleanup: []
     };
 
     function init(root) {
@@ -36,6 +45,7 @@
       if (config.autoEvaluate) {
         placements.forEach((element) => schedulePlacement(element));
       }
+      flushQueuedEvents(config).catch((error) => logWithConfig(config, "Queued event flush failed", error));
       return placements;
     }
 
@@ -43,7 +53,7 @@
       if (!element || element.dataset.deeWired === "true") return;
       element.dataset.deeWired = "true";
       element.deeClient = { sendSkippedEvent };
-      element.addEventListener("click", (event) => {
+      const clickHandler = (event) => {
         const dismiss = event.target.closest("[data-dee-dismiss]");
         if (dismiss && element.contains(dismiss)) {
           const decision = state.decisions.get(element);
@@ -78,7 +88,9 @@
         if (!link || !element.contains(link)) return;
         const decision = state.decisions.get(element);
         if (decision) trackConversion("click", element, { link_url: link.href }).catch(() => {});
-      });
+      };
+      element.__deeClickHandler = clickHandler;
+      element.addEventListener("click", clickHandler);
     }
 
     function schedulePlacement(element) {
@@ -89,15 +101,18 @@
         return;
       }
       if (trigger.type === "custom_event" && trigger.event) {
-        global.addEventListener(trigger.event, (event) => {
+        const listener = (event) => {
           if (triggerMatches(trigger, event.detail || {})) {
             evaluatePlacement(element, { context: { trigger_event: trigger.event, trigger_payload: event.detail || {} } }).catch((error) => log("Placement evaluation failed", error));
           }
-        });
+        };
+        global.addEventListener(trigger.event, listener);
+        state.cleanup.push(() => global.removeEventListener(trigger.event, listener));
         return;
       }
       if (trigger.type === "data_layer_event" && trigger.event) {
-        wireDataLayerTrigger(element, trigger, evaluatePlacement, config);
+        const cleanup = wireDataLayerTrigger(element, trigger, evaluatePlacement, config);
+        if (cleanup) state.cleanup.push(cleanup);
         return;
       }
       evaluatePlacement(element).catch((error) => log("Placement evaluation failed", error));
@@ -135,6 +150,7 @@
       const placement = placementName(element);
       const variantKey = decisionVariantKey(decision);
       const messageVariantKey = messageVariant(decision);
+      const graphExperiments = decisionGraphExperiments(decision);
       const payload = {
         event_id: eventId(type, decision, placement),
         decision_key: decision?.decision_key || element.dataset.deeDecisionKey || "",
@@ -145,6 +161,7 @@
         surface: placement,
         object_type: element.dataset.deeObjectType || "placement",
         object_id: element.dataset.deeObjectId || placement,
+        ...(graphExperiments.length ? { graph_experiments: graphExperiments } : {}),
         context: {
           page_url: location.href,
           placement,
@@ -155,9 +172,13 @@
           ...(messageVariantKey ? { message_variant: messageVariantKey } : {}),
           ...(extra?.context || {})
         },
-        ...(extra?.event || messageVariantKey ? { event: { ...(messageVariantKey ? { message_variant: messageVariantKey } : {}), ...(extra?.event || {}) } } : {})
+        ...(extra?.event || messageVariantKey || graphExperiments.length ? { event: {
+          ...(messageVariantKey ? { message_variant: messageVariantKey } : {}),
+          ...(graphExperiments.length ? { graph_experiments: graphExperiments } : {}),
+          ...(extra?.event || {})
+        } } : {})
       };
-      const response = await post(`/v1/client/${type}`, payload, { keepalive: true });
+      const response = await sendClientEvent(`/v1/client/${type}`, payload, element, type, config);
       element.dispatchEvent(new CustomEvent("dee:event", { detail: { type, payload, response } }));
       return response;
     }
@@ -166,6 +187,7 @@
       if (!config.autoSkipped) return null;
       const decision = detail.decision || null;
       const placement = placementName(element);
+      const graphExperiments = decisionGraphExperiments(decision);
       const payload = {
         event_id: eventId("skipped", decision || { decision_key: element.dataset.deeDecisionKey, profile_key: profileKey(), rule_version: "v0" }, placement),
         decision_key: decision?.decision_key || element.dataset.deeDecisionKey || "",
@@ -176,6 +198,7 @@
         surface: placement,
         object_type: element.dataset.deeObjectType || "placement",
         object_id: element.dataset.deeObjectId || placement,
+        ...(graphExperiments.length ? { graph_experiments: graphExperiments } : {}),
         context: {
           page_url: location.href,
           placement,
@@ -190,10 +213,11 @@
           action: "skipped",
           reason: reason || "skipped",
           category: skippedCategory(reason),
+          ...(graphExperiments.length ? { graph_experiments: graphExperiments } : {}),
           detail: sanitizedSkippedDetail(detail)
         }
       };
-      const response = await post("/v1/client/skipped", payload, { keepalive: true });
+      const response = await sendClientEvent("/v1/client/skipped", payload, element, "skipped", config);
       element.dispatchEvent(new CustomEvent("dee:event", { detail: { type: "skipped", payload, response } }));
       return response;
     }
@@ -281,18 +305,44 @@
     async function post(path, payload, options) {
       if (!config.baseUrl) throw new Error("DEE baseUrl is required");
       if (!config.token) throw new Error("DEE token is required");
-      const response = await fetch(`${trimSlash(config.baseUrl)}${path}`, {
+      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const timeoutMs = Math.max(500, Number(options?.timeoutMs || config.requestTimeoutMs || 3000));
+      const timeout = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+      let response;
+      try {
+        response = await fetch(`${trimSlash(config.baseUrl)}${path}`, {
         method: "POST",
         keepalive: options?.keepalive === true,
+        signal: controller?.signal,
         headers: {
           "content-type": "application/json",
           authorization: `Bearer ${config.token}`
         },
         body: JSON.stringify(payload)
-      });
+        });
+      } catch (error) {
+        if (error?.name === "AbortError") throw new Error(`DEE request timed out after ${timeoutMs}ms`);
+        throw error;
+      } finally {
+        if (timeout) clearTimeout(timeout);
+      }
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.message || body.error || `DEE returned ${response.status}`);
       return body;
+    }
+
+    async function sendClientEvent(path, payload, element, type, config) {
+      try {
+        return await post(path, payload, { keepalive: true, timeoutMs: config.eventTimeoutMs });
+      } catch (error) {
+        const queued = enqueueEvent(config, { path, payload, type });
+        if (queued) {
+          element?.dispatchEvent(new CustomEvent("dee:event-queued", { detail: { type, payload, error: error.message } }));
+          logWithConfig(config, "Queued DEE event for retry", { type, error: error.message });
+          return { accepted: false, queued: true, error: error.message };
+        }
+        throw error;
+      }
     }
 
     function profileKey() {
@@ -326,6 +376,10 @@
       return decision?.experiment?.variant_key || decision?.outputs?.variant_key || decision?.outputs?.variant || messageVariant(decision) || "";
     }
 
+    function decisionGraphExperiments(decision) {
+      return Array.isArray(decision?.graph_experiments) ? decision.graph_experiments : [];
+    }
+
     function hasMessageOutput(decision) {
       const outputs = decision?.outputs || {};
       return Boolean(outputs.message || outputs.message_content || outputs.messageContent || outputs.message_id || outputs.messageId);
@@ -343,8 +397,25 @@
       evaluatePlacement,
       sendEvent,
       trackConversion,
-      buildEvaluateRequest
+      buildEvaluateRequest,
+      destroy
     };
+
+    function destroy() {
+      state.cleanup.splice(0).forEach((cleanup) => {
+        try {
+          cleanup();
+        } catch {
+          // Best-effort cleanup for SPA/GTM reinitialization.
+        }
+      });
+      document.querySelectorAll(config.placementSelector).forEach((element) => {
+        if (element.__deeClickHandler) element.removeEventListener("click", element.__deeClickHandler);
+        if (element.__deeClickHandler) delete element.__deeClickHandler;
+        if (element.dataset.deeWired === "true") delete element.dataset.deeWired;
+        if (element.deeClient) delete element.deeClient;
+      });
+    }
   }
 
   const defaultRenderers = {
@@ -561,7 +632,7 @@
           ? survey.questions
           : [{ label: content.question || survey.question || "", options: content.options || survey.options || [] }].filter((question) => question.label);
       return `<div class="dee-message-survey">${questions.slice(0, 6).map((question, index) => `
-        <fieldset data-dee-survey-fieldset data-dee-survey-required="${question.required ? "true" : "false"}">
+        <fieldset data-dee-survey-fieldset data-dee-survey-question-id="${escapeHtml(surveyQuestionId(question, index))}" data-dee-survey-required="${question.required ? "true" : "false"}"${surveyShowIfAttributes(question)}>
           <legend>${escapeHtml(question.label || question.title || `Question ${index + 1}`)}</legend>
           <div>${(Array.isArray(question.options) ? question.options : []).slice(0, 8).map((option) => surveyOptionButton(option, question)).join("") || surveyTextInput(question, index)}</div>
           <p class="dee-message-survey-feedback" data-dee-survey-feedback aria-live="polite"></p>
@@ -572,6 +643,19 @@
       return `<div class="dee-message-fragment" data-dee-message-html></div>`;
     }
     return "";
+  }
+
+  function surveyQuestionId(question = {}, index = 0) {
+    return question.id || question.tracking_name || question.trackingName || `survey_question_${index + 1}`;
+  }
+
+  function surveyShowIfAttributes(question = {}) {
+    const showIf = question.show_if || question.showIf;
+    if (!showIf || typeof showIf !== "object") return "";
+    const sourceQuestion = showIf.question || showIf.question_id || showIf.questionId || "";
+    const value = showIf.value || showIf.equals || showIf.answer || "";
+    if (!sourceQuestion || value == null || value === "") return "";
+    return ` data-dee-survey-show-question="${escapeHtml(sourceQuestion)}" data-dee-survey-show-value="${escapeHtml(value)}" hidden`;
   }
 
   function surveyOptionButton(option, question = {}) {
@@ -636,6 +720,7 @@
     const fieldset = action.closest("fieldset");
     const feedback = fieldset?.querySelector("[data-dee-survey-feedback]");
     if (fieldset) fieldset.dataset.deeSurveyState = "submitted";
+    if (fieldset) fieldset.dataset.deeSurveyAnswer = String(event.value || "");
     if (action.dataset.deeSurveyValue) {
       fieldset?.querySelectorAll("[data-dee-survey-value]").forEach((button) => {
         button.classList.toggle("is-selected", button === action);
@@ -643,6 +728,38 @@
       });
     }
     if (feedback) feedback.textContent = "Thanks, your answer was recorded.";
+    updateSurveyBranching(fieldset?.closest(".dee-message-survey"));
+  }
+
+  function updateSurveyBranching(container) {
+    if (!container) return;
+    const answers = new Map();
+    container.querySelectorAll("[data-dee-survey-fieldset]").forEach((fieldset) => {
+      const id = fieldset.dataset.deeSurveyQuestionId || "";
+      if (id && !fieldset.hidden && fieldset.dataset.deeSurveyAnswer != null) answers.set(id, fieldset.dataset.deeSurveyAnswer);
+    });
+    container.querySelectorAll("[data-dee-survey-show-question][data-dee-survey-show-value]").forEach((fieldset) => {
+      const expected = String(fieldset.dataset.deeSurveyShowValue || "");
+      const actual = answers.get(fieldset.dataset.deeSurveyShowQuestion || "");
+      const visible = actual === expected;
+      fieldset.hidden = !visible;
+      if (!visible) resetSurveyFieldset(fieldset);
+    });
+  }
+
+  function resetSurveyFieldset(fieldset) {
+    if (!fieldset) return;
+    delete fieldset.dataset.deeSurveyState;
+    delete fieldset.dataset.deeSurveyAnswer;
+    fieldset.querySelectorAll("[data-dee-survey-value]").forEach((button) => {
+      button.classList.remove("is-selected");
+      button.setAttribute("aria-pressed", "false");
+    });
+    fieldset.querySelectorAll("[data-dee-survey-input]").forEach((input) => {
+      input.value = "";
+    });
+    const feedback = fieldset.querySelector("[data-dee-survey-feedback]");
+    if (feedback) feedback.textContent = "";
   }
 
   function messageCss(template) {
@@ -1019,6 +1136,9 @@
       layer.__deeWrapped = true;
     }
     layer.slice().forEach(handler);
+    return () => {
+      layer.__deeHandlers = (layer.__deeHandlers || []).filter((registered) => registered !== handler);
+    };
   }
 
   function triggerMatches(trigger, payload) {
@@ -1083,7 +1203,69 @@
     }
   }
 
+  function queueKey() {
+    return "dee_event_retry_queue";
+  }
+
+  function enqueueEvent(config, item) {
+    if (config.eventRetryQueue === false) return false;
+    const storage = safeStorage("local");
+    if (!storage || !item?.path || !item?.payload) return false;
+    const max = Math.max(1, Number(config.eventRetryMaxItems || 50));
+    const queue = readEventQueue(storage);
+    queue.push({
+      path: item.path,
+      type: item.type || "",
+      payload: item.payload,
+      queued_at: new Date().toISOString(),
+      attempts: Number(item.attempts || 0)
+    });
+    storage.setItem(queueKey(), JSON.stringify(queue.slice(-max)));
+    return true;
+  }
+
+  async function flushQueuedEvents(config) {
+    if (config.eventRetryQueue === false || !config.baseUrl || !config.token) return { flushed: 0, remaining: 0 };
+    const storage = safeStorage("local");
+    if (!storage) return { flushed: 0, remaining: 0 };
+    const queue = readEventQueue(storage);
+    if (!queue.length) return { flushed: 0, remaining: 0 };
+    const remaining = [];
+    let flushed = 0;
+    for (const item of queue) {
+      try {
+        const response = await fetch(`${trimSlash(config.baseUrl)}${item.path}`, {
+          method: "POST",
+          keepalive: true,
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${config.token}`
+          },
+          body: JSON.stringify(item.payload)
+        });
+        if (!response.ok && response.status >= 500) throw new Error(`DEE returned ${response.status}`);
+        flushed += 1;
+      } catch {
+        remaining.push({ ...item, attempts: Number(item.attempts || 0) + 1 });
+      }
+    }
+    storage.setItem(queueKey(), JSON.stringify(remaining.slice(-Math.max(1, Number(config.eventRetryMaxItems || 50)))));
+    return { flushed, remaining: remaining.length };
+  }
+
+  function readEventQueue(storage) {
+    try {
+      const parsed = JSON.parse(storage.getItem(queueKey()) || "[]");
+      return Array.isArray(parsed) ? parsed.filter((item) => item?.path && item?.payload) : [];
+    } catch {
+      return [];
+    }
+  }
+
   function placementPrecheck(element, config, overrides) {
+    if (botBlocked(config)) {
+      return { ok: false, reason: "bot", detail: { policy: config.botPolicy, user_agent: navigator.userAgent || "" } };
+    }
     const localTargeting = {
       url_rules: parseJsonAttribute(element.dataset.deeUrlRules),
       devices: csvAttribute(element.dataset.deeDevices),
@@ -1278,6 +1460,7 @@
   }
 
   function skippedCategory(reason) {
+    if (reason === "bot") return "runtime";
     if (["consent", "device_targeting", "url_targeting", "sdk_condition"].includes(reason)) return "targeting";
     if (["display_policy", "dismiss_cooldown", "dismiss_suppression"].includes(reason)) return "frequency";
     if (["profile_enrichment", "missing_attribute", "suppression"].includes(reason)) return "eligibility";
@@ -1326,6 +1509,26 @@
     } catch {
       return undefined;
     }
+  }
+
+  function debugEnabled(config) {
+    if (config.debug === true) return true;
+    if (config.allowDebugQuery === false) return false;
+    const param = String(config.debugParam || "dee_debug");
+    try {
+      return new URLSearchParams(location.search).get(param) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function botBlocked(config) {
+    const policy = String(config.botPolicy || "skip_known").trim();
+    if (policy === "allow") return false;
+    if (navigator.webdriver && policy !== "allow_automation") return true;
+    const ua = String(navigator.userAgent || "");
+    const known = /\b(bot|crawler|spider|preview|facebookexternalhit|slackbot|twitterbot|linkedinbot|whatsapp|headlesschrome|pingdom|uptimerobot|datadog|newrelic|lighthouse)\b/i.test(ua);
+    return policy === "skip_all" || (policy === "skip_known" && known);
   }
 
   function modeSafe(value) {

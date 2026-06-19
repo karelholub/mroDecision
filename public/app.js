@@ -26,8 +26,13 @@ const evalOutput = document.querySelector("#eval-output");
 const evalTrace = document.querySelector("#eval-trace");
 const evalSummary = document.querySelector("#eval-summary");
 const evalOutputSummary = document.querySelector("#eval-output-summary");
+const evalRuntimeSummary = document.querySelector("#eval-runtime-summary");
 const evalEndpointLabel = document.querySelector("#eval-endpoint-label");
 const evalAuditLabel = document.querySelector("#eval-audit-label");
+const evalRequestKind = document.querySelector("#eval-request-kind");
+const evalSurfaceInput = document.querySelector("#eval-surface");
+const evalLimitInput = document.querySelector("#eval-limit");
+const evalCompareButton = document.querySelector("#compare-eval");
 const evalPayloadPanel = document.querySelector("#eval-payload-panel");
 const evalPayloadToggle = document.querySelector("#toggle-eval-payload");
 const evalValidation = document.querySelector("#eval-validation");
@@ -40,6 +45,9 @@ const graphNodeEditor = document.querySelector("#graph-node-editor");
 const graphMinimap = document.querySelector("#graph-minimap");
 const graphSnapEnabledInput = document.querySelector("#graph-snap-enabled");
 const graphSnapSizeInput = document.querySelector("#graph-snap-size");
+const graphNodePicker = document.querySelector("#graph-node-picker");
+const graphNodePickerList = document.querySelector("#graph-node-picker-list");
+const graphNodePickerSearch = document.querySelector("#graph-node-picker-search");
 const lookupOutput = document.querySelector("#lookup-output");
 const lookupDetailPanel = document.querySelector("#lookup-editor");
 const messageOutput = document.querySelector("#message-output");
@@ -47,6 +55,7 @@ const messagePreview = document.querySelector("#message-preview");
 const messageDetailPanel = document.querySelector("#message-editor");
 const messageInspectorSummary = document.querySelector("#message-inspector-summary");
 const messageReadinessPanel = document.querySelector("#message-readiness-panel");
+const messageRuntimeContract = document.querySelector("#message-runtime-contract");
 const messagePerformanceSummary = document.querySelector("#message-performance-summary");
 const messageRuleLinks = document.querySelector("#message-rule-links");
 const messagePreviewHealth = document.querySelector("#message-preview-health");
@@ -68,9 +77,12 @@ const lookupValidationRules = document.querySelector("#lookup-validation-rules")
 const referenceGrid = document.querySelector("#reference-grid");
 const auditDetail = document.querySelector("#audit-detail");
 const auditDetailSummary = document.querySelector("#audit-detail-summary");
+const auditDetailExtra = document.querySelector("#audit-detail-extra");
 const auditCount = document.querySelector("#audit-count");
 const auditRange = document.querySelector("#audit-range");
 const auditInsights = document.querySelector("#audit-insights");
+const auditPresetChips = document.querySelector("#audit-preset-chips");
+const auditDetailMeta = document.querySelector("#audit-detail-meta");
 const versionList = document.querySelector("#version-list");
 const lookupVersionList = document.querySelector("#lookup-version-list");
 const settingsOutput = document.querySelector("#settings-output");
@@ -115,9 +127,12 @@ const experimentDetail = document.querySelector("#experiment-detail");
 const experimentFilterSearch = document.querySelector("#experiment-filter-search");
 const experimentFilterStatus = document.querySelector("#experiment-filter-status");
 const experimentSort = document.querySelector("#experiment-sort");
+const campaignFilterSearch = document.querySelector("#campaign-filter-search");
+const campaignSort = document.querySelector("#campaign-sort");
 const campaignMasterList = document.querySelector("#campaign-master-list");
 const campaignMasterDetail = document.querySelector("#campaign-master-detail");
 const clearCampaignSelection = document.querySelector("#clear-campaign-selection");
+const auditFilterSummary = document.querySelector("#audit-filter-summary");
 const stackList = document.querySelector("#stack-list");
 const stackSteps = document.querySelector("#stack-steps");
 const stackOutput = document.querySelector("#stack-output");
@@ -151,6 +166,8 @@ let selectedPublishedMetadata = null;
 let selectedRuleMetadata = {};
 let builderBranches = [];
 let graphBuilder = { entry: "input", nodes: [] };
+let selectedGraphNodeId = "";
+let graphConnectionDraft = null;
 let cachedRuleSets = [];
 let cachedRuleConflicts = { conflicts: [], by_rule: {} };
 let cachedLookupTables = [];
@@ -171,6 +188,7 @@ let cachedAssistantRollback = [];
 let assistantChatHistory = [];
 let selectedExperimentKey = null;
 let selectedCampaignName = "";
+let selectedCampaignGraphKey = "";
 let selectedStackId = null;
 let activeExperimentTab = "design";
 let selectedLookupMetadata = {};
@@ -180,6 +198,11 @@ let selectedMessageTokenField = "#message-preview-body";
 let ruleSort = { key: "updated_at", direction: "desc" };
 let graphSnapEnabled = true;
 let graphSnapSize = 24;
+const inventoryPaging = {
+  campaigns: { page: 1, pageSize: 5 },
+  rules: { page: 1, pageSize: 12 },
+  messages: { page: 1, pageSize: 10 }
+};
 const savedProfileStorageKey = "meiro-dee-evaluate-profiles";
 const defaultConditionBlockTemplates = [
   {
@@ -267,12 +290,46 @@ document.querySelectorAll("[data-rule-drawer-tab]").forEach((button) => {
   });
 });
 
-document.querySelectorAll("[data-message-drawer-tab]").forEach((button) => {
+document.querySelectorAll("[data-message-workspace-tab]").forEach((button) => {
+  button.addEventListener("click", () => activateMessageWorkspaceTab(button.dataset.messageWorkspaceTab));
+});
+
+document.querySelectorAll("[data-message-content-tab]").forEach((button) => {
+  button.addEventListener("click", () => activateMessageContentTab(button.dataset.messageContentTab));
+});
+
+document.querySelectorAll("[data-message-advanced-toggle]").forEach((button) => {
   button.addEventListener("click", () => {
-    document.querySelectorAll("[data-message-drawer-tab], [data-message-drawer-panel]").forEach((item) => item.classList.remove("active"));
-    button.classList.add("active");
-    document.querySelector(`[data-message-drawer-panel="${button.dataset.messageDrawerTab}"]`)?.classList.add("active");
+    setMessageAdvancedOpen(
+      button.dataset.messageAdvancedTarget || "message-advanced-panel",
+      button.getAttribute("aria-expanded") !== "true"
+    );
   });
+});
+
+document.querySelectorAll("[data-message-meta-tab]").forEach((button) => {
+  button.addEventListener("click", () => activateMessageMetaTab(button.dataset.messageMetaTab));
+});
+
+document.querySelectorAll("[data-message-meta-action='show-output']").forEach((button) => {
+  button.addEventListener("click", () => {
+    activateMessageWorkspaceTab("metadata");
+    activateMessageMetaTab("output");
+  });
+});
+
+document.querySelector("#format-message-metadata-json")?.addEventListener("click", () => {
+  const textarea = document.querySelector("#message-metadata");
+  if (!textarea) return;
+  if (document.querySelector("#message-metadata-advanced-panel")?.hidden) {
+    setMessageAdvancedOpen("message-metadata-advanced-panel", true);
+  }
+  try {
+    textarea.value = JSON.stringify(JSON.parse(textarea.value || "{}"), null, 2);
+    messageOutput.textContent = "Metadata JSON formatted";
+  } catch (error) {
+    messageOutput.textContent = error.message;
+  }
 });
 
 document.querySelectorAll("[data-lookup-drawer-tab]").forEach((button) => {
@@ -294,11 +351,14 @@ document.querySelector("#experiment-filter-campaign")?.addEventListener("input",
 experimentFilterSearch?.addEventListener("input", () => renderExperiments());
 experimentFilterStatus?.addEventListener("change", () => renderExperiments());
 experimentSort?.addEventListener("change", () => renderExperiments());
+campaignFilterSearch?.addEventListener("input", () => renderExperiments({ resetCampaignPage: true }));
+campaignSort?.addEventListener("change", () => renderExperiments({ resetCampaignPage: true }));
 clearCampaignSelection?.addEventListener("click", () => {
   selectedCampaignName = "";
   const campaignInput = document.querySelector("#experiment-filter-campaign");
   if (campaignInput) campaignInput.value = "";
-  renderExperiments();
+  if (campaignFilterSearch) campaignFilterSearch.value = "";
+  renderExperiments({ resetCampaignPage: true });
 });
 document.querySelector("#quick-create-experiment")?.addEventListener("click", quickCreateExperiment);
 document.querySelector("#export-experiments-csv")?.addEventListener("click", exportExperimentsCsv);
@@ -329,28 +389,55 @@ document.querySelector("#archive-stack")?.addEventListener("click", archiveDecis
 document.querySelector("#run-stack-test")?.addEventListener("click", runDecisionStackTest);
 document.querySelector("#stacks")?.addEventListener("input", renderStackReadiness);
 document.querySelector("#stacks")?.addEventListener("change", renderStackReadiness);
-document.querySelector("#rule-filter-search").addEventListener("input", renderRuleList);
-document.querySelector("#rule-filter-status").addEventListener("change", renderRuleList);
-document.querySelector("#rule-filter-type").addEventListener("change", renderRuleList);
-document.querySelector("#rule-filter-tag").addEventListener("input", renderRuleList);
-document.querySelector("#rule-filter-campaign")?.addEventListener("input", renderRuleList);
+document.querySelector("#rule-filter-search").addEventListener("input", () => renderRuleList({ resetPage: true }));
+document.querySelector("#rule-filter-status").addEventListener("change", () => renderRuleList({ resetPage: true }));
+document.querySelector("#rule-filter-type").addEventListener("change", () => renderRuleList({ resetPage: true }));
+document.querySelector("#rule-filter-tag").addEventListener("input", () => renderRuleList({ resetPage: true }));
+document.querySelector("#rule-filter-campaign")?.addEventListener("input", () => renderRuleList({ resetPage: true }));
 document.querySelector("#refresh-audit").addEventListener("click", loadAudit);
+document.querySelector("#apply-audit-filters")?.addEventListener("click", loadAudit);
 document.querySelector("#clear-audit-filters").addEventListener("click", clearAuditFilters);
 document.querySelector("#audit-mode").addEventListener("change", () => {
   renderAuditModeFields();
   loadAudit();
+});
+const scheduleAuditReload = debounce(() => loadAudit(), 220);
+[
+  "#audit-decision-key",
+  "#audit-campaign",
+  "#audit-profile-key",
+  "#audit-result",
+  "#audit-event-type",
+  "#audit-event-object",
+  "#audit-surface",
+  "#audit-matched-rule",
+  "#audit-search"
+].forEach((selector) => {
+  document.querySelector(selector)?.addEventListener("input", () => {
+    renderAuditFilterSummary();
+    scheduleAuditReload();
+  });
+});
+["#audit-from", "#audit-to", "#audit-limit"].forEach((selector) => {
+  document.querySelector(selector)?.addEventListener("change", () => {
+    renderAuditFilterSummary();
+    scheduleAuditReload();
+  });
+});
+document.querySelectorAll("[data-audit-range]").forEach((button) => {
+  button.addEventListener("click", () => applyAuditRange(Number(button.dataset.auditRange || 7)));
 });
 document.querySelector("#refresh-lookups").addEventListener("click", loadLookups);
 document.querySelector("#lookup-filter-search")?.addEventListener("input", renderLookupList);
 document.querySelector("#lookup-filter-column")?.addEventListener("input", renderLookupList);
 document.querySelector("#lookup-filter-rows")?.addEventListener("change", renderLookupList);
 document.querySelector("#refresh-messages").addEventListener("click", loadMessages);
-document.querySelector("#message-filter-search")?.addEventListener("input", renderMessageList);
-document.querySelector("#message-filter-status")?.addEventListener("change", renderMessageList);
-document.querySelector("#message-filter-template")?.addEventListener("change", renderMessageList);
-document.querySelector("#message-filter-application")?.addEventListener("input", renderMessageList);
-document.querySelector("#message-filter-surface")?.addEventListener("input", renderMessageList);
-document.querySelector("#message-filter-campaign")?.addEventListener("input", renderMessageList);
+document.querySelector("#message-filter-search")?.addEventListener("input", () => renderMessageList({ resetPage: true }));
+document.querySelector("#message-filter-status")?.addEventListener("change", () => renderMessageList({ resetPage: true }));
+document.querySelector("#message-filter-template")?.addEventListener("change", () => renderMessageList({ resetPage: true }));
+document.querySelector("#message-filter-application")?.addEventListener("input", () => renderMessageList({ resetPage: true }));
+document.querySelector("#message-filter-surface")?.addEventListener("input", () => renderMessageList({ resetPage: true }));
+document.querySelector("#message-filter-campaign")?.addEventListener("input", () => renderMessageList({ resetPage: true }));
 document.querySelector("#message-list")?.addEventListener("click", handleMessageListClick);
 document.querySelector("#export-lookup-csv").addEventListener("click", exportLookupCsv);
 document.querySelector("#refresh-settings").addEventListener("click", loadSettings);
@@ -386,6 +473,12 @@ document.querySelector("#add-eval-segment")?.addEventListener("click", () => add
 document.querySelector("#sync-eval-builder")?.addEventListener("click", syncEvaluatePayloadFromBuilder);
 document.querySelector("#reload-eval-builder")?.addEventListener("click", () => renderEvaluateProfileBuilder(readEvaluateInputSafe()));
 document.querySelector("#eval-saved-profile").addEventListener("change", loadSavedEvaluateProfile);
+evalRequestKind?.addEventListener("change", () => {
+  updateEvaluateRequestModeUi();
+  syncEvaluatePayloadFromControls();
+  renderEvaluateModeLabels();
+  renderEvaluateValidation();
+});
 document.querySelector("#eval-mode").addEventListener("change", () => {
   renderEvaluateModeLabels();
   renderEvaluateValidation();
@@ -395,6 +488,14 @@ document.querySelector("#eval-profile-key").addEventListener("input", () => {
   const body = readEvaluateInput();
   body.profile_key = document.querySelector("#eval-profile-key").value.trim() || body.profile_key;
   evalInput.value = JSON.stringify(body, null, 2);
+  renderEvaluateValidation();
+});
+evalSurfaceInput?.addEventListener("input", () => {
+  syncEvaluatePayloadFromControls();
+  renderEvaluateValidation();
+});
+evalLimitInput?.addEventListener("input", () => {
+  syncEvaluatePayloadFromControls();
   renderEvaluateValidation();
 });
 evalInput.addEventListener("input", () => renderEvaluateValidation());
@@ -421,11 +522,16 @@ document.querySelector("#add-branch").addEventListener("click", () => {
   renderBranchEditor();
   syncJsonFromBuilder();
 });
-document.querySelector("#add-graph-node").addEventListener("click", addGraphNode);
+document.querySelector("#close-graph-node-picker")?.addEventListener("click", closeGraphNodePicker);
+graphNodePicker?.addEventListener("click", (event) => {
+  if (event.target === graphNodePicker) closeGraphNodePicker();
+});
+graphNodePickerSearch?.addEventListener("input", renderGraphNodePicker);
 document.querySelector("#add-frequency-cap-helper")?.addEventListener("click", addFrequencyCapFromHelper);
 document.querySelector("#frequency-cap-message")?.addEventListener("change", applyFrequencyCapMessageSuggestion);
 document.querySelector("#create-graph-template").addEventListener("click", () => {
   graphBuilder = starterGraphBuilder();
+  selectedGraphNodeId = graphBuilder.entry || graphBuilder.nodes?.[0]?.id || "";
   renderGraphBuilder();
   syncJsonFromBuilder();
 });
@@ -455,7 +561,7 @@ document.querySelector("#cancel-publish-rule").addEventListener("click", closePu
 document.querySelector("#confirm-publish-rule").addEventListener("click", confirmPublishSelectedRule);
 document.querySelector("#rule-editor").addEventListener("submit", saveDraft);
 document.querySelector("#rule-draft").addEventListener("change", syncBuilderFromJson);
-["#rule-name", "#rule-key", "#rule-type", "#rule-priority", "#rule-surface", "#rule-client-ttl", "#rule-cache-scope", "#rule-description"].forEach((selector) => {
+["#rule-name", "#rule-key", "#rule-type", "#rule-priority", "#rule-surface", "#rule-client-ttl", "#rule-cache-scope", "#rule-dependency-failure-mode", "#rule-dependency-failure-outputs", "#rule-description"].forEach((selector) => {
   document.querySelector(selector).addEventListener("input", renderRuleInspector);
   document.querySelector(selector).addEventListener("change", renderRuleInspector);
 });
@@ -587,6 +693,7 @@ messageTokenSample?.addEventListener("input", renderMessagePreview);
 messageTokenSuggestions?.addEventListener("click", handleMessageTokenClick);
 messageExperimentIdeas?.addEventListener("click", handleMessageExperimentIdeaClick);
 messageOutput?.addEventListener("click", handleMessageOutputActionClick);
+messagePerformanceSummary?.addEventListener("click", handleMessagePerformanceActionClick);
 messageSurveyBuilder?.addEventListener("click", handleMessageSurveyBuilderClick);
 messageSurveyBuilder?.addEventListener("input", handleMessageSurveyBuilderInput);
 messageSurveyBuilder?.addEventListener("change", handleMessageSurveyBuilderInput);
@@ -652,6 +759,8 @@ newRule({ silent: true });
 newLookup({ silent: true });
 newMessage({ silent: true });
 initializeAuditDefaults();
+renderAuditPresetChips();
+renderAuditFilterSummary();
 loadAudit();
 loadLookups();
 loadMessages();
@@ -1169,12 +1278,14 @@ function renderMetrics(metrics) {
   const eligibilityRate = rate(eligibleCount, windowRequests);
   const impressionRate = rate(eventCounts.impression || 0, windowRequests);
   const conversionRate = rate(eventCounts.conversion || 0, Math.max(eventCounts.impression || 0, eventCounts.exposure || 0));
+  const skippedRate = rate(eventCounts.skipped || 0, Math.max(eventCounts.impression || 0, eventCounts.exposure || 0, 1));
   metricCards.innerHTML = [
     pipelineCell("REQ", "Evaluations", formatNumber(windowRequests), windowLabel, "teal"),
     pipelineCell("AUD", "Audience", formatNumber(requests.unique_profiles_window ?? requests.unique_profiles), "unique profiles", "blue"),
     pipelineCell("ELG", "Eligibility", formatPercent(eligibilityRate), `${formatNumber(eligibleCount)} eligible`, "teal"),
     pipelineCell("EXP", "Exposures", formatNumber(eventCounts.exposure || 0), `${formatPercent(rate(eventCounts.exposure || 0, windowRequests))} of evaluations`, "purple"),
     pipelineCell("IMP", "Impressions", formatNumber(eventCounts.impression || 0), `${formatPercent(impressionRate)} impression rate`, "blue"),
+    pipelineCell("SKP", "Skipped", formatNumber(eventCounts.skipped || 0), `${formatPercent(skippedRate)} skipped after exposure`, "amber"),
     pipelineCell("CVR", "Conversions", formatNumber(eventCounts.conversion || 0), `${formatPercent(conversionRate)} conversion rate`, "teal")
   ].join("");
 
@@ -1230,9 +1341,13 @@ function overviewHealthChecks(metrics = {}) {
   const runtime = metrics.runtime_requests || {};
   const rateLimit = metrics.client_rate_limit || {};
   const profileCache = metrics.profile_cache || {};
+  const counts = eventCountsByType(events.by_type || []);
+  const delivered = Number(counts.exposure || 0) + Number(counts.impression || 0);
+  const skipped = Number(counts.skipped || 0);
   return [
     { label: "Profile fields", ok: Number(profileCache.errors || 0) === 0 },
     { label: "Feedback loop", ok: Number(events.window ?? events.last_24h ?? 0) > 0 },
+    { label: "Delivery", ok: delivered === 0 || skipped / Math.max(delivered, 1) < 0.2 },
     { label: "Service reliability", ok: Number(runtime.error_rate || 0) < 0.05 },
     { label: "Schema sync", ok: !schema.last_sync_status || ["ok", "success", "never"].includes(String(schema.last_sync_status).toLowerCase()) },
     { label: "Rate limits", ok: Number(rateLimit.blocked || 0) === 0 }
@@ -1271,6 +1386,9 @@ function overviewAlertItems(metrics) {
   const rateLimit = metrics.client_rate_limit || {};
   const profileCache = metrics.profile_cache || {};
   const schema = metrics.schema || {};
+  const counts = eventCountsByType(events.by_type || []);
+  const delivered = Number(counts.exposure || 0) + Number(counts.impression || 0);
+  const skipped = Number(counts.skipped || 0);
   const items = [];
   if (Number(runtime.error_rate || 0) >= 0.05) {
     items.push({ level: "error", label: "Runtime", title: "High error rate", detail: `${formatPercent(runtime.error_rate)} across recent API samples.` });
@@ -1286,6 +1404,14 @@ function overviewAlertItems(metrics) {
   }
   if (Number(profileCache.errors || 0) > 0) {
     items.push({ level: "warn", label: "Profile API", title: "Profile enrichment errors", detail: `${formatNumber(profileCache.errors)} failed lookups recorded. ${formatNumber(profileCache.not_found || 0)} identifiers had no matching profile.` });
+  }
+  if (skipped > 0 && skipped / Math.max(delivered, 1) >= 0.2) {
+    items.push({
+      level: skipped / Math.max(delivered, 1) >= 0.4 ? "warn" : "info",
+      label: "Delivery",
+      title: "Skipped delivery is elevated",
+      detail: `${formatNumber(skipped)} skipped events across ${formatNumber(delivered)} exposures or impressions. Inspect Delivery diagnostics for consent, device, placement, or policy mismatches.`
+    });
   }
   if (Number(requests.window ?? requests.last_24h ?? 0) > 0 && Number(events.window ?? events.last_24h ?? 0) === 0) {
     items.push({ level: "info", label: "Feedback", title: "No client events in window", detail: "Evaluations are running, but exposure/impression/conversion feedback is absent." });
@@ -1340,8 +1466,12 @@ async function loadCampaignRollups(windowHours) {
   if (!overviewCampaignRollups) return;
   try {
     const hours = windowHours || document.querySelector("#overview-window")?.value || "24";
-    const body = await api(`/v1/campaigns?window_hours=${encodeURIComponent(hours)}&limit=10`);
+    const [body, experimentBody] = await Promise.all([
+      api(`/v1/campaigns?window_hours=${encodeURIComponent(hours)}&limit=10`),
+      api("/v1/experiments").catch(() => ({ experiments: [] }))
+    ]);
     cachedCampaigns = body.campaigns || [];
+    if (experimentBody.experiments?.length) cachedExperiments = experimentBody.experiments;
     renderCampaignRollups(cachedCampaigns);
   } catch (error) {
     overviewCampaignRollups.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
@@ -1437,6 +1567,7 @@ function renderCampaignDetail(campaignName) {
     </div>
     <div class="campaign-detail-grid">
       ${campaignAssetSection("Experiments", assets.experiments || [], "experiment")}
+      ${campaignGraphExperimentsSection(campaign)}
       ${campaignAssetSection("Rules", assets.rules || [], "rule")}
       ${campaignAssetSection("Messages", assets.messages || [], "message")}
       ${campaignSurfacesSection(campaign.surfaces || [], campaign.client_events || {})}
@@ -1448,6 +1579,13 @@ function renderCampaignDetail(campaignName) {
   `;
   overviewCampaignDetail.querySelectorAll("[data-campaign-nav]").forEach((button) => {
     button.addEventListener("click", handleCampaignNavigation);
+  });
+  overviewCampaignDetail.querySelectorAll("[data-campaign-graph-detail]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const key = button.dataset.campaignGraphDetail || "";
+      selectedCampaignGraphKey = selectedCampaignGraphKey === key ? "" : key;
+      renderCampaignDetail(campaign.campaign || "Unassigned");
+    });
   });
   overviewCampaignDetail.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -1495,6 +1633,126 @@ function campaignAssetRow(item, kind) {
       <button type="button" data-campaign-nav="${escapeHtml(action)}" data-object-id="${escapeHtml(item.id)}">Open</button>
     </div>
   `;
+}
+
+function campaignGraphExperimentsSection(campaign = {}, options = {}) {
+  const rows = campaignGraphExperiments(campaign);
+  if (options.compact && !rows.length) return "";
+  return `
+    <section class="campaign-detail-section ${options.compact ? "campaign-graph-compact" : "campaign-detail-wide"}">
+      <div class="campaign-detail-section-head">
+        <strong>Graph-managed experiments</strong>
+        <span>${escapeHtml(formatNumber(rows.length))} active split${rows.length === 1 ? "" : "s"}</span>
+      </div>
+      <div class="campaign-graph-list">
+        ${rows.length ? rows.map(campaignGraphExperimentRow).join("") : `<div class="status-line">No graph split assignments recorded for this campaign yet.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function campaignGraphExperiments(campaign = {}) {
+  const campaignName = campaign.campaign || "Unassigned";
+  return (cachedExperiments || [])
+    .filter((experiment) => (campaignForDecisionKey(experiment.decision_key) || "Unassigned") === campaignName)
+    .flatMap((experiment) => {
+      const graphNodes = experiment.assignment_history?.by_graph_node || [];
+      return graphNodes.map((node) => ({ experiment, node }));
+    })
+    .sort((left, right) => Number(right.node.count || 0) - Number(left.node.count || 0));
+}
+
+function campaignGraphExperimentRow({ experiment = {}, node = {} } = {}) {
+  const detailKey = campaignGraphDetailKey(experiment, node);
+  const active = selectedCampaignGraphKey === detailKey;
+  return `
+    <div class="campaign-graph-row ${active ? "selected" : ""}">
+      <div>
+        <strong>${escapeHtml(experiment.name || experiment.decision_key || "Experiment")}</strong>
+        <span>${escapeHtml([node.key, node.graph_node_id, node.mode || node.strategy].filter(Boolean).join(" · "))}</span>
+        <small>${escapeHtml(graphAssignmentVariantSummary(node.variants || []))}</small>
+      </div>
+      <em>${escapeHtml(formatNumber(node.count || 0))} assignments</em>
+      <button type="button" data-campaign-graph-detail="${escapeHtml(detailKey)}">${active ? "Hide" : "Details"}</button>
+      <button type="button" data-campaign-nav="open-experiment" data-object-id="${escapeHtml(experiment.decision_key || "")}">Open</button>
+    </div>
+    ${active ? campaignGraphExperimentDetail(experiment, node) : ""}
+  `;
+}
+
+function campaignGraphDetailKey(experiment = {}, node = {}) {
+  return [experiment.decision_key || "", node.graph_node_id || "", node.key || ""].join("::");
+}
+
+function campaignGraphExperimentDetail(experiment = {}, node = {}) {
+  const recentAssignments = graphNodeRecentAssignments(experiment, node);
+  const recentEvents = graphNodeRecentEvents(experiment, node);
+  return `
+    <div class="campaign-graph-detail">
+      <div class="campaign-graph-detail-summary">
+        ${campaignDetailKpi("Node", node.graph_node_id || "-", node.key || "graph split")}
+        ${campaignDetailKpi("Mode", node.mode || node.strategy || "-", assignmentStrategyLabel(node.strategy || "graph_split") || "assignment")}
+        ${campaignDetailKpi("Variants", formatNumber((node.variants || []).length), graphAssignmentVariantSummary(node.variants || []))}
+      </div>
+      <div class="campaign-graph-detail-columns">
+        <section>
+          <strong>Recent assignments</strong>
+          <div class="campaign-graph-mini-list">
+            ${recentAssignments.length ? recentAssignments.map((item) => `
+              <div>
+                <span>${escapeHtml(item.variant_key || "-")}</span>
+                <small>${escapeHtml(item.profile_key || "-")}</small>
+                <time>${item.assigned_at ? escapeHtml(formatTime(item.assigned_at)) : "-"}</time>
+              </div>
+            `).join("") : `<div class="status-line">No recent assignment rows for this node.</div>`}
+          </div>
+        </section>
+        <section>
+          <strong>Recent client events</strong>
+          <div class="campaign-graph-mini-list">
+            ${recentEvents.length ? recentEvents.map((event) => `
+              <div>
+                <span>${escapeHtml(event.event_type || "-")}</span>
+                <small>${escapeHtml([event.variant_key, event.surface, event.profile_key].filter(Boolean).join(" · ") || "-")}</small>
+                <time>${event.occurred_at ? escapeHtml(formatTime(event.occurred_at)) : "-"}</time>
+              </div>
+            `).join("") : `<div class="status-line">No recent campaign events for these variants.</div>`}
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+}
+
+function graphNodeRecentAssignments(experiment = {}, node = {}) {
+  const nodeId = node.graph_node_id || "";
+  return (experiment.assignment_history?.recent || [])
+    .filter((item) => {
+      const graph = item.assignment?.graph || {};
+      return graph.node_id === nodeId || item.assignment?.graph_node_id === nodeId;
+    })
+    .slice(0, 6);
+}
+
+function graphNodeRecentEvents(experiment = {}, node = {}) {
+  const variantKeys = new Set((node.variants || []).map((variant) => variant.key).filter(Boolean));
+  const events = (cachedCampaigns || [])
+    .flatMap((campaign) => campaign.recent_events || [])
+    .filter((event) => event.decision_key === experiment.decision_key);
+  const exact = events.filter((event) => eventGraphExperiments(event).some((assignment) =>
+    assignment.graph_node_id === node.graph_node_id ||
+    assignment.node_id === node.graph_node_id ||
+    assignment.experiment_key === node.key
+  ));
+  return (exact.length ? exact : events.filter((event) => !variantKeys.size || variantKeys.has(event.variant_key))).slice(0, 6);
+}
+
+function eventGraphExperiments(event = {}) {
+  return [
+    event.graph_experiments,
+    event.event?.graph_experiments,
+    event.event_payload?.graph_experiments
+  ].find((items) => Array.isArray(items)) || [];
 }
 
 function campaignSurfacesSection(surfaces = [], events = {}) {
@@ -1648,6 +1906,21 @@ async function handleCampaignNavigation(event) {
       switchView("messages");
       if (!cachedMessages.length) await loadMessages();
       loadMessage(id, cachedMessages);
+      return;
+    }
+    if (button.dataset.campaignNav === "open-campaign-rules") {
+      switchView("rules");
+      const input = document.querySelector("#rule-filter-campaign");
+      if (input) input.value = id === "Unassigned" ? "" : id;
+      renderRuleList();
+      return;
+    }
+    if (button.dataset.campaignNav === "open-campaign-messages") {
+      switchView("messages");
+      if (!cachedMessages.length) await loadMessages();
+      const input = document.querySelector("#message-filter-campaign");
+      if (input) input.value = id === "Unassigned" ? "" : id;
+      renderMessageList();
     }
   } catch (error) {
     overviewCampaignDetail.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
@@ -2258,8 +2531,80 @@ async function handleAssistantHandoffAction(event) {
   }
 }
 
-function renderExperiments() {
-  renderCampaignMasterPanel();
+function inventoryPageState(key) {
+  if (!inventoryPaging[key]) inventoryPaging[key] = { page: 1, pageSize: 10 };
+  return inventoryPaging[key];
+}
+
+function paginateInventory(items = [], key, options = {}) {
+  const state = inventoryPageState(key);
+  if (options.resetPage) state.page = 1;
+  const total = items.length;
+  const pageSize = Math.max(1, Number(state.pageSize || 10));
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  state.page = Math.min(Math.max(1, Number(state.page || 1)), pageCount);
+  const start = total ? (state.page - 1) * pageSize : 0;
+  const end = total ? Math.min(total, start + pageSize) : 0;
+  return {
+    items: items.slice(start, end),
+    total,
+    start,
+    end,
+    page: state.page,
+    pageSize,
+    pageCount
+  };
+}
+
+function inventoryPagerMarkup(key, meta, label = "items") {
+  if (!meta || meta.total <= meta.pageSize) return "";
+  const from = meta.total ? meta.start + 1 : 0;
+  const to = meta.end;
+  return `
+    <div class="inventory-pager" data-inventory-pager="${escapeHtml(key)}">
+      <span>Showing ${formatNumber(from)}-${formatNumber(to)} of ${formatNumber(meta.total)} ${escapeHtml(label)}</span>
+      <label>
+        <span>Rows</span>
+        <select data-page-size="${escapeHtml(key)}">
+          ${[5, 10, 20, 50].map((size) => `<option value="${size}" ${meta.pageSize === size ? "selected" : ""}>${size}</option>`).join("")}
+        </select>
+      </label>
+      <div class="inventory-pager-actions">
+        <button type="button" data-page-step="${escapeHtml(key)}:-1" ${meta.page <= 1 ? "disabled" : ""}>Prev</button>
+        <strong>Page ${formatNumber(meta.page)} / ${formatNumber(meta.pageCount)}</strong>
+        <button type="button" data-page-step="${escapeHtml(key)}:1" ${meta.page >= meta.pageCount ? "disabled" : ""}>Next</button>
+      </div>
+    </div>
+  `;
+}
+
+function bindInventoryPager(target, key, renderFn) {
+  target?.querySelectorAll(`[data-page-step^="${key}:"]`).forEach((button) => {
+    button.addEventListener("click", () => {
+      const step = Number((button.dataset.pageStep || "").split(":")[1] || 0);
+      const state = inventoryPageState(key);
+      state.page = Math.max(1, Number(state.page || 1) + step);
+      renderFn();
+    });
+  });
+  target?.querySelector(`[data-page-size="${key}"]`)?.addEventListener("change", (event) => {
+    const state = inventoryPageState(key);
+    state.pageSize = Math.max(1, Number(event.target.value || state.pageSize || 10));
+    state.page = 1;
+    renderFn();
+  });
+}
+
+function ensureInventorySelectionPage(items = [], key, selectedValue, valueGetter = (item) => item?.id) {
+  if (!selectedValue) return;
+  const state = inventoryPageState(key);
+  const index = items.findIndex((item) => valueGetter(item) === selectedValue);
+  if (index < 0) return;
+  state.page = Math.floor(index / Math.max(1, Number(state.pageSize || 10))) + 1;
+}
+
+function renderExperiments(options = {}) {
+  renderCampaignMasterPanel({ resetPage: options.resetCampaignPage });
   const summary = summarizeExperimentList(experimentFilterBaseExperiments());
   const experiments = campaignFilteredExperiments();
   if (experimentKpis) {
@@ -2286,12 +2631,19 @@ function renderExperiments() {
   const selected = experiments.find((experiment) => experiment.decision_key === selectedExperimentKey) || experiments[0];
   selectedExperimentKey = selected?.decision_key || null;
   experimentList.innerHTML = experiments.map((experiment, index) => experimentOpsCard(experiment, index, experiment.decision_key === selectedExperimentKey)).join("");
-  experimentList.querySelectorAll("[data-experiment-index]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const nextKey = experiments[Number(button.dataset.experimentIndex)]?.decision_key || null;
+  experimentList.querySelectorAll("[data-experiment-index]").forEach((card) => {
+    const select = () => {
+      const nextKey = experiments[Number(card.dataset.experimentIndex)]?.decision_key || null;
       if (nextKey !== selectedExperimentKey) activeExperimentTab = "design";
       selectedExperimentKey = nextKey;
       renderExperiments();
+    };
+    card.addEventListener("click", select);
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        select();
+      }
     });
   });
   renderExperimentDetail(selected);
@@ -2324,16 +2676,29 @@ function experimentFilterBaseExperiments() {
     });
 }
 
-function renderCampaignMasterPanel() {
+function renderCampaignMasterPanel(options = {}) {
   if (!campaignMasterList || !campaignMasterDetail) return;
-  const campaigns = cachedCampaigns || [];
+  const campaigns = filteredCampaignInventory(cachedCampaigns || []);
   if (!campaigns.length) {
-    campaignMasterList.innerHTML = "";
-    campaignMasterDetail.innerHTML = `<div class="campaign-empty-state">Assign experiments, rules, or messages to a campaign to see grouped assets here.</div>`;
+    campaignMasterList.innerHTML = `<div class="campaign-empty-state">No campaigns match the current filters.</div>`;
+    campaignMasterDetail.innerHTML = `<div class="campaign-empty-state">Clear filters or assign experiments, rules, and messages to a campaign.</div>`;
     return;
   }
-  const selected = campaigns.find((item) => (item.campaign || "Unassigned") === selectedCampaignName) || (selectedCampaignName ? null : campaigns[0]);
-  campaignMasterList.innerHTML = campaigns.map((campaign) => campaignMasterCard(campaign, (campaign.campaign || "Unassigned") === (selectedCampaignName || ""))).join("");
+  const selected = campaigns.find((item) => (item.campaign || "Unassigned") === selectedCampaignName)
+    || (selectedCampaignName ? null : campaigns[0]);
+  ensureInventorySelectionPage(campaigns, "campaigns", selectedCampaignName, (item) => item.campaign || "Unassigned");
+  const page = paginateInventory(campaigns, "campaigns", { resetPage: options.resetPage });
+  campaignMasterList.innerHTML = `
+    ${inventoryPagerMarkup("campaigns", page, "campaigns")}
+    <div class="campaign-inventory-header">
+      <span>Campaign</span>
+      <span>Assets</span>
+      <span>Traffic</span>
+      <span>Health</span>
+    </div>
+    ${page.items.map((campaign) => campaignMasterCard(campaign, (campaign.campaign || "Unassigned") === (selectedCampaignName || ""))).join("")}
+  `;
+  bindInventoryPager(campaignMasterList, "campaigns", () => renderCampaignMasterPanel());
   campaignMasterList.querySelectorAll("[data-campaign-select]").forEach((button) => {
     button.addEventListener("click", () => {
       selectedCampaignName = button.dataset.campaignSelect || "";
@@ -2348,27 +2713,76 @@ function renderCampaignMasterPanel() {
     : selected;
   campaignMasterDetail.innerHTML = detailCampaign
     ? campaignWorkbenchDetail(detailCampaign)
-    : `<div class="status-line">Select a campaign to inspect its assets.</div>`;
+    : `<div class="status-line">Select a campaign to inspect its assets, readiness, and performance.</div>`;
   campaignMasterDetail.querySelectorAll("[data-campaign-nav]").forEach((button) => {
     button.addEventListener("click", handleCampaignNavigation);
   });
+  campaignMasterDetail.querySelectorAll("[data-campaign-graph-detail]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const key = button.dataset.campaignGraphDetail || "";
+      selectedCampaignGraphKey = selectedCampaignGraphKey === key ? "" : key;
+      renderCampaignMasterPanel();
+    });
+  });
+}
+
+function filteredCampaignInventory(campaigns = []) {
+  const search = campaignFilterSearch?.value.trim().toLowerCase() || "";
+  const sort = campaignSort?.value || "traffic";
+  return campaigns
+    .filter((campaign) => {
+      if (!search) return true;
+      const assets = campaign.assets || {};
+      const haystack = [
+        campaign.campaign || "Unassigned",
+        ...(campaign.surfaces || []),
+        ...(assets.experiments || []).map((item) => `${item.name || ""} ${item.id || ""}`),
+        ...(assets.rules || []).map((item) => `${item.name || ""} ${item.id || ""}`),
+        ...(assets.messages || []).map((item) => `${item.name || ""} ${item.id || ""}`)
+      ].join(" ").toLowerCase();
+      return haystack.includes(search);
+    })
+    .sort((left, right) => campaignSortCompare(left, right, sort));
+}
+
+function campaignSortCompare(left = {}, right = {}, sort = "traffic") {
+  if (sort === "name") return String(left.campaign || "Unassigned").localeCompare(String(right.campaign || "Unassigned"));
+  if (sort === "conflicts") return Number(right.conflict_count || 0) - Number(left.conflict_count || 0);
+  if (sort === "assets") return campaignAssetCount(right) - campaignAssetCount(left);
+  if (sort === "recent") return latestCampaignActivity(right) - latestCampaignActivity(left);
+  return Number(right.requests || 0) - Number(left.requests || 0);
+}
+
+function latestCampaignActivity(campaign = {}) {
+  const events = campaign.recent_events || [];
+  const times = events.map((event) => Date.parse(event.last_seen_at || event.created_at || event.event_time || "")).filter(Number.isFinite);
+  return times.length ? Math.max(...times) : 0;
+}
+
+function campaignAssetCount(campaign = {}) {
+  return Number(campaign.experiments || 0) + Number(campaign.rules || 0) + Number(campaign.messages || 0);
 }
 
 function campaignMasterCard(campaign = {}, selected = false) {
   const name = campaign.campaign || "Unassigned";
   const feedback = campaign.client_events || {};
+  const feedbackTotal = Object.values(feedback).reduce((sum, value) => sum + Number(value || 0), 0);
+  const conflictCount = Number(campaign.conflict_count || 0);
+  const review = campaign.review_status || {};
+  const reviewIssues = Number(review.blockers || 0) + Number(review.warnings || 0);
+  const healthLabel = conflictCount ? `${formatNumber(conflictCount)} conflict${conflictCount === 1 ? "" : "s"}`
+    : reviewIssues ? `${formatNumber(reviewIssues)} review item${reviewIssues === 1 ? "" : "s"}`
+      : "Ready";
+  const healthTone = conflictCount ? "danger" : reviewIssues ? "warn" : "ok";
   return `
     <button type="button" class="campaign-master-card ${selected ? "selected" : ""}" data-campaign-select="${escapeHtml(name)}">
       <div>
         <strong>${escapeHtml(name)}</strong>
         <span>${escapeHtml((campaign.surfaces || []).join(", ") || "No surfaces")}</span>
       </div>
-      <dl>
-        <div><dt>Experiments</dt><dd>${formatNumber(campaign.experiments || 0)}</dd></div>
-        <div><dt>Rules</dt><dd>${formatNumber(campaign.rules || 0)}</dd></div>
-        <div><dt>Messages</dt><dd>${formatNumber(campaign.messages || 0)}</dd></div>
-        <div><dt>Feedback</dt><dd>${formatNumber(Object.values(feedback).reduce((sum, value) => sum + Number(value || 0), 0))}</dd></div>
-      </dl>
+      <span>${formatNumber(campaignAssetCount(campaign))}</span>
+      <span>${formatNumber(campaign.requests || feedbackTotal || 0)}</span>
+      <mark class="${healthTone}">${escapeHtml(healthLabel)}</mark>
     </button>
   `;
 }
@@ -2376,29 +2790,47 @@ function campaignMasterCard(campaign = {}, selected = false) {
 function campaignWorkbenchDetail(campaign = {}) {
   const assets = campaign.assets || {};
   const events = campaign.client_events || {};
+  const review = campaign.review_status || {};
+  const campaignName = campaign.campaign || "Unassigned";
   const recentAsset = [
     ...(assets.experiments || []).slice(0, 2).map((item) => item.name || item.id),
     ...(assets.rules || []).slice(0, 2).map((item) => item.name || item.id),
     ...(assets.messages || []).slice(0, 2).map((item) => item.name || item.id)
   ].filter(Boolean).slice(0, 4);
   return `
-    <div class="campaign-focus-panel">
-      <div class="campaign-focus-main">
-        <span>Campaign focus</span>
-        <strong>${escapeHtml(campaign.campaign || "Unassigned")}</strong>
-        <small>${escapeHtml((campaign.surfaces || []).join(", ") || "No surfaces configured")}</small>
+    <div class="campaign-workbench-hero">
+      <div>
+        <span>Selected campaign</span>
+        <h3>${escapeHtml(campaignName)}</h3>
+        <p>${escapeHtml((campaign.surfaces || []).join(", ") || "No surfaces configured")}</p>
       </div>
-      <div class="campaign-focus-metrics">
+      <div class="campaign-workbench-actions">
+        <button type="button" data-campaign-nav="open-campaign-rules" data-object-id="${escapeHtml(campaignName)}">Rules</button>
+        <button type="button" data-campaign-nav="open-campaign-messages" data-object-id="${escapeHtml(campaignName)}">Messages</button>
+      </div>
+    </div>
+    <div class="campaign-focus-metrics">
         ${campaignDetailKpi("Requests", campaign.requests || 0, "window")}
         ${campaignDetailKpi("Exposure", events.exposure || 0, "events")}
         ${campaignDetailKpi("Conversion", formatPercent(campaign.conversion_rate || 0), `${formatNumber(events.conversion || 0)} conv`)}
         ${campaignDetailKpi("Conflicts", campaign.conflict_count || 0, (campaign.conflict_count || 0) ? "review" : "clear")}
-      </div>
-      <div class="campaign-focus-assets">
-        <span>${escapeHtml(`${formatNumber(campaign.experiments || 0)} exp · ${formatNumber(campaign.rules || 0)} rules · ${formatNumber(campaign.messages || 0)} msgs`)}</span>
-        <small>${escapeHtml(recentAsset.join(", ") || "No linked assets yet")}</small>
-      </div>
     </div>
+    <div class="campaign-workbench-assets">
+      ${campaignCompactAssetSection("Experiments", assets.experiments || [], "experiment")}
+      ${campaignCompactAssetSection("Rules", assets.rules || [], "rule")}
+      ${campaignCompactAssetSection("Messages", assets.messages || [], "message")}
+      <section class="campaign-compact-section">
+        <div>
+          <strong>Review</strong>
+          <span>${formatNumber(Number(review.blockers || 0) + Number(review.warnings || 0))} items</span>
+        </div>
+        <div class="campaign-review-summary">
+          <span>${escapeHtml((campaign.conflict_count || 0) ? "Conflicts need review before launch." : "No cross-surface conflicts detected.")}</span>
+          <small>${escapeHtml(recentAsset.join(", ") || "No linked assets yet")}</small>
+        </div>
+      </section>
+    </div>
+    ${campaignGraphExperimentsSection(campaign, { compact: true })}
   `;
 }
 
@@ -2495,7 +2927,7 @@ function experimentOpsCard(experiment, index, selected = false) {
   const isDraft = status === "draft";
   const executions = exposureCount || impressionCount || conversionCount;
   return `
-    <button type="button" class="experiment-ops-card ${selected ? "selected" : ""}" data-experiment-index="${index}">
+    <div role="button" tabindex="0" class="experiment-ops-card ${selected ? "selected" : ""}" data-experiment-index="${index}">
       <div class="experiment-ops-head">
         <div>
           <strong>${escapeHtml(experiment.name)}</strong>
@@ -2522,7 +2954,7 @@ function experimentOpsCard(experiment, index, selected = false) {
           ${experimentCardMetric("Winner", winner, "winner")}
         </div>
       `}
-    </button>
+    </div>
   `;
 }
 
@@ -2896,7 +3328,7 @@ function experimentResultsTab(experiment) {
       </div>
     </div>
     ${experimentGoalReportPanel(experiment)}
-    ${mode === "bandit" ? experimentBanditDetail(experiment) : ""}
+    ${experimentAssignmentDetail(experiment, mode)}
     ${experimentWinnerAutomationPanel(experiment)}
     <div class="experiment-detail-actions">
       <button type="button" data-experiment-action="declare-winner" data-rule-key="${escapeHtml(experiment.decision_key)}" data-winner-key="${escapeHtml(winnerKey)}" ${winnerKey ? "" : "disabled"}>Declare Winner</button>
@@ -3461,21 +3893,25 @@ function experimentWinnerAutomationPanel(experiment = {}) {
   `;
 }
 
-function experimentBanditDetail(experiment = {}) {
+function experimentAssignmentDetail(experiment = {}, mode = experimentMode(experiment)) {
   const bandit = experiment.bandit || {};
   const history = experiment.assignment_history || {};
   return `
     <div class="experiment-bandit-detail">
       <div>
-        <strong>Adaptive allocation guardrails</strong>
-        <span>Bandit experiments bypass decision-result caching so allocation can react to exposure and conversion feedback.</span>
+        <strong>${escapeHtml(mode === "bandit" ? "Adaptive allocation guardrails" : "Assignment history")}</strong>
+        <span>${escapeHtml(mode === "bandit"
+          ? "Bandit experiments bypass decision-result caching so allocation can react to exposure and conversion feedback."
+          : "Fixed and graph-managed experiments record assignments so allocation trends can be reviewed after launch.")}</span>
       </div>
-      <div class="experiment-detail-summary">
-        ${statusItem("Exploration", `${formatNumber(bandit.exploration_rate ?? 10)}%`)}
-        ${statusItem("Min exposures", formatNumber(bandit.min_exposures_per_variant ?? 100))}
-        ${statusItem("Window", bandit.window_days ? `${formatNumber(bandit.window_days)}d` : "All feedback")}
-        ${statusItem("Frozen winner", bandit.freeze_variant || "-")}
-      </div>
+      ${mode === "bandit" ? `
+        <div class="experiment-detail-summary">
+          ${statusItem("Exploration", `${formatNumber(bandit.exploration_rate ?? 10)}%`)}
+          ${statusItem("Min exposures", formatNumber(bandit.min_exposures_per_variant ?? 100))}
+          ${statusItem("Window", bandit.window_days ? `${formatNumber(bandit.window_days)}d` : "All feedback")}
+          ${statusItem("Frozen winner", bandit.freeze_variant || "-")}
+        </div>
+      ` : ""}
       <div class="bandit-history-panel">
         <div class="bandit-history-head">
           <strong>Assignment history</strong>
@@ -3486,6 +3922,7 @@ function experimentBanditDetail(experiment = {}) {
           ${banditHistoryGroup("Variants", history.by_variant)}
           ${banditHistoryGroup("Reasons", history.by_reason)}
           ${banditHistoryGroup("Strategies", history.by_strategy)}
+          ${graphAssignmentHistoryGroup(history.by_graph_node)}
         </div>
         <div class="bandit-recent-list">
           ${banditRecentAssignments(history.recent)}
@@ -3562,7 +3999,7 @@ function banditHistoryGroup(title, items = []) {
         items?.length
           ? items.map((item) => `
             <div class="traffic-group-row">
-              <strong title="${escapeHtml(item.key || "-")}">${escapeHtml(item.key || "-")}</strong>
+              <strong title="${escapeHtml(item.key || "-")}">${escapeHtml(title === "Strategies" ? assignmentStrategyLabel(item.key) : title === "Reasons" ? assignmentReasonLabel(item.key) : item.key || "-")}</strong>
               <span>${formatNumber(item.count || 0)}</span>
             </div>
           `).join("")
@@ -3572,15 +4009,60 @@ function banditHistoryGroup(title, items = []) {
   `;
 }
 
+function graphAssignmentHistoryGroup(items = []) {
+  return `
+    <section class="traffic-group">
+      <div class="editor-title">Graph nodes</div>
+      <div class="traffic-group-list">${
+        items?.length
+          ? items.map((item) => `
+            <div class="traffic-group-row graph-node-assignment-row">
+              <strong title="${escapeHtml([item.key, item.graph_node_id].filter(Boolean).join(" · "))}">${escapeHtml(item.key || item.graph_node_id || "-")}</strong>
+              <span>${formatNumber(item.count || 0)}</span>
+              <small>${escapeHtml(graphAssignmentVariantSummary(item.variants || []))}</small>
+            </div>
+          `).join("")
+          : `<div class="status-line">No graph split assignments yet</div>`
+      }</div>
+    </section>
+  `;
+}
+
+function graphAssignmentVariantSummary(variants = []) {
+  const rows = Array.isArray(variants) ? variants : [];
+  return rows.slice(0, 3).map((item) => `${item.key}: ${formatNumber(item.count || 0)}`).join(" · ") || "No variants";
+}
+
 function banditRecentAssignments(items = []) {
   return items?.length ? items.map((item) => `
     <div class="bandit-recent-row">
       <strong>${escapeHtml(item.variant_key || item.reason || "-")}</strong>
-      <span>${escapeHtml(item.reason || item.strategy || "-")}</span>
+      <span>${escapeHtml(assignmentReasonLabel(item.reason) || assignmentStrategyLabel(item.strategy) || "-")}</span>
       <em>${escapeHtml(item.profile_key || "-")}</em>
       <small>${item.assigned_at ? escapeHtml(formatTime(item.assigned_at)) : "-"}</small>
     </div>
   `).join("") : `<div class="status-line">No recent assignments yet.</div>`;
+}
+
+function assignmentStrategyLabel(value = "") {
+  return {
+    fixed: "Fixed split",
+    bandit: "Adaptive bandit",
+    graph_split: "Graph split",
+    graph_bandit: "Graph bandit",
+    holdout: "Holdout"
+  }[value] || value || "";
+}
+
+function assignmentReasonLabel(value = "") {
+  return {
+    graph_split: "Graph split",
+    forced: "Forced variant",
+    exploration: "Exploration",
+    exploitation: "Exploitation",
+    minimum_sample: "Minimum sample",
+    forced_holdout: "Forced holdout"
+  }[value] || value || "";
 }
 
 function deeRuntimeBaseUrl() {
@@ -3680,7 +4162,7 @@ function experimentOpsWarnings(experiment) {
 async function loadClientEventMetrics() {
   if (!clientEventsPanel) return;
   try {
-    const body = await api("/v1/metrics/client-events?limit=8&recent_limit=8");
+    const body = await api("/v1/metrics/client-events?limit=8&recent_limit=24");
     renderClientEventMetrics(body.metrics);
   } catch (error) {
     clientEventsPanel.innerHTML = `<div class="status-line">${escapeHtml(error.message)}</div>`;
@@ -3688,11 +4170,14 @@ async function loadClientEventMetrics() {
 }
 
 function renderClientEventMetrics(metrics) {
+  const deliveryDiagnostics = messageDeliveryDiagnostics(metrics.recent_events || []);
+  const skippedCount = (metrics.recent_events || []).filter((item) => (item.event_type || item.type) === "skipped").length;
   const tabs = [
     { id: "rules", label: "Rules", count: metrics.by_rule?.length || 0, rows: clientEventMetricRows(metrics.by_rule) },
     { id: "variants", label: "Variants", count: metrics.by_variant?.length || 0, rows: clientEventMetricRows(metrics.by_variant) },
     { id: "messages", label: "Messages", count: metrics.by_message?.length || 0, rows: clientEventMetricRows(metrics.by_message) },
     { id: "surfaces", label: "Surfaces", count: metrics.by_surface?.length || 0, rows: clientEventMetricRows(metrics.by_surface) },
+    { id: "delivery", label: "Delivery", count: skippedCount, rows: clientEventDiagnosticRows(deliveryDiagnostics, skippedCount) },
     { id: "recent", label: "Recent", count: metrics.recent_events?.length || 0, rows: clientEventRecentRows(metrics.recent_events) }
   ];
   clientEventsPanel.innerHTML = `
@@ -3769,6 +4254,7 @@ function clientEventMetricRow({ type, title, count, profiles, meta, time, recent
 function clientEventTypeClass(type = "") {
   if (type === "conversion") return "conversion";
   if (type === "impression") return "impression";
+  if (type === "skipped") return "skipped";
   return "exposure";
 }
 
@@ -3784,8 +4270,30 @@ function clientEventStatusItems(items) {
   return [
     statusItem("Exposures", formatNumber(counts.exposure || 0)),
     statusItem("Impressions", formatNumber(counts.impression || 0)),
+    statusItem("Skipped", formatNumber(counts.skipped || 0)),
     statusItem("Conversions", formatNumber(counts.conversion || 0))
   ];
+}
+
+function clientEventDiagnosticRows(items = [], skippedCount = 0) {
+  if (!skippedCount) {
+    return `<div class="client-event-empty">No skipped delivery events recorded in the recent sample.</div>`;
+  }
+  if (!items.length) {
+    return `<div class="client-event-empty">Skipped delivery events were received, but the SDK did not include a reason in the recent sample.</div>`;
+  }
+  return `
+    <div class="client-event-diagnostic-list">
+      ${items.map((item) => `
+        <div class="client-event-diagnostic-row">
+          <span>${escapeHtml(messageDeliveryDiagnosticLabel(item.reason))}</span>
+          <strong>${escapeHtml(formatNumber(item.count || 0))}</strong>
+          <em>${escapeHtml(`${formatNumber(item.profiles || 0)} profiles${item.latest_at ? ` · latest ${formatTime(item.latest_at)}` : ""}`)}</em>
+          <small>${escapeHtml(messageDeliveryDiagnosticHint(item.reason, item.category))}</small>
+        </div>
+      `).join("")}
+    </div>
+  `;
 }
 
 function renderClientTraffic(metrics = {}) {
@@ -4010,6 +4518,9 @@ function readinessChecklist(metrics = {}) {
   const counts = eventCountsByType(events.by_type || []);
   const schemaOk = Number(schema.total || 0) > 0 && ["ok", "success"].includes(String(schema.last_sync_status || "").toLowerCase());
   const feedbackOk = Number(counts.impression || 0) > 0 || Number(counts.exposure || 0) > 0 || Number(counts.conversion || 0) > 0;
+  const skipped = Number(counts.skipped || 0);
+  const delivered = Number(counts.exposure || 0) + Number(counts.impression || 0);
+  const deliveryOk = delivered === 0 || skipped / Math.max(delivered, 1) < 0.2;
   const runtimeOk = Number(runtime.error_rate || 0) < 0.01 && Number(rateLimit.blocked || 0) === 0;
   const profileErrors = Number(profileCache.errors || 0);
   const profileNotFound = Number(profileCache.not_found || 0);
@@ -4020,7 +4531,8 @@ function readinessChecklist(metrics = {}) {
     : "No sparse client requests have needed Profile API enrichment yet";
   const items = [
     readinessItem("Profile fields", schemaOk ? "Ready" : "Needs sync", `${formatNumber(schema.total || 0)} fields · ${schema.last_synced_at ? formatTime(schema.last_synced_at) : "never synced"}`, schemaOk),
-    readinessItem("Feedback loop", feedbackOk ? "Receiving events" : "No feedback yet", `${formatNumber(counts.exposure || 0)} exposures · ${formatNumber(counts.impression || 0)} impressions · ${formatNumber(counts.conversion || 0)} conversions`, feedbackOk),
+    readinessItem("Feedback loop", feedbackOk ? "Receiving events" : "No feedback yet", `${formatNumber(counts.exposure || 0)} exposures · ${formatNumber(counts.impression || 0)} impressions · ${formatNumber(counts.skipped || 0)} skipped · ${formatNumber(counts.conversion || 0)} conversions`, feedbackOk),
+    readinessItem("Delivery health", deliveryOk ? "Renderable" : "Skipped too often", `${formatNumber(skipped)} skipped across ${formatNumber(delivered)} exposures or impressions`, deliveryOk),
     readinessItem("Profile enrichment", profileOk ? `${Math.round((profileCache.hit_rate || 0) * 100)}% cache hit` : "Errors found", profileDetail, profileOk),
     readinessItem("Service reliability", runtimeOk ? "Healthy" : "Needs attention", `${formatPercent(runtime.error_rate || 0)} error rate · ${formatNumber(rateLimit.blocked || 0)} blocked`, runtimeOk),
     readinessItem("Reference data", Number(metrics.lookups?.total || 0) > 0 ? "Available" : "Not configured", `${formatNumber(metrics.lookups?.total || 0)} tables`, Number(metrics.lookups?.total || 0) > 0),
@@ -4416,6 +4928,7 @@ function renderRuleInspector() {
   const mode = document.querySelector("#builder-mode").value;
   const ttl = Number(document.querySelector("#rule-client-ttl").value || 0);
   const scope = document.querySelector("#rule-cache-scope").value;
+  const failureMode = document.querySelector("#rule-dependency-failure-mode")?.value || "evaluate";
   const fallback = mode === "graph" ? "graph output" : (document.querySelector("#fallback-result").value.trim() || "deferred");
   const approval = selected?.metadata?.approval || {};
   const summaryItems = [
@@ -4430,7 +4943,10 @@ function renderRuleInspector() {
   renderExperimentPanel();
   inspectorKey.textContent = key;
   inspectorSurface.textContent = surface;
-  inspectorCache.textContent = ttl > 0 ? `${ttl}s / ${scope === "none" ? "profile" : scope}` : "No cache hint";
+  inspectorCache.textContent = [
+    ttl > 0 ? `${ttl}s / ${scope === "none" ? "profile" : scope}` : "No cache hint",
+    failureMode !== "evaluate" ? failureMode.replace("_", " ") : ""
+  ].filter(Boolean).join(" · ");
   inspectorFallback.textContent = fallback;
   inspectorBranches.textContent = String(builderBranches.length || 0);
   inspectorNodes.textContent = String(graphBuilder.nodes?.length || 0);
@@ -5462,15 +5978,25 @@ function renderExperimentPlanningSummary(planning, warnings = []) {
   `;
 }
 
-function renderRuleList() {
+function renderRuleList(options = {}) {
   const target = document.querySelector("#rule-list");
-  target.innerHTML = ruleListHeader();
   const filtered = filteredRuleSets();
-  target.innerHTML += filtered.map(ruleSetRow).join("");
+  const page = paginateInventory(filtered, "rules", { resetPage: options.resetPage });
+  target.innerHTML = `
+    <div class="inventory-toolbar">
+      ${ruleInventorySummary(filtered)}
+      ${inventoryPagerMarkup("rules", page, "rules")}
+    </div>
+    ${ruleListHeader()}
+    <div class="inventory-list">
+      ${filtered.length ? page.items.map(ruleSetRow).join("") : inventoryEmptyState("No rules match the current filters", "Broaden the search, status, type, tag, or campaign filter.")}
+    </div>
+  `;
+  bindInventoryPager(target, "rules", renderRuleList);
   target.querySelectorAll("[data-rule-sort]").forEach((button) => {
     button.addEventListener("click", () => setRuleSort(button.dataset.ruleSort));
   });
-  target.querySelectorAll(".row[data-rule-key]").forEach((element) => {
+  target.querySelectorAll("[data-rule-key]").forEach((element) => {
     element.addEventListener("click", () => loadRule(element.dataset.ruleKey));
   });
   target.querySelectorAll("[data-rule-action]").forEach((button) => {
@@ -5483,19 +6009,30 @@ function renderRuleList() {
 
 function ruleListHeader() {
   return `
-    <div class="row rule-list-header">
+    <div class="inventory-header rule-list-header">
       ${[
-        ["name", "Name"],
-        ["decision_key", "Decision key"],
+        ["name", "Rule"],
         ["status", "Status"],
         ["type", "Type"],
-        ["priority", "Priority"],
         ["campaign", "Campaign"],
-        ["conflicts", "Conflicts"],
-        ["version", "Version"],
-        ["updated_at", "Last Modified"]
-      ].map(([key, label]) => `<div><button type="button" data-rule-sort="${key}">${escapeHtml(label)}${ruleSort.key === key ? ` ${ruleSort.direction === "asc" ? "ASC" : "DESC"}` : ""}</button></div>`).join("")}
+        ["conflicts", "Review"],
+        ["updated_at", "Updated"]
+      ].map(([key, label]) => `<button type="button" data-rule-sort="${key}">${escapeHtml(label)}${ruleSort.key === key ? ` ${ruleSort.direction === "asc" ? "ASC" : "DESC"}` : ""}</button>`).join("")}
       <div>Actions</div>
+    </div>
+  `;
+}
+
+function ruleInventorySummary(filtered) {
+  const published = filtered.filter((item) => item.status === "published").length;
+  const draft = filtered.filter((item) => item.status === "draft").length;
+  const conflicts = filtered.reduce((count, item) => count + ruleConflictsFor(item.decision_key).length, 0);
+  return `
+    <div class="inventory-summary">
+      <span>${formatNumber(filtered.length)} of ${formatNumber(cachedRuleSets.length)} rules</span>
+      <span>${formatNumber(published)} published</span>
+      <span>${formatNumber(draft)} draft</span>
+      <span class="${conflicts ? "warn" : ""}">${conflicts ? `${formatNumber(conflicts)} conflicts` : "No conflicts"}</span>
     </div>
   `;
 }
@@ -5506,6 +6043,7 @@ function setRuleSort(key) {
   } else {
     ruleSort = { key, direction: key === "updated_at" ? "desc" : "asc" };
   }
+  inventoryPageState("rules").page = 1;
   renderRuleList();
 }
 
@@ -5544,6 +6082,7 @@ function compareRuleSetsForSort(left, right) {
 
 function ruleSetRow(item) {
   const conflicts = ruleConflictsFor(item.decision_key);
+  const campaign = campaignValue(item.metadata) || folderValue(item.metadata) || "Unassigned";
   const actions = [
     `<button type="button" data-rule-action="duplicate" data-rule-key="${escapeHtml(item.decision_key)}">Duplicate</button>`,
     `<button type="button" data-rule-action="move_campaign" data-rule-key="${escapeHtml(item.decision_key)}">Move</button>`,
@@ -5551,21 +6090,20 @@ function ruleSetRow(item) {
       ? ""
       : `<button type="button" data-rule-action="archive" data-rule-key="${escapeHtml(item.decision_key)}">Archive</button>`
   ].join("");
-  return row(
-    [
-      item.name,
-      item.decision_key,
-      item.status,
-      item.type || "decision",
-      item.priority ?? 0,
-      campaignValue(item.metadata) || folderValue(item.metadata) || "-",
-      ruleConflictBadge(conflicts),
-      item.version ?? "-",
-      item.updated_at ? formatTime(item.updated_at) : "-",
-      actions
-    ],
-    { key: item.decision_key, rawColumns: [6, 9] }
-  );
+  return `
+    <div class="inventory-row rule-inventory-row actionable" data-rule-key="${escapeHtml(item.decision_key)}">
+      <div class="inventory-main">
+        <strong>${escapeHtml(item.name || item.decision_key)}</strong>
+        <small>${escapeHtml(item.decision_key)} · priority ${escapeHtml(item.priority ?? 0)} · v${escapeHtml(item.version ?? "-")}</small>
+      </div>
+      <div><span class="inventory-chip ${escapeHtml(item.status || "draft")}">${escapeHtml(item.status || "draft")}</span></div>
+      <div><span class="inventory-chip neutral">${escapeHtml(item.type || "decision")}</span></div>
+      <div class="inventory-muted">${escapeHtml(campaign)}</div>
+      <div>${ruleConflictBadge(conflicts)}</div>
+      <div class="inventory-muted">${escapeHtml(item.updated_at ? formatTime(item.updated_at) : "-")}</div>
+      <div class="inventory-actions">${actions}</div>
+    </div>
+  `;
 }
 
 function ruleConflictsFor(ruleKey) {
@@ -5672,6 +6210,10 @@ async function loadRule(key) {
     document.querySelector("#rule-surface").value = body.rule_set.surface || "";
     document.querySelector("#rule-client-ttl").value = body.rule_set.cache_policy?.client_ttl ?? "";
     document.querySelector("#rule-cache-scope").value = body.rule_set.cache_policy?.scope || (body.rule_set.cache_policy?.client_ttl ? "profile" : "none");
+    document.querySelector("#rule-dependency-failure-mode").value = body.rule_set.cache_policy?.dependency_failure_mode || "evaluate";
+    document.querySelector("#rule-dependency-failure-outputs").value = body.rule_set.cache_policy?.dependency_failure_outputs
+      ? JSON.stringify(body.rule_set.cache_policy.dependency_failure_outputs)
+      : "";
     document.querySelector("#rule-campaign").value = campaignValue(body.rule_set.metadata);
     document.querySelector("#rule-folder").value = folderValue(body.rule_set.metadata);
     document.querySelector("#rule-description").value = body.rule_set.description || "";
@@ -5707,6 +6249,8 @@ function newRule(options = {}) {
   document.querySelector("#rule-surface").value = defaults.surface;
   document.querySelector("#rule-client-ttl").value = defaults.ttl;
   document.querySelector("#rule-cache-scope").value = defaults.scope;
+  document.querySelector("#rule-dependency-failure-mode").value = defaults.dependencyFailureMode || "evaluate";
+  document.querySelector("#rule-dependency-failure-outputs").value = "";
   document.querySelector("#rule-campaign").value = "";
   document.querySelector("#rule-folder").value = "";
   document.querySelector("#rule-description").value = defaults.description;
@@ -5748,6 +6292,7 @@ function ruleCreationDefaults(type) {
       surface: "homepage_hero",
       ttl: "300",
       scope: "profile",
+      dependencyFailureMode: "fail_open",
       description: "Experiment draft."
     };
   }
@@ -5759,6 +6304,7 @@ function ruleCreationDefaults(type) {
       surface: "homepage_hero",
       ttl: "300",
       scope: "profile",
+      dependencyFailureMode: "fail_open",
       description: "In-app message eligibility rule."
     };
   }
@@ -5798,6 +6344,8 @@ function quickCreateExperiment() {
   document.querySelector("#rule-surface").value = "homepage_hero";
   document.querySelector("#rule-client-ttl").value = "300";
   document.querySelector("#rule-cache-scope").value = "profile";
+  document.querySelector("#rule-dependency-failure-mode").value = "fail_open";
+  document.querySelector("#rule-dependency-failure-outputs").value = '{"message":"Temporary fallback"}';
   document.querySelector("#rule-description").value = "Experiment draft created from shortcut.";
   setExperimentMetadata({
     status: "draft",
@@ -6441,31 +6989,44 @@ async function loadAudit() {
 
 async function loadDecisionAudit() {
   const target = document.querySelector("#audit-list");
-  target.innerHTML = header(["Time", "Decision", "Profile", "Result", "Matched"]);
+  target.dataset.auditMode = "decisions";
+  target.innerHTML = header(["Decision / time", "Outcome", "Profile", "Matched", "Summary"]);
+  renderAuditLoadingState("Loading decision audit…");
   try {
     const params = auditParams();
     const body = await api(`/v1/audit${params.toString() ? `?${params}` : ""}`);
     const audit = filterAuditByCampaign(body.audit || []);
     target.innerHTML += audit.length
-      ? audit.map((item, index) => row([formatTime(item.evaluated_at), item.decision_key, item.profile_key, item.result, item.matched_rules.join(", ") || "fallback"], { auditIndex: index })).join("")
-      : row(["No audit entries match the current filters", "", "", "", ""]);
+      ? audit.map((item, index) => row(renderDecisionAuditRow(item), { auditIndex: index, rawColumns: [0, 1, 2, 3, 4] })).join("")
+      : row([
+          auditEmptyState("No decision audit entries match the current filters.", "Try clearing a preset, widening the date range, or removing a campaign filter."),
+          "",
+          "",
+          "",
+          ""
+        ], { rawColumns: [0] });
     renderAuditSummary(audit);
-    document.querySelectorAll("[data-audit-index]").forEach((element) => {
+    target.querySelectorAll("[data-audit-index]").forEach((element) => {
       element.addEventListener("click", () => {
+        setActiveAuditRow(Number(element.dataset.auditIndex));
         renderAuditDetail(audit[Number(element.dataset.auditIndex)]);
       });
     });
+    setActiveAuditRow(0);
     renderAuditDetail(audit[0]);
   } catch (error) {
     target.innerHTML += row([error.message, "", "", "", ""]);
     renderAuditSummary([]);
+    if (auditDetailExtra) auditDetailExtra.innerHTML = auditEmptyState("Audit loading failed.", error.message);
     auditDetail.textContent = error.message;
   }
 }
 
 async function loadClientEventAudit() {
   const target = document.querySelector("#audit-list");
-  target.innerHTML = header(["Time", "Type", "Rule", "Profile", "Object"]);
+  target.dataset.auditMode = "client_events";
+  target.innerHTML = header(["Rule / time", "Type", "Profile", "Object", "Context"]);
+  renderAuditLoadingState("Loading client feedback…");
   try {
     const params = auditParams();
     params.set("limit", document.querySelector("#audit-limit").value || "100");
@@ -6473,22 +7034,27 @@ async function loadClientEventAudit() {
     const body = await api(`/v1/metrics/client-events${params.toString() ? `?${params}` : ""}`);
     const events = filterAuditByCampaign(body.metrics?.recent_events || []);
     target.innerHTML += events.length
-      ? events.map((item, index) => row([
-          formatTime(item.occurred_at),
-          item.event_type,
-          item.decision_key,
-          item.profile_key,
-          item.variant_key || item.message_id || item.surface || "-"
-        ], { auditIndex: index })).join("")
-      : row(["No client feedback events match the current filters", "", "", "", ""]);
+      ? events.map((item, index) => row(renderClientEventAuditRow(item), { auditIndex: index, rawColumns: [0, 1, 2, 3, 4] })).join("")
+      : row([
+          auditEmptyState("No client feedback events match the current filters.", "Try a broader date range or switch from skipped-only to all feedback events."),
+          "",
+          "",
+          "",
+          ""
+        ], { rawColumns: [0] });
     renderClientEventAuditSummary(events, body.metrics || {});
     target.querySelectorAll("[data-audit-index]").forEach((element) => {
-      element.addEventListener("click", () => renderClientEventAuditDetail(events[Number(element.dataset.auditIndex)]));
+      element.addEventListener("click", () => {
+        setActiveAuditRow(Number(element.dataset.auditIndex));
+        renderClientEventAuditDetail(events[Number(element.dataset.auditIndex)]);
+      });
     });
+    setActiveAuditRow(0);
     renderClientEventAuditDetail(events[0]);
   } catch (error) {
     target.innerHTML += row([error.message, "", "", "", ""]);
     renderClientEventAuditSummary([], {});
+    if (auditDetailExtra) auditDetailExtra.innerHTML = auditEmptyState("Client feedback loading failed.", error.message);
     auditDetail.textContent = error.message;
   }
 }
@@ -6500,6 +7066,156 @@ function renderAuditSummary(audit) {
   const last = audit.at(-1)?.evaluated_at ? formatTime(audit.at(-1).evaluated_at) : "";
   auditRange.textContent = last ? `${first} to ${last}` : first;
   renderAuditInsights(audit);
+}
+
+function renderAuditLoadingState(message = "Loading audit events…") {
+  const target = document.querySelector("#audit-list");
+  if (target) {
+    target.innerHTML += row([
+      auditEmptyState(message, "Hold on while DEE refreshes the latest matching events."),
+      "",
+      "",
+      "",
+      ""
+    ], { rawColumns: [0] });
+  }
+  auditCount.textContent = "Loading…";
+  auditRange.textContent = "Fetching latest events";
+  if (auditInsights) {
+    auditInsights.innerHTML = [
+      statusItem("Top decision", "…"),
+      statusItem("Top result", "…"),
+      statusItem("Matched rate", "…"),
+      statusItem("Profiles", "…")
+    ].join("");
+  }
+  if (auditDetailMeta) {
+    auditDetailMeta.textContent = "Refreshing audit selection and detail context.";
+  }
+}
+
+function renderDecisionAuditRow(item = {}) {
+  const outputs = item.outputs && typeof item.outputs === "object" ? item.outputs : {};
+  const outputCount = Object.keys(outputs).filter((key) => key !== "message").length;
+  const source = item.inputs?.request_source || item.context?.request_source || "runtime";
+  const surface = item.inputs?.surface || item.surface || item.outputs?.message?.surface || "-";
+  const matched = item.matched_rules?.length ? item.matched_rules.join(", ") : "fallback";
+  const resultLabel = (item.result || "-").replace(/_/g, " ");
+  const summary = [
+    surface !== "-" ? surface : "",
+    outputCount ? `${outputCount} output${outputCount === 1 ? "" : "s"}` : "",
+    profileEnrichmentStatusLabel(item.profile_cache?.status || item.inputs?.profile_enrichment || "") || source
+  ].filter(Boolean).join(" · ");
+  return [
+    `
+      <div class="audit-cell-stack">
+        <strong>${escapeHtml(item.decision_key || "-")}</strong>
+        <small>${escapeHtml(formatTime(item.evaluated_at))}</small>
+      </div>
+    `,
+    `
+      <div class="audit-cell-stack audit-cell-outcome">
+        <span class="audit-badge ${escapeHtml(auditOutcomeTone(item.result))}">${escapeHtml(resultLabel)}</span>
+        <small>${escapeHtml(item.rule_version != null ? `v${item.rule_version}` : "draft/runtime")}</small>
+      </div>
+    `,
+    `
+      <div class="audit-cell-stack">
+        <strong class="audit-inline-key">${escapeHtml(item.profile_key || "-")}</strong>
+        <small>${escapeHtml(source)}</small>
+      </div>
+    `,
+    `
+      <div class="audit-cell-stack">
+        <strong>${escapeHtml(matched)}</strong>
+        <small>${escapeHtml(item.request_id || "request")}</small>
+      </div>
+    `,
+    `
+      <div class="audit-cell-stack">
+        <span>${escapeHtml(summary || "No output summary")}</span>
+        ${Array.isArray(item.errors) && item.errors.length ? `<small class="audit-inline-warning">${escapeHtml(item.errors[0])}</small>` : `<small>${escapeHtml(surface)}</small>`}
+      </div>
+    `
+  ];
+}
+
+function renderClientEventAuditRow(item = {}) {
+  const objectLabel = item.variant_key || item.message_id || item.surface || "-";
+  const context = item.context && typeof item.context === "object" ? item.context : {};
+  const details = item.event && typeof item.event === "object" ? item.event : {};
+  const summary = [
+    context.application || context.app_id || context.platform || "",
+    item.surface || "",
+    details.reason ? messageDeliveryDiagnosticLabel(details.reason) : ""
+  ].filter(Boolean).join(" · ");
+  return [
+    `
+      <div class="audit-cell-stack">
+        <strong>${escapeHtml(item.decision_key || "client event")}</strong>
+        <small>${escapeHtml(formatTime(item.occurred_at))}</small>
+      </div>
+    `,
+    `
+      <div class="audit-cell-stack audit-cell-outcome">
+        <span class="audit-badge ${escapeHtml(auditEventTone(item.event_type))}">${escapeHtml(messageDeliveryDiagnosticLabel(item.event_type || "-"))}</span>
+        <small>${escapeHtml(item.rule_version != null ? `v${item.rule_version}` : "client")}</small>
+      </div>
+    `,
+    `
+      <div class="audit-cell-stack">
+        <strong class="audit-inline-key">${escapeHtml(item.profile_key || "-")}</strong>
+        <small>${escapeHtml(context.request_source || "client feedback")}</small>
+      </div>
+    `,
+    `
+      <div class="audit-cell-stack">
+        <strong>${escapeHtml(objectLabel)}</strong>
+        <small>${escapeHtml(item.message_id ? "message" : item.variant_key ? "variant" : "surface")}</small>
+      </div>
+    `,
+    `
+      <div class="audit-cell-stack">
+        <span>${escapeHtml(summary || "No extra runtime context")}</span>
+        <small>${escapeHtml(context.device_type || context.channel || context.platform || "-")}</small>
+      </div>
+    `
+  ];
+}
+
+function auditOutcomeTone(result = "") {
+  switch (String(result || "").toLowerCase()) {
+    case "eligible":
+      return "success";
+    case "suppressed":
+    case "deferred":
+      return "warning";
+    case "ineligible":
+      return "neutral";
+    default:
+      return "info";
+  }
+}
+
+function auditEventTone(type = "") {
+  switch (String(type || "").toLowerCase()) {
+    case "conversion":
+      return "success";
+    case "skipped":
+      return "warning";
+    case "impression":
+      return "info";
+    case "exposure":
+      return "accent";
+    default:
+      return "neutral";
+  }
+}
+
+function setActiveAuditRow(index = 0) {
+  document.querySelectorAll("#audit-list [data-audit-index]").forEach((element) => {
+    element.classList.toggle("selected", Number(element.dataset.auditIndex) === Number(index));
+  });
 }
 
 function renderAuditInsights(audit) {
@@ -6552,14 +7268,26 @@ function topCount(values) {
 
 function renderAuditDetail(entry) {
   if (!entry) {
+    if (auditDetailMeta) {
+      auditDetailMeta.textContent = "No decision audit entry selected yet.";
+    }
     auditDetailSummary.innerHTML = [
       statusItem("Decision", "-"),
       statusItem("Result", "-"),
       statusItem("Profile", "-"),
       statusItem("Matched", "-")
     ].join("");
+    if (auditDetailExtra) auditDetailExtra.innerHTML = auditEmptyState("No decision audit entries match the current filters.", "Try clearing a preset, widening the date range, or removing a campaign filter.");
     auditDetail.textContent = "No audit entries match the current filters";
     return;
+  }
+  if (auditDetailMeta) {
+    auditDetailMeta.innerHTML = [
+      detailMetaChip(entry.evaluated_at ? formatTime(entry.evaluated_at) : "Latest"),
+      detailMetaChip(entry.inputs?.request_source || entry.context?.request_source || "runtime"),
+      detailMetaChip(entry.inputs?.surface || entry.surface || "No surface"),
+      detailMetaChip(entry.request_id || "request")
+    ].join("");
   }
   auditDetailSummary.innerHTML = [
     statusItem("Decision", entry.decision_key || "-"),
@@ -6567,19 +7295,32 @@ function renderAuditDetail(entry) {
     statusItem("Profile", entry.profile_key || "-"),
     statusItem("Matched", entry.matched_rules?.join(", ") || "fallback")
   ].join("");
+  if (auditDetailExtra) auditDetailExtra.innerHTML = renderAuditDecisionPanels(entry);
   auditDetail.textContent = JSON.stringify(entry, null, 2);
 }
 
 function renderClientEventAuditDetail(entry) {
   if (!entry) {
+    if (auditDetailMeta) {
+      auditDetailMeta.textContent = "No client feedback event selected yet.";
+    }
     auditDetailSummary.innerHTML = [
       statusItem("Type", "-"),
       statusItem("Rule", "-"),
       statusItem("Profile", "-"),
       statusItem("Object", "-")
     ].join("");
+    if (auditDetailExtra) auditDetailExtra.innerHTML = auditEmptyState("No client feedback events match the current filters.", "Try a broader date range or switch from skipped-only to all feedback events.");
     auditDetail.textContent = "No client feedback events match the current filters";
     return;
+  }
+  if (auditDetailMeta) {
+    auditDetailMeta.innerHTML = [
+      detailMetaChip(entry.occurred_at ? formatTime(entry.occurred_at) : "Latest"),
+      detailMetaChip(entry.context?.request_source || "client feedback"),
+      detailMetaChip(entry.surface || "No surface"),
+      detailMetaChip(entry.event_id || entry.message_id || entry.variant_key || "event")
+    ].join("");
   }
   auditDetailSummary.innerHTML = [
     statusItem("Type", entry.event_type || "-"),
@@ -6587,7 +7328,369 @@ function renderClientEventAuditDetail(entry) {
     statusItem("Profile", entry.profile_key || "-"),
     statusItem("Object", entry.variant_key || entry.message_id || entry.surface || "-")
   ].join("");
+  if (auditDetailExtra) auditDetailExtra.innerHTML = renderClientEventAuditPanels(entry);
   auditDetail.textContent = JSON.stringify(entry, null, 2);
+}
+
+function renderClientEventAuditPanels(entry = {}) {
+  const details = entry.event && typeof entry.event === "object" ? entry.event : {};
+  const context = entry.context && typeof entry.context === "object" ? entry.context : {};
+  const runtime = clientEventRuntimeProfile(entry);
+  const survey = clientEventSurveySummary(entry);
+  const contextEntries = Object.entries(context).slice(0, 8);
+  const detailEntries = Object.entries(details)
+    .filter(([key]) => !["graph_experiments", "survey_answers", "answers"].includes(key))
+    .slice(0, 8);
+  return `
+    <section class="audit-detail-sections">
+      <div class="eval-output-summary audit-output-summary">
+        <div class="eval-output-card primary">
+          <span>Event</span>
+          <strong>${escapeHtml(messageDeliveryDiagnosticLabel(entry.event_type || "-"))}</strong>
+          <small>${escapeHtml(entry.decision_key || "client event")}</small>
+        </div>
+        <div class="eval-output-card">
+          <span>Message</span>
+          <strong>${escapeHtml(entry.message_id || "-")}</strong>
+          <small>${escapeHtml(entry.surface || "No surface")}</small>
+        </div>
+        <div class="eval-output-card">
+          <span>Variant</span>
+          <strong>${escapeHtml(entry.variant_key || "-")}</strong>
+          <small>${escapeHtml(entry.rule_version != null ? `rule v${entry.rule_version}` : "rule version unknown")}</small>
+        </div>
+        <div class="eval-output-card">
+          <span>Occurred</span>
+          <strong>${escapeHtml(entry.occurred_at ? formatTime(entry.occurred_at) : "-")}</strong>
+          <small>${escapeHtml(context.request_source || "client feedback")}</small>
+        </div>
+        ${detailEntries.map(([key, value]) => `
+          <div class="eval-output-card">
+            <span>${escapeHtml(key)}</span>
+            <strong>${escapeHtml(formatDecisionValue(value))}</strong>
+          </div>
+        `).join("")}
+      </div>
+      <div class="eval-runtime-summary audit-runtime-summary">
+        ${evaluationRuntimeCardHtml(runtime, clientEventRuntimeIssues(entry, runtime))}
+      </div>
+      ${clientEventDiagnosticPanel(entry)}
+      ${survey ? clientEventSurveyPanel(survey) : ""}
+      ${(contextEntries.length || detailEntries.length) ? `
+        <section class="audit-assignment-panel">
+          <div class="audit-assignment-head">
+            <strong>Event context</strong>
+            <span>${escapeHtml(`${formatNumber(contextEntries.length + detailEntries.length)} fields shown`)}</span>
+          </div>
+          <div class="profile-enrichment-grid">
+            ${contextEntries.map(([key, value]) => profileEnrichmentMetric(`context.${key}`, formatDecisionValue(value), "request context")).join("")}
+            ${detailEntries
+              .filter(([key]) => !contextEntries.some(([contextKey]) => contextKey === key))
+              .map(([key, value]) => profileEnrichmentMetric(`event.${key}`, formatDecisionValue(value), "event payload"))
+              .join("")}
+          </div>
+        </section>
+      ` : ""}
+      ${graphExperimentAuditPanel(entry)}
+    </section>
+  `;
+}
+
+function clientEventRuntimeProfile(entry = {}) {
+  const details = entry.event && typeof entry.event === "object" ? entry.event : {};
+  const context = entry.context && typeof entry.context === "object" ? entry.context : {};
+  const reason = details.reason || context.skipped_reason || "";
+  const platform = context.platform || context.device_type || context.channel || "web";
+  const placement = context.placement || entry.surface || "";
+  const application = context.application || context.app_id || context.application_id || "";
+  return {
+    hasMessage: Boolean(entry.message_id),
+    surfaceCandidate: false,
+    platform,
+    application,
+    placement,
+    surface: entry.surface || "",
+    templateType: details.template || details.template_type || "",
+    enrichmentSource: context.profile_enrichment ? profileEnrichmentStatusLabel(context.profile_enrichment) : "Client event only",
+    missingRequired: [],
+    suppressionReason: reason,
+    availability: {},
+    level: entry.event_type === "skipped" || reason ? "warning" : "ok",
+    summary: clientEventRuntimeSummary(entry, reason)
+  };
+}
+
+function clientEventRuntimeSummary(entry = {}, reason = "") {
+  if ((entry.event_type || "") === "skipped") {
+    return reason
+      ? `The SDK reported a skipped delivery because ${reason.replace(/_/g, " ")}.`
+      : "The SDK reported a skipped delivery for this placement.";
+  }
+  if ((entry.event_type || "") === "conversion") return "Client conversion feedback was received for this decision.";
+  if ((entry.event_type || "") === "impression") return "The client reported that the message was rendered to the user.";
+  if ((entry.event_type || "") === "exposure") return "The client reported an experiment or decision exposure.";
+  return "Client-side feedback was received for this decision.";
+}
+
+function clientEventRuntimeIssues(entry = {}, runtime = {}) {
+  const issues = [];
+  const details = entry.event && typeof entry.event === "object" ? entry.event : {};
+  const reason = details.reason || entry.context?.skipped_reason || "";
+  if ((entry.event_type || "") === "skipped") {
+    issues.push({
+      level: "warn",
+      title: "Skipped delivery",
+      detail: messageDeliveryDiagnosticHint(reason, details.category || "runtime")
+    });
+  }
+  if ((entry.event_type || "") === "conversion" && !entry.message_id && !entry.variant_key) {
+    issues.push({
+      level: "info",
+      title: "Unattributed conversion",
+      detail: "This conversion was not tied to a message_id or variant_key, so downstream reporting may group it only at the decision level."
+    });
+  }
+  if (!runtime.application && /mobile|ios|android|app/i.test(String(runtime.platform || ""))) {
+    issues.push({
+      level: "warn",
+      title: "Application missing",
+      detail: "Mobile feedback is easier to debug when the app identifier is included in client event context."
+    });
+  }
+  if (!entry.surface) {
+    issues.push({
+      level: "info",
+      title: "Surface missing",
+      detail: "Include surface in the client feedback payload so placement reporting can stay precise."
+    });
+  }
+  if (!issues.length) {
+    issues.push({
+      level: "ok",
+      title: "Feedback captured",
+      detail: "This event includes enough client metadata to support audit, attribution, and delivery diagnostics."
+    });
+  }
+  return issues;
+}
+
+function clientEventDiagnosticPanel(entry = {}) {
+  const details = entry.event && typeof entry.event === "object" ? entry.event : {};
+  const reason = details.reason || entry.context?.skipped_reason || "";
+  const category = details.category || "";
+  const fields = [
+    ["Event ID", entry.event_id || "-"],
+    ["Reason", reason ? messageDeliveryDiagnosticLabel(reason) : "-"],
+    ["Hint", reason ? messageDeliveryDiagnosticHint(reason, category) : "No delivery issue reported."],
+    ["Survey value", details.survey_value || details.value || "-"]
+  ];
+  return `
+    <section class="audit-assignment-panel">
+      <div class="audit-assignment-head">
+        <strong>Feedback diagnostics</strong>
+        <span>${escapeHtml(entry.event_type || "event")}</span>
+      </div>
+      <div class="profile-enrichment-grid">
+        ${fields.map(([label, value]) => profileEnrichmentMetric(label, value, label === "Hint" ? "SDK or app runtime guidance" : "client feedback")).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function clientEventSurveySummary(entry = {}) {
+  const details = entry.event && typeof entry.event === "object" ? entry.event : {};
+  const answers = Array.isArray(details.answers)
+    ? details.answers
+    : Array.isArray(details.survey_answers)
+      ? details.survey_answers
+      : [];
+  const hasSurvey = details.type === "survey_response" || details.survey_question || details.survey_value || answers.length;
+  if (!hasSurvey) return null;
+  return {
+    question: details.survey_question_label || details.survey_question || "Survey response",
+    value: details.survey_value || details.value || "",
+    answers
+  };
+}
+
+function clientEventSurveyPanel(survey) {
+  return `
+    <section class="audit-assignment-panel">
+      <div class="audit-assignment-head">
+        <strong>Survey response</strong>
+        <span>${escapeHtml(survey.answers.length ? `${formatNumber(survey.answers.length)} answers` : "single value")}</span>
+      </div>
+      <div class="profile-enrichment-grid">
+        ${profileEnrichmentMetric("Question", survey.question || "-", "client survey payload")}
+        ${profileEnrichmentMetric("Value", survey.value || "-", "captured response")}
+        ${survey.answers.slice(0, 6).map((answer, index) => profileEnrichmentMetric(
+          answer.question || answer.label || `Answer ${index + 1}`,
+          formatDecisionValue(answer.value ?? answer.answer ?? ""),
+          answer.type || "survey answer"
+        )).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderAuditDecisionPanels(entry = {}) {
+  const outputEntries = Object.entries(entry.outputs || {}).filter(([key]) => key !== "message").slice(0, 8);
+  const errors = Array.isArray(entry.errors) ? entry.errors : [];
+  const surface = entry.inputs?.surface || entry.surface || entry.outputs?.message?.surface || entry.outputs?.message?.rendering?.surface || "-";
+  const requestSource = entry.inputs?.request_source || "-";
+  const profileStatus = entry.profile_cache?.status || entry.inputs?.profile_enrichment || "";
+  const runtime = auditDecisionRuntimeProfile(entry);
+  const trace = Array.isArray(entry.trace) ? entry.trace : [];
+  return `
+    <section class="audit-detail-sections">
+      <div class="eval-output-summary audit-output-summary">
+        <div class="eval-output-card primary">
+          <span>Result</span>
+          <strong>${escapeHtml(entry.result || "-")}</strong>
+          <small>${escapeHtml(entry.decision_key || "decision")}</small>
+        </div>
+        <div class="eval-output-card">
+          <span>Version</span>
+          <strong>${escapeHtml(entry.rule_version != null ? String(entry.rule_version) : "-")}</strong>
+          <small>${escapeHtml(entry.evaluated_at ? formatTime(entry.evaluated_at) : "latest")}</small>
+        </div>
+        <div class="eval-output-card">
+          <span>Source</span>
+          <strong>${escapeHtml(requestSource)}</strong>
+          <small>${escapeHtml(surface)}</small>
+        </div>
+        <div class="eval-output-card ${errors.length ? "warning" : ""}">
+          <span>Profile enrichment</span>
+          <strong>${escapeHtml(profileEnrichmentStatusLabel(profileStatus) || "Not used")}</strong>
+          <small>${escapeHtml(entry.profile_cache?.reason || `${formatNumber(entry.inputs?.attribute_keys?.length || 0)} attributes in request`)}</small>
+        </div>
+        ${outputEntries.map(([key, value]) => `
+          <div class="eval-output-card">
+            <span>${escapeHtml(key)}</span>
+            <strong>${escapeHtml(formatDecisionValue(value))}</strong>
+          </div>
+        `).join("")}
+        ${entry.outputs?.message?.id || entry.outputs?.message_id ? `
+          <div class="eval-output-card">
+            <span>Message</span>
+            <strong>${escapeHtml(entry.outputs?.message?.id || entry.outputs?.message_id || "-")}</strong>
+            <small>${escapeHtml(entry.outputs?.message?.rendering?.template_type || entry.outputs?.message?.content?.template_type || "in-app")}</small>
+          </div>
+        ` : ""}
+        ${errors.length ? `
+          <div class="eval-output-card warning">
+            <span>Errors</span>
+            <strong>${escapeHtml(errors.join(", "))}</strong>
+          </div>
+        ` : ""}
+      </div>
+      <div class="eval-runtime-summary audit-runtime-summary">
+        ${evaluationRuntimeCardHtml(runtime)}
+      </div>
+      ${entry.profile_cache ? renderProfileEnrichmentCard(entry.profile_cache) : auditProfileEnrichmentCard(entry)}
+      ${trace.length ? `
+        <div class="trace-card audit-trace-card">
+          <div class="trace-card-header">
+            <strong>Decision path</strong>
+            <span class="trace-badge">${escapeHtml(`${trace.length} checks`)}</span>
+          </div>
+          <div class="trace-path">
+            ${trace.map(traceStepHtml).join("")}
+          </div>
+        </div>
+      ` : ""}
+      ${graphExperimentAuditPanel(entry)}
+    </section>
+  `;
+}
+
+function auditDecisionRuntimeProfile(entry = {}) {
+  const surface = entry.inputs?.surface || entry.surface || entry.outputs?.message?.surface || "";
+  const request = {
+    surface,
+    context: {
+      surface,
+      placement: surface,
+      request_source: entry.inputs?.request_source || "",
+      application: entry.outputs?.message?.rendering?.application?.key || entry.outputs?.message?.rendering?.application?.id || ""
+    }
+  };
+  const withFallbackCache = entry.profile_cache
+    ? entry
+    : {
+        ...entry,
+        profile_cache: entry.inputs?.profile_enrichment
+          ? { status: entry.inputs.profile_enrichment, hit: false, diagnostics: { source: profileEnrichmentStatusLabel(entry.inputs.profile_enrichment) } }
+          : null
+      };
+  return evaluationRuntimeProfile(withFallbackCache, request);
+}
+
+function auditProfileEnrichmentCard(entry = {}) {
+  if (!entry.inputs?.profile_enrichment) return "";
+  return `
+    <div class="profile-enrichment-card neutral">
+      <div class="profile-enrichment-head">
+        <div>
+          <span>Profile enrichment</span>
+          <strong>${escapeHtml(profileEnrichmentStatusLabel(entry.inputs.profile_enrichment))}</strong>
+        </div>
+        <em>${escapeHtml(entry.inputs.profile_enrichment)}</em>
+      </div>
+      <div class="profile-enrichment-grid">
+        ${profileEnrichmentMetric("Attributes sent", formatNumber(entry.inputs?.attribute_keys?.length || 0), (entry.inputs?.attribute_keys || []).slice(0, 6).join(", ") || "No attributes")}
+        ${profileEnrichmentMetric("Segments sent", formatNumber(entry.inputs?.segment_keys?.length || 0), (entry.inputs?.segment_keys || []).slice(0, 6).join(", ") || "No segments")}
+        ${profileEnrichmentMetric("Context sent", formatNumber(entry.inputs?.context_keys?.length || 0), (entry.inputs?.context_keys || []).slice(0, 6).join(", ") || "No context")}
+        ${profileEnrichmentMetric("Surface", entry.inputs?.surface || "-", entry.inputs?.request_source || "audit")}
+      </div>
+    </div>
+  `;
+}
+
+function graphExperimentAuditPanel(entry = {}) {
+  const assignments = graphExperimentAssignmentsFromEntry(entry);
+  if (!assignments.length) return "";
+  return `
+    <section class="audit-assignment-panel">
+      <div class="audit-assignment-head">
+        <strong>Graph experiments</strong>
+        <span>${escapeHtml(formatNumber(assignments.length))} assignment${assignments.length === 1 ? "" : "s"}</span>
+      </div>
+      <div class="audit-assignment-list">
+        ${assignments.map(graphExperimentAuditRow).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function graphExperimentAssignmentsFromEntry(entry = {}) {
+  const sources = [
+    entry.graph_experiments,
+    entry.event?.graph_experiments,
+    entry.event_payload?.graph_experiments,
+    entry.event?.event_payload?.graph_experiments
+  ];
+  const assignments = sources.find((items) => Array.isArray(items) && items.length) || [];
+  const primary = entry.experiment || entry.event?.experiment || entry.event_payload?.experiment || null;
+  const rows = [...assignments];
+  if (primary?.graph_node_id && !rows.some((item) => item.graph_node_id === primary.graph_node_id && item.variant_key === primary.variant_key)) {
+    rows.unshift(primary);
+  }
+  return rows;
+}
+
+function graphExperimentAuditRow(assignment = {}) {
+  const label = assignment.experiment_key || assignment.key || assignment.graph_node_id || "graph split";
+  return `
+    <div class="audit-assignment-row">
+      <div>
+        <strong>${escapeHtml(label)}</strong>
+        <span>${escapeHtml([assignment.graph_node_id, assignment.bucket ? `bucket ${assignment.bucket}` : ""].filter(Boolean).join(" · ") || "graph node")}</span>
+      </div>
+      <mark>${escapeHtml(assignment.variant_key || "-")}</mark>
+      <small>${escapeHtml([assignment.strategy, assignment.reason, assignment.holdout ? "holdout" : ""].filter(Boolean).join(" · ") || "assigned")}</small>
+    </div>
+  `;
 }
 
 function filterAuditByCampaign(items) {
@@ -6601,6 +7704,8 @@ function clearAuditFilters() {
   });
   document.querySelector("#audit-limit").value = "100";
   initializeAuditDefaults();
+  renderAuditPresetChips();
+  renderAuditFilterSummary();
   loadAudit();
 }
 
@@ -6641,6 +7746,8 @@ function renderAuditModeFields() {
   document.querySelectorAll("[data-audit-client-field]").forEach((element) => {
     element.hidden = !clientMode;
   });
+  renderAuditPresetChips();
+  renderAuditFilterSummary();
 }
 
 function initializeAuditDefaults() {
@@ -6651,6 +7758,142 @@ function initializeAuditDefaults() {
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   if (!fromInput.value) fromInput.value = toLocalDateTimeInputValue(sevenDaysAgo);
   if (!toInput.value) toInput.value = toLocalDateTimeInputValue(now);
+  syncAuditRangeButtons();
+}
+
+function applyAuditRange(days = 7) {
+  const toInput = document.querySelector("#audit-to");
+  const fromInput = document.querySelector("#audit-from");
+  if (!fromInput || !toInput) return;
+  const now = new Date();
+  const start = new Date(now.getTime() - Math.max(1, days) * 24 * 60 * 60 * 1000);
+  fromInput.value = toLocalDateTimeInputValue(start);
+  toInput.value = toLocalDateTimeInputValue(now);
+  syncAuditRangeButtons(days);
+  renderAuditFilterSummary();
+  loadAudit();
+}
+
+function syncAuditRangeButtons(activeDays = null) {
+  const fromValue = document.querySelector("#audit-from")?.value;
+  const toValue = document.querySelector("#audit-to")?.value;
+  let computedDays = activeDays;
+  if (computedDays == null && fromValue && toValue) {
+    const diffMs = new Date(toValue).getTime() - new Date(fromValue).getTime();
+    const days = Math.round(diffMs / (24 * 60 * 60 * 1000));
+    if ([1, 7, 30].includes(days)) computedDays = days;
+  }
+  document.querySelectorAll("[data-audit-range]").forEach((button) => {
+    button.classList.toggle("active", Number(button.dataset.auditRange || 0) === Number(computedDays || 0));
+  });
+}
+
+function renderAuditFilterSummary() {
+  if (!auditFilterSummary) return;
+  const mode = document.querySelector("#audit-mode")?.value === "client_events" ? "Client feedback" : "Decision audit";
+  const activeFields = [
+    "#audit-decision-key",
+    "#audit-campaign",
+    "#audit-profile-key",
+    "#audit-result",
+    "#audit-event-type",
+    "#audit-event-object",
+    "#audit-surface",
+    "#audit-matched-rule",
+    "#audit-search"
+  ].filter((selector) => {
+    const element = document.querySelector(selector);
+    return element && !element.closest("label")?.hidden && String(element.value || "").trim();
+  }).length;
+  const fromValue = document.querySelector("#audit-from")?.value;
+  const toValue = document.querySelector("#audit-to")?.value;
+  syncAuditRangeButtons();
+  const rangeLabel = fromValue && toValue
+    ? `${formatTime(new Date(fromValue).toISOString())} to ${formatTime(new Date(toValue).toISOString())}`
+    : "Open date range";
+  auditFilterSummary.textContent = `${mode} · ${activeFields} active filter${activeFields === 1 ? "" : "s"} · ${rangeLabel}`;
+}
+
+function renderAuditPresetChips() {
+  if (!auditPresetChips) return;
+  const mode = document.querySelector("#audit-mode")?.value === "client_events" ? "client_events" : "decisions";
+  const presets = mode === "client_events"
+    ? [
+        { id: "all", label: "All feedback" },
+        { id: "exposure", label: "Exposure" },
+        { id: "impression", label: "Impression" },
+        { id: "conversion", label: "Conversion" },
+        { id: "skipped", label: "Skipped" }
+      ]
+    : [
+        { id: "all", label: "All decisions" },
+        { id: "eligible", label: "Eligible" },
+        { id: "ineligible", label: "Ineligible" },
+        { id: "fallback", label: "Fallback" },
+        { id: "issues", label: "Profile issues" }
+      ];
+  auditPresetChips.innerHTML = presets.map((preset) => `
+    <button
+      type="button"
+      class="${auditPresetIsActive(mode, preset.id) ? "active" : ""}"
+      data-audit-preset="${escapeHtml(preset.id)}"
+    >${escapeHtml(preset.label)}</button>
+  `).join("");
+  auditPresetChips.querySelectorAll("[data-audit-preset]").forEach((button) => {
+    button.addEventListener("click", () => applyAuditPreset(button.dataset.auditPreset || "all"));
+  });
+}
+
+function auditPresetIsActive(mode, preset) {
+  if (mode === "client_events") {
+    const eventType = document.querySelector("#audit-event-type")?.value.trim() || "";
+    if (preset === "all") return !eventType;
+    return eventType === preset;
+  }
+  const result = document.querySelector("#audit-result")?.value.trim().toLowerCase() || "";
+  const matched = document.querySelector("#audit-matched-rule")?.value.trim().toLowerCase() || "";
+  const search = document.querySelector("#audit-search")?.value.trim().toLowerCase() || "";
+  if (preset === "all") return !result && !matched && !search;
+  if (preset === "eligible") return result === "eligible";
+  if (preset === "ineligible") return result === "ineligible";
+  if (preset === "fallback") return matched === "fallback";
+  if (preset === "issues") return search.includes("missing attribute");
+  return false;
+}
+
+function applyAuditPreset(preset = "all") {
+  const mode = document.querySelector("#audit-mode")?.value === "client_events" ? "client_events" : "decisions";
+  if (mode === "client_events") {
+    const eventType = document.querySelector("#audit-event-type");
+    if (eventType) eventType.value = preset === "all" ? "" : preset;
+  } else {
+    const result = document.querySelector("#audit-result");
+    const matched = document.querySelector("#audit-matched-rule");
+    const search = document.querySelector("#audit-search");
+    if (result) result.value = "";
+    if (matched) matched.value = "";
+    if (search) search.value = "";
+    if (preset === "eligible" && result) result.value = "eligible";
+    if (preset === "ineligible" && result) result.value = "ineligible";
+    if (preset === "fallback" && matched) matched.value = "fallback";
+    if (preset === "issues" && search) search.value = "Missing attribute";
+  }
+  renderAuditPresetChips();
+  renderAuditFilterSummary();
+  loadAudit();
+}
+
+function detailMetaChip(value = "") {
+  return `<span class="audit-detail-chip">${escapeHtml(String(value || "-"))}</span>`;
+}
+
+function auditEmptyState(title, detail) {
+  return `
+    <div class="audit-empty-state">
+      <strong>${escapeHtml(title)}</strong>
+      <span>${escapeHtml(detail)}</span>
+    </div>
+  `;
 }
 
 function toLocalDateTimeInputValue(date) {
@@ -6795,7 +8038,7 @@ async function loadMessages() {
   }
 }
 
-function renderMessageList() {
+function renderMessageList(options = {}) {
   const target = document.querySelector("#message-list");
   if (!target) return;
   const search = document.querySelector("#message-filter-search")?.value.trim().toLowerCase() || "";
@@ -6825,10 +8068,26 @@ function renderMessageList() {
       (!surface || String(item.surface || "").toLowerCase().includes(surface)) &&
       (!campaign || campaignSearchText(item.metadata || {}).includes(campaign));
   });
-  target.innerHTML = header(["Preview", "Name", "Application", "Surface", "Campaign", "Status", "Updated", "Details", "Actions"]);
-  target.innerHTML += filtered.length
-    ? filtered.map((item) => messageCatalogRow(item)).join("")
-    : row(["No messages match the current filters", "", "", "", "", "", "", "", ""]);
+  const page = paginateInventory(filtered, "messages", { resetPage: options.resetPage });
+  target.innerHTML = `
+    <div class="inventory-toolbar">
+      ${messageInventorySummary(filtered)}
+      ${inventoryPagerMarkup("messages", page, "messages")}
+    </div>
+    <div class="inventory-header message-list-header">
+      <div>Message</div>
+      <div>Application</div>
+      <div>Surface</div>
+      <div>Campaign</div>
+      <div>Status</div>
+      <div>Updated</div>
+      <div>Actions</div>
+    </div>
+    <div class="inventory-list">
+      ${filtered.length ? page.items.map((item) => messageCatalogRow(item)).join("") : inventoryEmptyState("No messages match the current filters", "Broaden search, status, template, application, surface, or campaign filters.")}
+    </div>
+  `;
+  bindInventoryPager(target, "messages", renderMessageList);
 }
 
 function handleMessageListClick(event) {
@@ -6838,8 +8097,31 @@ function handleMessageListClick(event) {
     runMessageListAction(action.dataset.messageAction, action.dataset.messageActionId);
     return;
   }
-  const rowElement = event.target.closest(".row[data-message-id]");
+  const rowElement = event.target.closest("[data-message-id]");
   if (rowElement) loadMessage(rowElement.dataset.messageId, cachedMessages);
+}
+
+function messageInventorySummary(filtered) {
+  const active = filtered.filter((item) => (item.status || "active") === "active").length;
+  const templates = new Set(filtered.map((item) => messageTemplateType(item.default_content?.template_type || item.metadata?.template_type || "banner"))).size;
+  const applications = new Set(filtered.map((item) => applicationValue(item.metadata || {})).filter(Boolean)).size;
+  return `
+    <div class="inventory-summary">
+      <span>${formatNumber(filtered.length)} of ${formatNumber(cachedMessages.length)} messages</span>
+      <span>${formatNumber(active)} active</span>
+      <span>${formatNumber(templates)} templates</span>
+      <span>${formatNumber(applications)} applications</span>
+    </div>
+  `;
+}
+
+function inventoryEmptyState(title, detail) {
+  return `
+    <div class="inventory-empty">
+      <strong>${escapeHtml(title)}</strong>
+      <span>${escapeHtml(detail)}</span>
+    </div>
+  `;
 }
 
 function messageCatalogRow(item) {
@@ -6856,17 +8138,23 @@ function messageCatalogRow(item) {
     expiresAt ? `Expires ${formatTime(expiresAt)}` : ""
   ].filter(Boolean).join(" · ");
   const actions = `<button type="button" data-message-action="move_campaign" data-message-action-id="${escapeHtml(item.id)}">Move</button>`;
-  return row([
-    messageCatalogPreview(item),
-    item.name,
-    applicationValue(item.metadata) || "-",
-    item.surface || "-",
-    campaignValue(item.metadata) || folderValue(item.metadata) || "-",
-    item.status || "active",
-    item.updated_at ? formatTime(item.updated_at) : "-",
-    `${title} · ${details}`,
-    actions
-  ], { messageId: item.id, rawColumns: [0, 8] });
+  return `
+    <div class="inventory-row message-inventory-row actionable" data-message-id="${escapeHtml(item.id)}">
+      <div class="message-inventory-main">
+        ${messageCatalogPreview(item)}
+        <div class="inventory-main">
+          <strong>${escapeHtml(item.name || title)}</strong>
+          <small>${escapeHtml(details)}</small>
+        </div>
+      </div>
+      <div class="inventory-muted">${escapeHtml(applicationValue(item.metadata) || "-")}</div>
+      <div class="inventory-muted">${escapeHtml(item.surface || "-")}</div>
+      <div class="inventory-muted">${escapeHtml(campaignValue(item.metadata) || folderValue(item.metadata) || "Unassigned")}</div>
+      <div><span class="inventory-chip ${escapeHtml(item.status || "active")}">${escapeHtml(item.status || "active")}</span></div>
+      <div class="inventory-muted">${escapeHtml(item.updated_at ? formatTime(item.updated_at) : "-")}</div>
+      <div class="inventory-actions">${actions}</div>
+    </div>
+  `;
 }
 
 async function runMessageListAction(action, id) {
@@ -7051,6 +8339,11 @@ function renderMessageApplicationOptions() {
 function openMessageDetail() {
   if (!messageDetailPanel) return;
   messageDetailPanel.hidden = false;
+  activateMessageWorkspaceTab("content");
+  activateMessageContentTab("content_json");
+  activateMessageMetaTab("versions");
+  setMessageAdvancedOpen("message-advanced-panel", false);
+  setMessageAdvancedOpen("message-metadata-advanced-panel", false);
   messageDetailPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
@@ -7198,6 +8491,17 @@ function renderMessagePerformance(metrics, options = {}) {
   const recent = (metrics.recent_events || []).slice(0, 5);
   const surveyResponses = messageSurveyResponseSummary(metrics.recent_events || []);
   const deliveryDiagnostics = messageDeliveryDiagnostics(metrics.recent_events || []);
+  const skipInsights = messageSkipInsights(metrics.recent_events || []);
+  const ruleLinks = messageBacklinks(options.messageId || "");
+  const impactRules = messageSkipImpactRules(metrics.recent_events || [], ruleLinks);
+  const impactCampaigns = messageSkipImpactCampaigns(impactRules);
+  const trend = messageSkipTrend(metrics.recent_events || []);
+  const mobileHealth = messageMobileRenderingHealth(metrics.recent_events || [], {
+    application: document.querySelector("#message-application")?.value.trim() || "",
+    placement: document.querySelector("#message-placement")?.value.trim() || "",
+    templateType: document.querySelector("#message-template-type")?.value || "banner",
+    targetDevices: document.querySelector("#message-target-devices")?.value || "any"
+  });
   const linkedExperiments = messageLinkedExperiments(options.messageId, options.experiments || cachedExperiments || []);
   messagePerformanceSummary.innerHTML = `
     <div class="message-performance-head">
@@ -7214,7 +8518,10 @@ function renderMessagePerformance(metrics, options = {}) {
       ${statusItem("Dismissals", formatNumber(dismissals))}
       ${statusItem("Skipped", formatNumber(skipped))}
     </div>
-    ${messageDeliveryDiagnosticsPanel(deliveryDiagnostics)}
+    ${messageDeliveryDiagnosticsPanel(deliveryDiagnostics, skipInsights)}
+    ${messageSkipBreakdownPanel(skipInsights)}
+    ${messageSkipImpactPanel({ rules: impactRules, campaigns: impactCampaigns, trend })}
+    ${messageMobileRenderingPanel(mobileHealth)}
     <div class="message-performance-grid">
       ${messagePerformanceList("Top surfaces", surfaces, "surface")}
       ${messagePerformanceList("Recent profiles", profiles, "profile")}
@@ -7275,12 +8582,16 @@ function messageDeliveryDiagnostics(events = []) {
     .slice(0, 6);
 }
 
-function messageDeliveryDiagnosticsPanel(items = []) {
+function messageDeliveryDiagnosticsPanel(items = [], insights = null) {
+  const skipped = Number(insights?.total || 0);
+  const summary = skipped
+    ? `${formatNumber(skipped)} skipped event${skipped === 1 ? "" : "s"} in the recent sample.`
+    : "No skipped delivery events recorded for this message.";
   return `
     <div class="message-delivery-diagnostics">
       <div class="message-performance-head">
         <strong>Delivery diagnostics</strong>
-        <span>${items.length ? "Recent SDK skip reasons and likely fixes." : "No skipped delivery events recorded for this message."}</span>
+        <span>${items.length ? `${summary} Recent SDK skip reasons and likely fixes.` : summary}</span>
       </div>
       ${items.length ? `
         <div class="message-delivery-diagnostic-list">
@@ -7296,14 +8607,45 @@ function messageDeliveryDiagnosticsPanel(items = []) {
 }
 
 function messageDeliveryDiagnosticRow(item = {}) {
+  const actions = messageDeliveryDiagnosticActions(item.reason);
   return `
     <div class="message-delivery-diagnostic-row">
       <span>${escapeHtml(messageDeliveryDiagnosticLabel(item.reason))}</span>
       <strong>${escapeHtml(formatNumber(item.count || 0))}</strong>
       <em>${escapeHtml(`${formatNumber(item.profiles || 0)} profiles${item.latest_at ? ` · latest ${formatTime(item.latest_at)}` : ""}`)}</em>
       <small>${escapeHtml(messageDeliveryDiagnosticHint(item.reason, item.category))}</small>
+      ${actions.length ? `
+        <div class="message-delivery-diagnostic-actions">
+          ${actions.map((action) => `
+            <button type="button" data-message-performance-action="focus-field" data-focus-target="${escapeHtml(action.target)}" data-focus-label="${escapeHtml(action.label)}">
+              ${escapeHtml(action.label)}
+            </button>
+          `).join("")}
+        </div>
+      ` : ""}
     </div>
   `;
+}
+
+function messageDeliveryDiagnosticActions(reason = "") {
+  const map = {
+    consent: [{ label: "Consent", target: "#message-consent-category" }],
+    device_targeting: [{ label: "Devices", target: "#message-target-devices" }, { label: "Placement", target: "#message-placement" }],
+    platform_mismatch: [{ label: "Application", target: "#message-application" }, { label: "Template", target: "#message-template-type" }],
+    application_mismatch: [{ label: "Application", target: "#message-application" }],
+    placement_mismatch: [{ label: "Placement", target: "#message-placement" }, { label: "Surface", target: "#message-surface" }],
+    template_unsupported: [{ label: "Template", target: "#message-template-type" }],
+    mobile_sdk_version: [{ label: "Application", target: "#message-application" }, { label: "Template", target: "#message-template-type" }],
+    url_targeting: [{ label: "Placement", target: "#message-placement" }, { label: "Surface", target: "#message-surface" }],
+    sdk_condition: [{ label: "Trigger", target: "#message-trigger-type" }, { label: "Placement", target: "#message-placement" }],
+    display_policy: [{ label: "Display", target: "#message-display-mode" }, { label: "Frequency", target: "#message-max-impressions" }],
+    local_frequency_cap: [{ label: "Frequency", target: "#message-max-impressions" }, { label: "TTL", target: "#message-frequency-ttl" }],
+    dismiss_cooldown: [{ label: "Dismiss", target: "#message-dismiss-behavior" }, { label: "TTL", target: "#message-frequency-ttl" }],
+    local_dismiss_cooldown: [{ label: "Dismiss", target: "#message-dismiss-behavior" }, { label: "TTL", target: "#message-frequency-ttl" }],
+    dismiss_suppression: [{ label: "Dismiss", target: "#message-dismiss-behavior" }],
+    local_dismiss_suppression: [{ label: "Dismiss", target: "#message-dismiss-behavior" }]
+  };
+  return map[reason] || [];
 }
 
 function messageDeliveryDiagnosticLabel(reason = "") {
@@ -7316,11 +8658,19 @@ function messageDeliveryDiagnosticHint(reason = "", category = "") {
   const hints = {
     consent: "Check consent category and SDK consentProvider values.",
     device_targeting: "Check target devices against the visitor viewport.",
+    platform_mismatch: "Check whether the message was requested from the expected web or mobile runtime.",
+    application_mismatch: "Check that the app/site identifier sent by the SDK matches the message application setting.",
+    placement_mismatch: "Check that the requested placement and configured message placement describe the same slot.",
+    template_unsupported: "The current client runtime does not support this template yet; switch template or upgrade the SDK.",
+    mobile_sdk_version: "Check the mobile SDK version and feature support for this template or trigger type.",
     url_targeting: "Check Show on URL rules and page URL.",
     sdk_condition: "Check named SDK condition wiring on the website.",
     display_policy: "The visitor has already seen this message in the configured display window.",
+    local_frequency_cap: "The client suppressed this message locally because the display window or cap is still active.",
     dismiss_cooldown: "The visitor dismissed this message and is still inside cooldown.",
-    dismiss_suppression: "The visitor dismissed this message and suppression is active."
+    local_dismiss_cooldown: "The client still has a local dismiss cooldown recorded for this message.",
+    dismiss_suppression: "The visitor dismissed this message and suppression is active.",
+    local_dismiss_suppression: "The client has a local dismiss suppression record for this message."
   };
   return hints[reason] || (category === "frequency" ? "Check frequency, cooldown, and dismiss policy." : "Inspect SDK skipped event detail for this placement.");
 }
@@ -7338,6 +8688,468 @@ function messagePerformanceList(title, items, fallbackLabel) {
         `).join("") : `<span><b>No data</b><em>Waiting for client events</em></span>`}
       </div>
     </section>
+  `;
+}
+
+function messageSkipInsights(events = []) {
+  const skippedEvents = (events || []).filter((event) => (event.event_type || event.type) === "skipped");
+  return {
+    total: skippedEvents.length,
+    placements: messageSkipContextBreakdown(skippedEvents, (event) => event.event?.placement || event.context?.placement || event.surface || "", "placement"),
+    applications: messageSkipContextBreakdown(skippedEvents, (event) => event.event?.application || event.context?.application || event.context?.app_id || event.context?.application_id || "", "application"),
+    recent: skippedEvents
+      .slice()
+      .sort((left, right) => String(right.occurred_at || "").localeCompare(String(left.occurred_at || "")))
+      .slice(0, 5)
+      .map((event) => ({
+        reason: event.event?.reason || event.context?.skipped_reason || "skipped",
+        placement: event.event?.placement || event.context?.placement || event.surface || "-",
+        application: event.event?.application || event.context?.application || event.context?.app_id || event.context?.application_id || "-",
+        profile: event.profile_key || "-",
+        occurred_at: event.occurred_at || ""
+      }))
+  };
+}
+
+function messageSkipContextBreakdown(events = [], resolver, fallbackLabel = "context") {
+  const groups = new Map();
+  for (const event of events || []) {
+    const key = String(resolver(event) || "").trim() || "(empty)";
+    const current = groups.get(key) || { key, count: 0, profiles: new Set(), latest_at: "", label: fallbackLabel };
+    current.count += 1;
+    if (event.profile_key) current.profiles.add(event.profile_key);
+    if (event.occurred_at && (!current.latest_at || event.occurred_at > current.latest_at)) current.latest_at = event.occurred_at;
+    groups.set(key, current);
+  }
+  return [...groups.values()]
+    .map((item) => ({ ...item, profiles: item.profiles.size }))
+    .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key))
+    .slice(0, 5);
+}
+
+function messageSkipBreakdownPanel(insights = {}) {
+  if (!Number(insights.total || 0)) return "";
+  return `
+    <div class="message-skip-breakdown">
+      <div class="message-performance-head">
+        <strong>Delivery friction</strong>
+        <span>Where skipped delivery is clustering across placements, applications, and recent profiles.</span>
+      </div>
+      <div class="message-performance-grid">
+        ${messageSkipBreakdownList("Skipped placements", insights.placements || [], "placement")}
+        ${messageSkipBreakdownList("Skipped applications", insights.applications || [], "application")}
+      </div>
+      <div class="message-performance-events">
+        <strong>Recent skipped events</strong>
+        ${insights.recent?.length ? insights.recent.map(messageSkippedEventRow).join("") : `<span>No skipped events in the recent sample.</span>`}
+      </div>
+    </div>
+  `;
+}
+
+function messageSkipImpactRules(events = [], ruleLinks = []) {
+  const linksByRule = new Map((ruleLinks || []).map((link) => [link.rule_key, link]));
+  const grouped = new Map();
+  for (const event of events || []) {
+    if ((event.event_type || event.type) !== "skipped") continue;
+    const decisionKey = String(event.decision_key || "").trim();
+    if (!decisionKey) continue;
+    const link = linksByRule.get(decisionKey);
+    const current = grouped.get(decisionKey) || {
+      decision_key: decisionKey,
+      rule_name: link?.rule_name || decisionKey,
+      rule_type: link?.rule_type || "decision",
+      campaign: campaignLabelForMetadata(ruleMetadataForDecision(decisionKey) || {}) || "Unassigned",
+      count: 0,
+      profiles: new Set(),
+      latest_at: ""
+    };
+    current.count += 1;
+    if (event.profile_key) current.profiles.add(event.profile_key);
+    if (event.occurred_at && (!current.latest_at || event.occurred_at > current.latest_at)) current.latest_at = event.occurred_at;
+    grouped.set(decisionKey, current);
+  }
+  return [...grouped.values()]
+    .map((item) => ({ ...item, profiles: item.profiles.size }))
+    .sort((left, right) => right.count - left.count || left.rule_name.localeCompare(right.rule_name))
+    .slice(0, 6);
+}
+
+function messageSkipImpactCampaigns(items = []) {
+  const grouped = new Map();
+  for (const item of items || []) {
+    const key = String(item.campaign || "Unassigned");
+    const current = grouped.get(key) || { campaign: key, count: 0, rules: 0, profiles: 0, latest_at: "" };
+    current.count += Number(item.count || 0);
+    current.rules += 1;
+    current.profiles += Number(item.profiles || 0);
+    if (item.latest_at && (!current.latest_at || item.latest_at > current.latest_at)) current.latest_at = item.latest_at;
+    grouped.set(key, current);
+  }
+  return [...grouped.values()]
+    .sort((left, right) => right.count - left.count || left.campaign.localeCompare(right.campaign))
+    .slice(0, 5);
+}
+
+function messageSkipTrend(events = []) {
+  const rows = [...(events || [])]
+    .filter((event) => event.occurred_at)
+    .sort((left, right) => String(left.occurred_at).localeCompare(String(right.occurred_at)));
+  if (!rows.length) return [];
+  const first = new Date(rows[0].occurred_at);
+  const last = new Date(rows.at(-1).occurred_at);
+  const spanHours = Math.max(1, Math.round((last.getTime() - first.getTime()) / (60 * 60 * 1000)));
+  const bucketHours = spanHours > 72 ? 24 : spanHours > 18 ? 6 : 1;
+  const bucketMs = bucketHours * 60 * 60 * 1000;
+  const buckets = new Map();
+  for (const event of rows) {
+    const time = new Date(event.occurred_at).getTime();
+    const bucketTime = Math.floor(time / bucketMs) * bucketMs;
+    const key = new Date(bucketTime).toISOString();
+    const current = buckets.get(key) || { bucket: key, skipped: 0, delivered: 0, total: 0 };
+    const type = event.event_type || event.type || "";
+    if (type === "skipped") current.skipped += 1;
+    if (type === "exposure" || type === "impression") current.delivered += 1;
+    current.total += 1;
+    buckets.set(key, current);
+  }
+  return [...buckets.values()]
+    .sort((left, right) => left.bucket.localeCompare(right.bucket))
+    .slice(-8)
+    .map((item) => ({
+      ...item,
+      skip_rate: rate(item.skipped, Math.max(item.skipped + item.delivered, 1))
+    }));
+}
+
+function messageSkipImpactPanel({ rules = [], campaigns = [], trend = [] } = {}) {
+  if (!rules.length && !campaigns.length && !trend.length) return "";
+  return `
+    <div class="message-skip-impact">
+      <div class="message-performance-head">
+        <strong>Business impact</strong>
+        <span>Which linked rules and campaigns are losing delivery in the recent sample.</span>
+      </div>
+      ${messageSkipTrendPanel(trend)}
+      <div class="message-performance-grid">
+        ${messageSkipRulesPanel(rules)}
+        ${messageSkipCampaignsPanel(campaigns)}
+      </div>
+    </div>
+  `;
+}
+
+function messageMobileRenderingHealth(events = [], context = {}) {
+  const rows = (events || []).filter((event) => isMobileMessageEvent(event, context));
+  const skipped = rows.filter((event) => (event.event_type || event.type) === "skipped");
+  const exposures = rows.filter((event) => ["exposure", "impression"].includes(event.event_type || event.type));
+  const total = rows.length;
+  const appRows = groupMobileEvents(rows, mobileEventApplicationLabel);
+  const platformRows = groupMobileEvents(rows, mobileEventPlatformLabel);
+  const versionRows = groupMobileEvents(rows, (event) => event.context?.app_version || event.event?.app_version || "", 4);
+  const issueRows = messageMobileIssueRows(skipped);
+  return {
+    enabled: context.targetDevices === "mobile" || context.targetDevices === "tablet" || rows.length > 0 || looksMobileApplication(context.application),
+    total,
+    skipped: skipped.length,
+    delivered: exposures.length,
+    skipRate: rate(skipped.length, Math.max(skipped.length + exposures.length, 1)),
+    apps: appRows,
+    platforms: platformRows,
+    versions: versionRows,
+    issues: issueRows
+  };
+}
+
+function isMobileMessageEvent(event = {}, context = {}) {
+  const platform = mobileEventPlatformLabel(event);
+  const application = mobileEventApplicationLabel(event);
+  const version = String(event.context?.app_version || event.event?.app_version || "").trim();
+  return platform !== "(empty)" || application !== "(empty)" || Boolean(version) || context.targetDevices === "mobile" || context.targetDevices === "tablet" || looksMobileApplication(context.application);
+}
+
+function looksMobileApplication(value = "") {
+  return /(ios|android|mobile|app|native|react[\s_-]?native|swiftui|compose)/i.test(String(value || ""));
+}
+
+function mobileEventApplicationLabel(event = {}) {
+  return String(event.context?.application || event.context?.app_id || event.context?.application_id || event.event?.application || "").trim() || "(empty)";
+}
+
+function mobileEventPlatformLabel(event = {}) {
+  return String(event.context?.platform || event.context?.device_type || event.event?.platform || "").trim() || "(empty)";
+}
+
+function groupMobileEvents(events = [], resolver, limit = 5) {
+  const grouped = new Map();
+  for (const event of events || []) {
+    const key = String(resolver(event) || "").trim() || "(empty)";
+    const current = grouped.get(key) || { key, total: 0, skipped: 0, delivered: 0, latest_at: "" };
+    current.total += 1;
+    const type = event.event_type || event.type || "";
+    if (type === "skipped") current.skipped += 1;
+    if (type === "exposure" || type === "impression") current.delivered += 1;
+    if (event.occurred_at && (!current.latest_at || event.occurred_at > current.latest_at)) current.latest_at = event.occurred_at;
+    grouped.set(key, current);
+  }
+  return [...grouped.values()]
+    .map((item) => ({ ...item, skip_rate: rate(item.skipped, Math.max(item.skipped + item.delivered, 1)) }))
+    .sort((left, right) => right.total - left.total || left.key.localeCompare(right.key))
+    .slice(0, limit);
+}
+
+function messageMobileIssueRows(skippedEvents = []) {
+  const grouped = new Map();
+  for (const event of skippedEvents || []) {
+    const details = event.event || {};
+    const reason = String(details.reason || event.context?.skipped_reason || "skipped");
+    const bucket = mobileIssueBucket(reason);
+    const current = grouped.get(bucket.id) || { ...bucket, count: 0, latest_at: "" };
+    current.count += 1;
+    if (event.occurred_at && (!current.latest_at || event.occurred_at > current.latest_at)) current.latest_at = event.occurred_at;
+    grouped.set(bucket.id, current);
+  }
+  return [...grouped.values()].sort((left, right) => right.count - left.count || left.title.localeCompare(right.title)).slice(0, 6);
+}
+
+function mobileIssueBucket(reason = "") {
+  const id = String(reason || "skipped");
+  if (["platform_mismatch", "application_mismatch", "placement_mismatch"].includes(id)) {
+    return { id: "runtime_contract", title: "Runtime contract mismatch", detail: "App/platform/placement context does not match the message contract.", actions: ["#message-application", "#message-placement"] };
+  }
+  if (["mobile_sdk_version", "template_unsupported"].includes(id)) {
+    return { id: "sdk_compatibility", title: "SDK compatibility", detail: "The current app runtime may not support this template or message capability.", actions: ["#message-template-type", "#message-application"] };
+  }
+  if (["local_frequency_cap", "display_policy", "dismiss_cooldown", "local_dismiss_cooldown", "dismiss_suppression", "local_dismiss_suppression"].includes(id)) {
+    return { id: "local_suppression", title: "Local suppression state", detail: "The device or browser already has active display, dismiss, or cooldown state for this message.", actions: ["#message-display-mode", "#message-frequency-ttl", "#message-dismiss-behavior"] };
+  }
+  return { id, title: messageDeliveryDiagnosticLabel(id), detail: messageDeliveryDiagnosticHint(id, "runtime"), actions: [] };
+}
+
+function messageMobileRenderingPanel(report = {}) {
+  if (!report.enabled) return "";
+  return `
+    <div class="message-mobile-rendering">
+      <div class="message-performance-head">
+        <strong>Mobile rendering health</strong>
+        <span>${escapeHtml(report.total ? "Recent app-side delivery and suppression signals from mobile-like traffic." : "No mobile app feedback recorded for this message yet.")}</span>
+      </div>
+      <div class="message-performance-kpis">
+        ${statusItem("Mobile events", formatNumber(report.total || 0))}
+        ${statusItem("Delivered", formatNumber(report.delivered || 0))}
+        ${statusItem("Skipped", formatNumber(report.skipped || 0))}
+        ${statusItem("Skip rate", formatPercent(report.skipRate || 0))}
+      </div>
+      ${report.total ? `
+        <div class="message-performance-grid">
+          ${messageMobileGroupPanel("Applications", report.apps || [], "application")}
+          ${messageMobileGroupPanel("Platforms", report.platforms || [], "platform")}
+        </div>
+        ${messageMobileVersionPanel(report.versions || [])}
+        ${messageMobileIssuePanel(report.issues || [])}
+      ` : `
+        <div class="message-delivery-empty">
+          Once native or hybrid app clients send platform, application, app_version, and skipped feedback, DEE will summarize runtime health here.
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function messageMobileGroupPanel(title, items = [], fallbackLabel = "group") {
+  return `
+    <section>
+      <strong>${escapeHtml(title)}</strong>
+      <div class="message-impact-list">
+        ${items.length ? items.map((item) => `
+          <div class="message-impact-row">
+            <div>
+              <b>${escapeHtml(item.key === "(empty)" ? `No ${fallbackLabel}` : item.key)}</b>
+              <em>${escapeHtml(`${formatNumber(item.total || 0)} events · ${formatNumber(item.skipped || 0)} skipped · ${formatPercent(item.skip_rate || 0)} skip rate${item.latest_at ? ` · latest ${formatTime(item.latest_at)}` : ""}`)}</em>
+            </div>
+            <span class="message-impact-muted">${escapeHtml(item.skip_rate >= 0.3 ? "Review" : "Healthy")}</span>
+          </div>
+        `).join("") : `<span><b>No data</b><em>Waiting for app-side message feedback</em></span>`}
+      </div>
+    </section>
+  `;
+}
+
+function messageMobileVersionPanel(items = []) {
+  if (!items.length) return "";
+  return `
+    <section class="message-mobile-version-panel">
+      <div class="message-performance-head">
+        <strong>App versions</strong>
+        <span>Most recent app versions seen for this message.</span>
+      </div>
+      <div class="message-impact-list">
+        ${items.map((item) => `
+          <div class="message-impact-row">
+            <div>
+              <b>${escapeHtml(item.key === "(empty)" ? "Version missing" : item.key)}</b>
+              <em>${escapeHtml(`${formatNumber(item.total || 0)} events · ${formatNumber(item.skipped || 0)} skipped · ${formatPercent(item.skip_rate || 0)} skip rate${item.latest_at ? ` · latest ${formatTime(item.latest_at)}` : ""}`)}</em>
+            </div>
+            <span class="message-impact-muted">${escapeHtml(item.skip_rate >= 0.3 ? "Review" : "Healthy")}</span>
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function messageMobileIssuePanel(items = []) {
+  return `
+    <section class="message-mobile-issue-panel">
+      <div class="message-performance-head">
+        <strong>Mobile issue classes</strong>
+        <span>${escapeHtml(items.length ? "Top mobile-specific failure buckets in the recent sample." : "No mobile-specific skipped issue classes recorded.")}</span>
+      </div>
+      ${items.length ? `
+        <div class="message-delivery-diagnostic-list">
+          ${items.map((item) => `
+            <div class="message-delivery-diagnostic-row">
+              <span>${escapeHtml(item.title)}</span>
+              <strong>${escapeHtml(formatNumber(item.count || 0))}</strong>
+              <em>${escapeHtml(item.latest_at ? `latest ${formatTime(item.latest_at)}` : "recent sample")}</em>
+              <small>${escapeHtml(item.detail)}</small>
+              ${item.actions?.length ? `
+                <div class="message-delivery-diagnostic-actions">
+                  ${item.actions.map((target) => `
+                    <button type="button" data-message-performance-action="focus-field" data-focus-target="${escapeHtml(target)}" data-focus-label="${escapeHtml(messageMobileActionLabel(target))}">
+                      ${escapeHtml(messageMobileActionLabel(target))}
+                    </button>
+                  `).join("")}
+                </div>
+              ` : ""}
+            </div>
+          `).join("")}
+        </div>
+      ` : `
+        <div class="message-delivery-empty">Runtime mismatch, unsupported template, and local suppression patterns will appear here once app clients report skipped delivery reasons.</div>
+      `}
+    </section>
+  `;
+}
+
+function messageMobileActionLabel(target = "") {
+  const labels = {
+    "#message-application": "Application",
+    "#message-placement": "Placement",
+    "#message-template-type": "Template",
+    "#message-display-mode": "Display",
+    "#message-frequency-ttl": "TTL",
+    "#message-dismiss-behavior": "Dismiss"
+  };
+  return labels[target] || "Setting";
+}
+
+function messageSkipTrendPanel(trend = []) {
+  if (!trend.length) return "";
+  const maxSkipped = Math.max(1, ...trend.map((item) => Number(item.skipped || 0)));
+  return `
+    <section class="message-skip-trend">
+      <div class="message-performance-head">
+        <strong>Skipped trend</strong>
+        <span>Recent sample by ${escapeHtml(trendBucketLabel(trend))}. Bars show skipped volume; labels show skip rate.</span>
+      </div>
+      <div class="message-skip-trend-bars">
+        ${trend.map((item) => `
+          <div class="message-skip-trend-bar" title="${escapeHtml(`${formatTime(item.bucket)} · ${formatNumber(item.skipped)} skipped · ${formatPercent(item.skip_rate)} skip rate`)}">
+            <div class="message-skip-trend-track">
+              <i style="height:${Math.max(8, Math.round((Number(item.skipped || 0) / maxSkipped) * 100))}%"></i>
+            </div>
+            <strong>${escapeHtml(formatPercent(item.skip_rate))}</strong>
+            <span>${escapeHtml(formatTrendBucketTime(item.bucket, trend))}</span>
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function trendBucketLabel(trend = []) {
+  if (trend.length < 2) return "bucket";
+  const first = new Date(trend[0].bucket);
+  const second = new Date(trend[1].bucket);
+  const hours = Math.round((second.getTime() - first.getTime()) / (60 * 60 * 1000));
+  if (hours >= 24) return "day";
+  if (hours >= 6) return "6 hours";
+  return "hour";
+}
+
+function formatTrendBucketTime(value, trend = []) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  const label = trendBucketLabel(trend);
+  if (label === "day") return date.toLocaleDateString([], { month: "short", day: "numeric" });
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function messageSkipRulesPanel(items = []) {
+  return `
+    <section>
+      <strong>Impacted rules</strong>
+      <div class="message-impact-list">
+        ${items.length ? items.map((item) => `
+          <div class="message-impact-row">
+            <div>
+              <b>${escapeHtml(item.rule_name || item.decision_key)}</b>
+              <em>${escapeHtml(`${item.campaign} · ${formatNumber(item.count || 0)} skipped · ${formatNumber(item.profiles || 0)} profiles${item.latest_at ? ` · latest ${formatTime(item.latest_at)}` : ""}`)}</em>
+            </div>
+            <button type="button" data-message-performance-action="open-rule" data-decision-key="${escapeHtml(item.decision_key)}">Open rule</button>
+          </div>
+        `).join("") : `<span><b>No linked rules</b><em>Skipped events have not been attributed to a linked rule yet.</em></span>`}
+      </div>
+    </section>
+  `;
+}
+
+function messageSkipCampaignsPanel(items = []) {
+  return `
+    <section>
+      <strong>Impacted campaigns</strong>
+      <div class="message-impact-list">
+        ${items.length ? items.map((item) => `
+          <div class="message-impact-row">
+            <div>
+              <b>${escapeHtml(item.campaign || "Unassigned")}</b>
+              <em>${escapeHtml(`${formatNumber(item.count || 0)} skipped · ${formatNumber(item.rules || 0)} rules · ${formatNumber(item.profiles || 0)} profiles${item.latest_at ? ` · latest ${formatTime(item.latest_at)}` : ""}`)}</em>
+            </div>
+            ${item.campaign && item.campaign !== "Unassigned"
+              ? `<button type="button" data-message-performance-action="open-campaign" data-campaign-name="${escapeHtml(item.campaign)}">Open campaign</button>`
+              : `<span class="message-impact-muted">No campaign</span>`}
+          </div>
+        `).join("") : `<span><b>No campaign impact</b><em>Linked rules in the recent skipped sample are not grouped into campaigns yet.</em></span>`}
+      </div>
+    </section>
+  `;
+}
+
+function messageSkipBreakdownList(title, items = [], fallbackLabel = "item") {
+  return `
+    <section>
+      <strong>${escapeHtml(title)}</strong>
+      <div>
+        ${items.length ? items.map((item) => `
+          <span>
+            <b>${escapeHtml(item.key === "(empty)" ? `No ${fallbackLabel}` : item.key)}</b>
+            <em>${escapeHtml(`${formatNumber(item.count || 0)} skipped · ${formatNumber(item.profiles || 0)} profiles${item.latest_at ? ` · latest ${formatTime(item.latest_at)}` : ""}`)}</em>
+          </span>
+        `).join("") : `<span><b>No data</b><em>Waiting for skipped delivery events</em></span>`}
+      </div>
+    </section>
+  `;
+}
+
+function messageSkippedEventRow(event = {}) {
+  const reason = messageDeliveryDiagnosticLabel(event.reason || "skipped");
+  const summary = [event.placement, event.application, event.profile, event.occurred_at ? formatTime(event.occurred_at) : ""].filter(Boolean).join(" · ");
+  return `
+    <span>
+      <b>${escapeHtml(reason)}</b>
+      <em>${escapeHtml(summary || "-")}</em>
+    </span>
   `;
 }
 
@@ -7531,16 +9343,32 @@ async function loadMessageVersions(id = selectedMessageId) {
           version.author || "-",
           version.status || "-",
           (version.content_keys || []).join(", ") || "-",
-          `<button type="button" data-message-version-diff="${escapeHtml(version.version)}">Diff</button>`
+          [
+            `<button type="button" data-message-version-preview="${escapeHtml(version.version)}">Preview</button>`,
+            `<button type="button" data-message-version-diff="${escapeHtml(version.version)}">Diff</button>`,
+            `<button type="button" data-message-version-restore="${escapeHtml(version.version)}">Restore</button>`
+          ].join("")
         ], { messageVersion: version.version, rawColumns: [5] })).join("")
       : row(["No versions recorded yet", "", "", "", "", ""]);
     messageVersionList.querySelectorAll("[data-message-version]").forEach((element) => {
       element.addEventListener("click", () => loadMessageVersionDetail(id, element.dataset.messageVersion));
     });
+    messageVersionList.querySelectorAll("[data-message-version-preview]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        loadMessageVersionDetail(id, button.dataset.messageVersionPreview);
+      });
+    });
     messageVersionList.querySelectorAll("[data-message-version-diff]").forEach((button) => {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         loadMessageVersionDiff(id, button.dataset.messageVersionDiff);
+      });
+    });
+    messageVersionList.querySelectorAll("[data-message-version-restore]").forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        await restoreMessageVersion(id, button.dataset.messageVersionRestore);
       });
     });
   } catch (error) {
@@ -7551,8 +9379,10 @@ async function loadMessageVersions(id = selectedMessageId) {
 async function loadMessageVersionDetail(id, version) {
   try {
     const body = await api(`/v1/messages/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}`);
-    messageOutput.textContent = JSON.stringify(body.message, null, 2);
-    document.querySelector('[data-message-drawer-tab="output"]')?.click();
+    renderMessageVersionSnapshot(body.message);
+    messageOutput.textContent = `Previewing saved message version v${version}.`;
+    activateMessageWorkspaceTab("metadata");
+    activateMessageMetaTab("versions");
   } catch (error) {
     messageOutput.textContent = error.message;
   }
@@ -7585,6 +9415,35 @@ function renderMessageVersionVisualDiff(beforeMessage, currentMessage, diff = []
     <div class="message-version-preview-grid">
       ${messageVersionPreviewCard("Before", beforeMessage, before, changedPaths)}
       ${messageVersionPreviewCard("Current", currentMessage, current, changedPaths)}
+    </div>
+  `;
+}
+
+function renderMessageVersionSnapshot(message) {
+  if (!messageVersionPreview) return;
+  const payload = messagePreviewPayloadFromMessage(message);
+  const contentKeys = Object.keys(message?.default_content || {});
+  messageVersionPreview.innerHTML = `
+    <div class="message-version-preview-head">
+      <strong>Saved snapshot</strong>
+      <span>${escapeHtml(`v${message?.version || "-"} · ${message?.updated_at ? formatTime(message.updated_at) : "-"} · ${message?.author || "-"}`)}</span>
+    </div>
+    <div class="message-version-preview-grid single">
+      <div class="message-version-preview-card">
+        <div class="message-version-preview-label">
+          <strong>${escapeHtml(message?.name || payload.title || "Saved message")}</strong>
+          <span>${escapeHtml([message?.status || "active", message?.surface || "-", payload.templateType].join(" · "))}</span>
+        </div>
+        <div class="message-preview-card"
+          data-template="${escapeHtml(payload.templateType)}"
+          data-archived="${message?.status === "archived" ? "true" : "false"}"
+          data-has-cta="${payload.ctas.length ? "true" : "false"}">
+          ${messagePreviewCardInnerHtml(payload)}
+        </div>
+        <div class="message-version-badges">
+          ${contentKeys.length ? contentKeys.map((key) => `<span>${escapeHtml(key)}</span>`).join("") : `<span>No content fields</span>`}
+        </div>
+      </div>
     </div>
   `;
 }
@@ -7653,6 +9512,23 @@ function formatMessageVersionDiff(body = {}) {
     }
   }
   return lines.join("\n");
+}
+
+async function restoreMessageVersion(id, version) {
+  const ok = window.confirm(`Restore message version v${version} as the current draft? This will create a new latest version from that snapshot.`);
+  if (!ok) return;
+  try {
+    const response = await api(`/v1/messages/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}/restore`, {
+      method: "POST"
+    });
+    await loadMessages();
+    loadMessage(response.message.id, cachedMessages);
+    activateMessageWorkspaceTab("metadata");
+    activateMessageMetaTab("versions");
+    messageOutput.textContent = `Restored v${version} as the latest editable message version.`;
+  } catch (error) {
+    messageOutput.textContent = error.message;
+  }
 }
 
 function formatDiffValue(value) {
@@ -7807,7 +9683,7 @@ function defaultSurveyQuestion() {
 
 function normalizeSurveyQuestion(question = {}) {
   const type = surveyQuestionType(question.type || (Array.isArray(question.options) && question.options.length ? "choice" : "text"));
-  return {
+  const normalized = {
     id: question.id || uniqueSurveyId("question"),
     label: question.label || question.title || question.question || "Question",
     type,
@@ -7815,6 +9691,16 @@ function normalizeSurveyQuestion(question = {}) {
     tracking_name: question.tracking_name || question.trackingName || question.id || "survey_response",
     options: type === "text" ? [] : surveyOptionsForQuestion(question, type)
   };
+  const showIf = normalizeSurveyShowIf(question.show_if || question.showIf);
+  if (showIf) normalized.show_if = showIf;
+  return normalized;
+}
+
+function normalizeSurveyShowIf(showIf = null) {
+  if (!showIf || typeof showIf !== "object") return null;
+  const question = String(showIf.question || showIf.question_id || showIf.questionId || "").trim();
+  const value = String(showIf.value || showIf.equals || showIf.answer || "").trim();
+  return question && value ? { question, value } : null;
 }
 
 function surveyOptionsForQuestion(question = {}, type = "choice") {
@@ -7841,6 +9727,7 @@ function surveyQuestionType(value) {
 
 function surveyQuestionEditor(question, index, total) {
   const optionsDisabled = question.type === "text";
+  const showIf = normalizeSurveyShowIf(question.show_if) || {};
   return `
     <section class="message-survey-question" data-survey-question-index="${escapeHtml(index)}" data-question-id="${escapeHtml(question.id)}">
       <div class="message-survey-question-head">
@@ -7872,6 +9759,17 @@ function surveyQuestionEditor(question, index, total) {
           <input type="checkbox" data-survey-question-field="required" ${question.required ? "checked" : ""} />
           Required
         </label>
+      </div>
+      <div class="message-survey-question-grid">
+        <label>
+          Show when question ID
+          <input value="${escapeHtml(showIf.question || "")}" data-survey-question-field="show_if_question" placeholder="${index === 0 ? "Always shown" : "question id"}" />
+        </label>
+        <label>
+          Has answer value
+          <input value="${escapeHtml(showIf.value || "")}" data-survey-question-field="show_if_value" placeholder="yes, high, 5..." />
+        </label>
+        <p class="message-survey-branch-hint">Leave empty to show this question immediately. Use this for follow-up questions that depend on a previous answer.</p>
       </div>
       <div class="message-survey-options" data-options-disabled="${optionsDisabled ? "true" : "false"}">
         <div class="message-survey-options-head">
@@ -7944,6 +9842,11 @@ function collectSurveyQuestionsFromBuilder() {
       tracking_name: questionElement.querySelector('[data-survey-question-field="tracking_name"]')?.value.trim() || "survey_response",
       options: []
     };
+    const showIf = normalizeSurveyShowIf({
+      question: questionElement.querySelector('[data-survey-question-field="show_if_question"]')?.value,
+      value: questionElement.querySelector('[data-survey-question-field="show_if_value"]')?.value
+    });
+    if (showIf) question.show_if = showIf;
     if (type !== "text") {
       question.options = [...questionElement.querySelectorAll(".message-survey-option")].map((optionElement) => {
         const label = optionElement.querySelector('[data-survey-option-field="label"]')?.value.trim() || "Option";
@@ -8086,8 +9989,57 @@ function messageDismissBehavior(value) {
   return ["suppress", "cooldown", "ignore"].includes(value) ? value : "suppress";
 }
 
+function activateMessageWorkspaceTab(tabId = "content") {
+  document.querySelectorAll("[data-message-workspace-tab]").forEach((button) => {
+    const active = button.dataset.messageWorkspaceTab === tabId;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  document.querySelectorAll("[data-message-workspace-panel]").forEach((panel) => {
+    const active = panel.dataset.messageWorkspacePanel === tabId;
+    panel.classList.toggle("active", active);
+    panel.hidden = !active;
+  });
+}
+
+function activateMessageContentTab(tabId = "content_json") {
+  document.querySelectorAll("[data-message-content-tab]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.messageContentTab === tabId);
+  });
+  document.querySelectorAll("[data-message-content-panel]").forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.messageContentPanel === tabId);
+  });
+}
+
+function activateMessageMetaTab(tabId = "metadata_json") {
+  if (tabId === "metadata_json" && document.querySelector("#message-metadata-advanced-panel")?.hidden) {
+    setMessageAdvancedOpen("message-metadata-advanced-panel", true);
+  }
+  document.querySelectorAll("[data-message-meta-tab]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.messageMetaTab === tabId);
+  });
+  document.querySelectorAll("[data-message-meta-panel]").forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.messageMetaPanel === tabId);
+  });
+}
+
+function setMessageAdvancedOpen(targetId = "message-advanced-panel", open = false) {
+  const panel = document.querySelector(`#${cssEscape(targetId)}`);
+  document.querySelectorAll("[data-message-advanced-toggle]").forEach((button) => {
+    const defaultTarget = button.dataset.messageAdvancedTarget || "message-advanced-panel";
+    if (defaultTarget !== targetId) return;
+    button.setAttribute("aria-expanded", open ? "true" : "false");
+    button.textContent = open ? "Hide advanced" : "Show advanced";
+    button.classList.toggle("active", open);
+  });
+  if (panel) panel.hidden = !open;
+}
+
 function formatActiveMessageJson() {
-  const activePanel = document.querySelector(".message-bottom-drawer .drawer-panel.active");
+  if (document.querySelector("#message-advanced-panel")?.hidden) {
+    setMessageAdvancedOpen("message-advanced-panel", true);
+  }
+  const activePanel = document.querySelector('[data-message-workspace-panel].active [data-message-content-panel].active, [data-message-workspace-panel].active [data-message-meta-panel].active');
   const textarea = activePanel?.querySelector("textarea");
   if (!textarea) {
     messageOutput.textContent = "Select a JSON tab to format";
@@ -8262,6 +10214,7 @@ function renderMessagePreview() {
   const dismissBehavior = messageDismissBehavior(document.querySelector("#message-dismiss-behavior").value);
   const expiresAt = document.querySelector("#message-expires-at").value;
   const startsAt = document.querySelector("#message-starts-at").value;
+  const previewDevice = activeMessagePreviewDevice();
   const ctas = [
     {
       label: renderPersonalizedText(raw.primaryCtaLabel, sample),
@@ -8292,6 +10245,8 @@ function renderMessagePreview() {
     triggerType,
     maxImpressions,
     targetDevices,
+    application,
+    previewDevice,
     consentCategory,
     dismissBehavior,
     tokens: messageTokenStats()
@@ -8301,10 +10256,21 @@ function renderMessagePreview() {
   messagePreview.dataset.archived = status === "archived" ? "true" : "false";
   messagePreview.dataset.template = templateType;
   messagePreview.innerHTML = messagePreviewCardInnerHtml({ templateType, placement, surface, title, body, footer, imageUrl, ctas, content: parseJsonSafe(document.querySelector("#message-content").value || "{}") });
+  const runtime = messageRuntimeProfile({
+    templateType,
+    placement,
+    surface,
+    application,
+    targetDevices,
+    triggerType,
+    previewDevice,
+    content: parseJsonSafe(document.querySelector("#message-content").value || "{}")
+  });
   messageInspectorSummary.innerHTML = [
     statusItem("Status", status),
     statusItem("Preview health", messagePreviewHealthLabel(health)),
     statusItem("Template", templateType),
+    statusItem("Runtime", messageDeliveryLabel(runtime.platform)),
     statusItem("Application", application),
     statusItem("Placement", placement || "-"),
     statusItem("Surface", surface),
@@ -8313,6 +10279,7 @@ function renderMessagePreview() {
     statusItem("Cooldown", ttl > 0 ? `${ttl}s` : "None"),
     statusItem("Max impressions", maxImpressions > 0 ? formatNumber(maxImpressions) : "No cap"),
     statusItem("Devices", messageDeliveryLabel(targetDevices)),
+    statusItem("Preview device", messageDeliveryLabel(previewDevice)),
     statusItem("Consent", consentCategory || "-"),
     statusItem("Dismiss", messageDeliveryLabel(dismissBehavior)),
     statusItem("Starts", startsAt ? formatTime(new Date(startsAt).toISOString()) : "Now"),
@@ -8322,6 +10289,7 @@ function renderMessagePreview() {
     statusItem("Tokens", messageTokenStats().tokens.length ? `${messageTokenStats().tokens.length} used` : "None")
   ].join("");
   renderMessagePreviewHealth(health);
+  renderMessageRuntimeContract(runtime);
   renderMessageReadiness({
     id: document.querySelector("#message-id").value.trim(),
     status,
@@ -8329,6 +10297,7 @@ function renderMessagePreview() {
     placement,
     surface,
     application,
+    runtime,
     campaign: document.querySelector("#message-campaign")?.value.trim() || "",
     folder: document.querySelector("#message-folder")?.value.trim() || "",
     startsAt,
@@ -8346,6 +10315,142 @@ function renderMessagePreview() {
   renderMessageExperimentIdeas({ templateType, placement, surface, raw, ctas });
   renderMessageRuleLinks();
   renderMessageAssetList();
+}
+
+function activeMessagePreviewDevice() {
+  return document.querySelector('[data-message-preview-device].active')?.dataset.messagePreviewDevice || messagePreview?.dataset.device || "desktop";
+}
+
+function messageRuntimeProfile({ templateType = "banner", placement = "", surface = "", application = "", targetDevices = "any", triggerType = "page_load", previewDevice = "desktop", content = {} } = {}) {
+  const normalizedTemplate = messageTemplateType(templateType);
+  const normalizedPlacement = String(placement || "").trim();
+  const normalizedSurface = String(surface || "").trim();
+  const normalizedApplication = String(application || "").trim();
+  const signals = [normalizedApplication, normalizedPlacement, normalizedSurface].join(" ").toLowerCase();
+  const mobileSignal = /(ios|android|mobile|app|native|react[\s_-]?native|swiftui|compose)/.test(signals);
+  const appScoped = Boolean(normalizedApplication);
+  const platform = mobileSignal || ["mobile", "tablet"].includes(targetDevices) ? "mobile" : "web";
+  const interruptive = ["modal", "toast", "alert"].includes(normalizedTemplate);
+  const collection = ["carousel", "recommendation"].includes(normalizedTemplate);
+  const survey = normalizedTemplate === "survey";
+  const htmlFragment = normalizedTemplate === "html_fragment";
+  const questions = surveyQuestionsForPreview(content);
+  let support = "ready";
+  if (platform === "mobile" && htmlFragment) support = "review";
+  if (platform === "mobile" && !appScoped) support = "review";
+  return {
+    platform,
+    appScoped,
+    support,
+    templateType: normalizedTemplate,
+    placement: normalizedPlacement,
+    surface: normalizedSurface,
+    application: normalizedApplication,
+    targetDevices,
+    previewDevice,
+    triggerType,
+    interruptive,
+    collection,
+    survey,
+    htmlFragment,
+    surveyQuestionCount: survey ? questions.length : 0,
+    contentType: survey ? "survey" : collection ? "collection" : htmlFragment ? "html" : "message",
+    likelySdk: platform === "mobile" ? "Native or hybrid app SDK" : "Web SDK / GTM"
+  };
+}
+
+function renderMessageRuntimeContract(runtime = {}) {
+  if (!messageRuntimeContract) return;
+  const notes = messageRuntimeNotes(runtime);
+  messageRuntimeContract.innerHTML = `
+    <div class="message-runtime-head ${escapeHtml(runtime.support || "ready")}">
+      <div>
+        <strong>Runtime Contract</strong>
+        <span>${escapeHtml(runtime.likelySdk || "Delivery contract inferred from application, placement, and template settings.")}</span>
+      </div>
+      <span>${escapeHtml(runtime.support === "ready" ? "Portable" : "Review")}</span>
+    </div>
+    <div class="message-runtime-metrics">
+      ${messageRuntimeMetric("Platform", messageDeliveryLabel(runtime.platform || "web"))}
+      ${messageRuntimeMetric("Content type", messageDeliveryLabel(runtime.contentType || "message"))}
+      ${messageRuntimeMetric("Application", runtime.application || "Any app / site")}
+      ${messageRuntimeMetric("Placement", runtime.placement || runtime.surface || "-")}
+      ${messageRuntimeMetric("Trigger", messageDeliveryLabel(runtime.triggerType || "page_load"))}
+      ${messageRuntimeMetric("Devices", messageDeliveryLabel(runtime.targetDevices || "any"))}
+    </div>
+    <div class="message-runtime-notes">
+      ${notes.map((item) => `
+        <div class="message-runtime-note ${escapeHtml(item.level)}">
+          <strong>${escapeHtml(item.title)}</strong>
+          <span>${escapeHtml(item.detail)}</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function messageRuntimeMetric(label, value) {
+  return `
+    <div>
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(String(value))}</strong>
+    </div>
+  `;
+}
+
+function messageRuntimeNotes(runtime = {}) {
+  const notes = [];
+  if (runtime.platform === "mobile") {
+    notes.push({
+      level: runtime.appScoped ? "ok" : "warn",
+      title: runtime.appScoped ? "Application scoped" : "Application missing",
+      detail: runtime.appScoped
+        ? "This message is tied to a named application, which is better for native app routing and analytics."
+        : "Add an application value so mobile delivery, diagnostics, and QA can stay scoped to one app."
+    });
+    notes.push({
+      level: runtime.placement ? "ok" : "warn",
+      title: runtime.placement ? "Placement defined" : "Placement underspecified",
+      detail: runtime.placement
+        ? "Native app teams can map this placement to a screen region or message slot."
+        : "Define a placement for app teams, for example home.hero, inbox.top, or cart.inline."
+    });
+    if (runtime.htmlFragment) {
+      notes.push({
+        level: "warn",
+        title: "HTML fragment is risky on mobile",
+        detail: "Guarded HTML can work in webviews, but native mobile usually needs structured templates like banner, card, modal, or survey."
+      });
+    }
+    if (runtime.survey && runtime.surveyQuestionCount > 3) {
+      notes.push({
+        level: "warn",
+        title: "Survey may feel long on mobile",
+        detail: `${formatNumber(runtime.surveyQuestionCount)} questions are configured. Consider 1 to 3 quick prompts for in-app completion.`
+      });
+    }
+    if (runtime.triggerType === "manual") {
+      notes.push({
+        level: "info",
+        title: "Manual trigger expected",
+        detail: "The app needs to call the SDK from the right screen or lifecycle event instead of relying on automatic page-load behavior."
+      });
+    }
+  } else {
+    notes.push({
+      level: "ok",
+      title: "Web delivery profile",
+      detail: "This configuration reads like a browser or GTM placement, which lines up with the current web SDK."
+    });
+  }
+  if (runtime.interruptive) {
+    notes.push({
+      level: "info",
+      title: "Interruptive format",
+      detail: "Modal, alert, and toast placements should usually have a frequency cap or dismiss cooldown."
+    });
+  }
+  return notes.slice(0, 4);
 }
 
 function messageDeliveryLabel(value) {
@@ -8573,6 +10678,36 @@ async function handleMessageOutputActionClick(event) {
   }
 }
 
+function handleMessagePerformanceActionClick(event) {
+  const ruleButton = event.target.closest("[data-message-performance-action='open-rule']");
+  if (ruleButton?.dataset.decisionKey) {
+    switchView("rules");
+    loadRule(ruleButton.dataset.decisionKey).then(() => openRuleDetail());
+    return;
+  }
+  const campaignButton = event.target.closest("[data-message-performance-action='open-campaign']");
+  if (campaignButton?.dataset.campaignName) {
+    selectedCampaignName = campaignButton.dataset.campaignName;
+    switchView("experiments");
+    renderExperiments();
+    experimentDetail?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  const button = event.target.closest("[data-message-performance-action='focus-field']");
+  if (!button) return;
+  focusMessageField(button.dataset.focusTarget || "", button.dataset.focusLabel || "");
+}
+
+function focusMessageField(selector = "", label = "") {
+  const field = selector ? document.querySelector(selector) : null;
+  if (!field) return;
+  field.scrollIntoView({ behavior: "smooth", block: "center" });
+  field.focus?.();
+  field.classList.add("field-pulse");
+  window.setTimeout(() => field.classList.remove("field-pulse"), 1800);
+  if (messageOutput && label) messageOutput.textContent = `Jumped to ${label} setting.`;
+}
+
 function renderMessageExperimentDraftSuccess(ruleSet = {}) {
   const decisionKey = ruleSet.decision_key || "";
   messageOutput.innerHTML = `
@@ -8588,7 +10723,8 @@ function renderMessageExperimentDraftSuccess(ruleSet = {}) {
       </div>
     </div>
   `;
-  document.querySelector('[data-message-drawer-tab="output"]')?.click();
+  activateMessageWorkspaceTab("metadata");
+  activateMessageMetaTab("output");
 }
 
 function buildMessageExperimentDraftPayload({ control, treatment }) {
@@ -8966,7 +11102,7 @@ async function cleanupMessageAssets() {
   }
 }
 
-function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, placement, surface, title, body, footer, imageUrl, ctas, displayMode, triggerType, maxImpressions, targetDevices, consentCategory, dismissBehavior, tokens }) {
+function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, placement, surface, title, body, footer, imageUrl, ctas, displayMode, triggerType, maxImpressions, targetDevices, application, previewDevice, consentCategory, dismissBehavior, tokens }) {
   const checks = [];
   const content = parseJsonSafe(document.querySelector("#message-content")?.value || "{}");
   const items = Array.isArray(content.items) ? content.items : Array.isArray(content.products) ? content.products : Array.isArray(content.recommendations) ? content.recommendations : [];
@@ -8974,6 +11110,7 @@ function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, 
   const questions = Array.isArray(content.questions) && content.questions.length
     ? content.questions
     : Array.isArray(survey.questions) ? survey.questions : [];
+  const runtime = messageRuntimeProfile({ templateType, placement, surface, application, targetDevices, triggerType, previewDevice, content });
   const now = Date.now();
   const starts = startsAt ? new Date(startsAt).getTime() : 0;
   const expires = expiresAt ? new Date(expiresAt).getTime() : 0;
@@ -9004,10 +11141,33 @@ function messagePreviewChecks({ status, startsAt, expiresAt, ttl, templateType, 
   if (templateType === "survey" && questions.some((question) => surveyQuestionType(question.type || "choice") !== "text" && !(Array.isArray(question.options) && question.options.length))) {
     checks.push({ level: "warn", title: "Survey option missing", detail: "Choice and rating questions need at least one answer option." });
   }
+  if (templateType === "survey" && questions.length) {
+    const questionIds = new Set(questions.map((question) => question.id || question.tracking_name || question.trackingName || "").filter(Boolean));
+    const invalidBranch = questions.find((question) => {
+      const showIf = normalizeSurveyShowIf(question.show_if || question.showIf);
+      return showIf && !questionIds.has(showIf.question);
+    });
+    if (invalidBranch) checks.push({ level: "warn", title: "Survey branch target missing", detail: `${invalidBranch.label || invalidBranch.id || "A follow-up question"} depends on a question ID that does not exist.` });
+  }
   if (templateType === "html_fragment") {
     const html = String(content.html || content.fragment || content.markup || "");
     if (!html) checks.push({ level: "warn", title: "No HTML fragment", detail: "Add html, fragment, or markup in Content JSON." });
     if (/<script|<iframe|<form|\son/i.test(html)) checks.push({ level: "warn", title: "HTML will be sanitized", detail: "The SDK removes scripts, iframes, forms, and inline event handlers." });
+  }
+  if (runtime.platform === "mobile" && !application) {
+    checks.push({ level: "warn", title: "Application missing", detail: "Native app delivery should usually be scoped to a named application." });
+  }
+  if (runtime.platform === "mobile" && runtime.htmlFragment) {
+    checks.push({ level: "warn", title: "HTML fragment for mobile", detail: "Prefer structured templates over raw HTML for native mobile delivery." });
+  }
+  if (runtime.platform === "mobile" && targetDevices === "desktop") {
+    checks.push({ level: "warn", title: "Platform/device mismatch", detail: "This looks mobile-scoped but the target device is desktop only." });
+  }
+  if (runtime.platform === "mobile" && previewDevice === "desktop") {
+    checks.push({ level: "info", title: "Preview on mobile", detail: "Switch the preview frame to tablet or mobile before final review." });
+  }
+  if (runtime.platform === "mobile" && templateType === "survey" && questions.length > 3) {
+    checks.push({ level: "warn", title: "Survey length", detail: "Keep in-app surveys short on mobile to avoid drop-off." });
   }
   if (!placement || surface === "-") checks.push({ level: "info", title: "Placement not fully defined", detail: "Surface and placement help client apps render this consistently." });
   if (tokens?.missing?.length) checks.push({ level: "warn", title: "Token sample missing", detail: `No sample value for ${tokens.missing.slice(0, 3).join(", ")}${tokens.missing.length > 3 ? "..." : ""}.` });
@@ -9051,6 +11211,7 @@ function renderMessageReadiness(context, health) {
     <div class="message-readiness-metrics">
       ${messageReadinessMetric("Rules", report.ruleLinks.length ? formatNumber(report.ruleLinks.length) : "0")}
       ${messageReadinessMetric("Campaign", report.campaignLabel || "Unassigned")}
+      ${messageReadinessMetric("Platform", messageDeliveryLabel(report.runtime.platform || "web"))}
       ${messageReadinessMetric("Conflicts", report.conflicts.length ? formatNumber(report.conflicts.length) : "0")}
     </div>
     <div class="message-readiness-list">
@@ -9077,6 +11238,7 @@ function messageReadinessReport(context, health) {
     level,
     ruleLinks,
     conflicts,
+    runtime: context.runtime || {},
     campaignLabel,
     items: items.slice(0, 8),
     summary: messageReadinessSummary({ level, items, ruleLinks, conflicts, campaignLabel })
@@ -9135,12 +11297,19 @@ function messageConflictReadinessItems(conflicts = []) {
 
 function messagePolicyReadinessItems(context) {
   const items = [];
+  const runtime = context.runtime || {};
   if (context.status !== "active") items.push({ level: "warn", title: "Not active", detail: "Only active messages should be used for live delivery." });
   if (["modal", "toast", "alert"].includes(context.templateType) && context.displayMode === "always" && !context.maxImpressions && !context.ttl) {
     items.push({ level: "warn", title: "Interruptive policy", detail: "Add a cap or cooldown before running this on high-traffic pages." });
   }
   if (context.targetDevices !== "any" && !context.placement) {
     items.push({ level: "warn", title: "Device targeting needs placement", detail: "Specify the placement where this device-specific message can render." });
+  }
+  if (runtime.platform === "mobile" && !context.application) {
+    items.push({ level: "warn", title: "Application not specified", detail: "Add an application so native app teams can map this message to one runtime and deployment channel." });
+  }
+  if (runtime.platform === "mobile" && runtime.htmlFragment) {
+    items.push({ level: "warn", title: "Native renderer mismatch", detail: "HTML fragments are better suited to web or webview placements than native in-app containers." });
   }
   return items;
 }
@@ -9367,10 +11536,13 @@ async function runEvaluate() {
     const request = readEvaluateInput();
     const validation = renderEvaluateValidation(request);
     if (validation.errors.length) throw new Error(`Fix request setup first: ${validation.errors.join("; ")}`);
-    const mode = document.querySelector("#eval-mode").value;
-    const path = mode === "draft"
-      ? `/v1/rule-sets/${encodeURIComponent(request.decision_key)}/test`
-      : "/v1/evaluate";
+    const requestKind = currentEvaluateRequestKind();
+    const mode = requestKind === "surface" ? "surface" : document.querySelector("#eval-mode").value;
+    const path = requestKind === "surface"
+      ? "/v1/client/surface"
+      : mode === "draft"
+        ? `/v1/rule-sets/${encodeURIComponent(request.decision_key)}/test`
+        : "/v1/evaluate";
     const body = await api(path, {
       method: "POST",
       body: JSON.stringify(request)
@@ -9391,6 +11563,7 @@ async function runEvaluate() {
 
 async function compareEvaluateVersions() {
   try {
+    if (isSurfaceEvaluateMode()) throw new Error("Compare draft is only available for single decision rule evaluation.");
     const request = readEvaluateInput();
     const validation = renderEvaluateValidation(request);
     if (validation.errors.length) throw new Error(`Fix request setup first: ${validation.errors.join("; ")}`);
@@ -9531,9 +11704,19 @@ function readEditorPayload() {
 function readCachePolicy() {
   const ttl = Number(document.querySelector("#rule-client-ttl").value || 0);
   const scope = document.querySelector("#rule-cache-scope").value;
+  const failureMode = document.querySelector("#rule-dependency-failure-mode")?.value || "evaluate";
+  const failureOutputsRaw = document.querySelector("#rule-dependency-failure-outputs")?.value.trim() || "";
   const policy = {};
   if (ttl > 0) policy.client_ttl = ttl;
   if (scope !== "none") policy.scope = scope;
+  if (failureMode !== "evaluate") policy.dependency_failure_mode = failureMode;
+  if (failureOutputsRaw) {
+    try {
+      policy.dependency_failure_outputs = JSON.parse(failureOutputsRaw);
+    } catch {
+      throw new Error("Dependency failure outputs must be valid JSON.");
+    }
+  }
   return policy;
 }
 
@@ -10015,10 +12198,13 @@ function renderAdvancedGraphPreview() {
   const cards = nodes.map((node) => {
     const edges = graphNodeEdges(node);
     const nodeLayout = normalizedGraphNodeLayout(node);
+    const selected = node.id === selectedGraphNodeId;
+    const connectTarget = graphConnectionDraft && node.id !== graphConnectionDraft.source;
     return `
-      <button
-        type="button"
-        class="graph-node branch-node graph-node-draggable"
+      <div
+        role="button"
+        tabindex="0"
+        class="graph-node branch-node graph-node-draggable graph-node-type-${escapeHtml(graphNodeTypeClass(node.type))}${selected ? " selected" : ""}${connectTarget ? " connect-target" : ""}"
         data-graph-node="${escapeHtml(node.id)}"
         style="left:${nodeLayout.x}px; top:${nodeLayout.y}px;"
         aria-label="Edit graph node ${escapeHtml(node.id || "node")}"
@@ -10028,40 +12214,93 @@ function renderAdvancedGraphPreview() {
         <strong>${escapeHtml(node.id || "node")}</strong>
         <span>${escapeHtml(graphNodeSummary(node))}</span>
         <small>${escapeHtml(edges.length ? `Routes to ${edges.join(", ")}` : "Terminal node")}</small>
-      </button>
+        <span class="graph-route-ports" aria-label="Connection routes">
+          ${graphConnectableRoutes(node).map((route) => `
+            <span
+              role="button"
+              tabindex="0"
+              class="graph-route-port${graphConnectionDraft?.source === node.id && graphConnectionDraft?.field === route.field ? " active" : ""}${graphRouteTarget(node, route.field) ? " connected" : ""}"
+              data-graph-route-source="${escapeHtml(node.id || "")}"
+              data-graph-route-field="${escapeHtml(route.field)}"
+              title="Connect ${escapeHtml(route.label)} route"
+            >${escapeHtml(route.label)}</span>
+          `).join("")}
+        </span>
+      </div>
     `;
   }).join("");
   ruleGraph.innerHTML = `
     <div class="graph-stage advanced-graph-stage">
-      <div class="graph-node input-node">
-        <span class="graph-kicker">Entry</span>
-        <strong>${escapeHtml(graphBuilder.entry || "input")}</strong>
-        <span>${escapeHtml(nodes.length)} node${nodes.length === 1 ? "" : "s"}</span>
-      </div>
-      <div class="graph-node fallback-node">
-        <span class="graph-kicker">Validation</span>
-        <strong>${escapeHtml(graphReachabilitySummary())}</strong>
-        <span>Draft JSON remains the source of truth.</span>
-      </div>
       <div class="graph-canvas-shell">
+        <div class="graph-canvas-status">
+          <strong>Canvas</strong>
+          <span>${graphConnectionDraft ? `Connect ${escapeHtml(graphConnectionDraft.field)} from ${escapeHtml(graphConnectionDraft.source)}: click a target node` : `Entry: ${escapeHtml(graphBuilder.entry || "input")} &middot; ${escapeHtml(graphReachabilitySummary())}`}</span>
+          ${graphConnectionDraft ? '<button type="button" data-graph-action="cancel-connect">Cancel</button>' : ""}
+        </div>
+        <div class="graph-canvas-controls">
+          <button type="button" data-graph-action="open-node-picker">+ Add node</button>
+        </div>
         <div class="graph-canvas${graphSnapEnabled ? " snap-enabled" : ""}" style="width:${layout.width}px; height:${layout.height}px; --graph-grid-size:${graphSnapSize}px;">
           ${graphEdgeSvg(layout.width, layout.height)}
           ${cards || '<div class="graph-empty graph-canvas-empty">Create a graph template or add a node.</div>'}
         </div>
+        <div class="graph-minimap graph-minimap-overlay" aria-live="polite">
+          ${graphMinimapHtml(layout)}
+        </div>
       </div>
     </div>
   `;
+  ruleGraph.querySelector("[data-graph-action='open-node-picker']")?.addEventListener("click", openGraphNodePicker);
+  ruleGraph.querySelector("[data-graph-action='cancel-connect']")?.addEventListener("click", () => {
+    graphConnectionDraft = null;
+    renderRuleGraph();
+  });
+  ruleGraph.querySelectorAll("[data-graph-route-source]").forEach((port) => {
+    const activate = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      graphConnectionDraft = {
+        source: port.dataset.graphRouteSource || "",
+        field: port.dataset.graphRouteField || ""
+      };
+      selectedGraphNodeId = graphConnectionDraft.source;
+      renderRuleGraph();
+    };
+    port.addEventListener("click", activate);
+    port.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") activate(event);
+    });
+  });
   ruleGraph.querySelectorAll("[data-graph-node]").forEach((button) => {
-    button.addEventListener("click", () => {
+    const activateNode = () => {
       if (button.dataset.dragged === "true") {
         button.dataset.dragged = "false";
         return;
       }
-      const target = graphNodeEditor.querySelector(`[data-node-id="${cssEscape(button.dataset.graphNode)}"]`);
-      target?.scrollIntoView({ behavior: "smooth", block: "center" });
-      target?.classList.add("highlight");
-      setTimeout(() => target?.classList.remove("highlight"), 900);
+      if (graphConnectionDraft && button.dataset.graphNode !== graphConnectionDraft.source) {
+        connectGraphNodes(graphConnectionDraft.source, graphConnectionDraft.field, button.dataset.graphNode || "");
+        graphConnectionDraft = null;
+        selectedGraphNodeId = button.dataset.graphNode || "";
+        renderGraphBuilder();
+        syncJsonFromBuilder();
+        return;
+      }
+      selectedGraphNodeId = button.dataset.graphNode || "";
+      graphConnectionDraft = null;
+      renderGraphBuilder();
+      const target = graphNodeEditor.querySelector(`[data-node-id="${cssEscape(selectedGraphNodeId)}"]`);
+      target?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    };
+    button.addEventListener("click", activateNode);
+    button.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        activateNode();
+      }
     });
+  });
+  ruleGraph.querySelectorAll("[data-graph-minimap-node]").forEach((button) => {
+    button.addEventListener("click", () => focusGraphNode(button.dataset.graphMinimapNode));
   });
   bindGraphNodeDrag();
   renderGraphMinimap(layout);
@@ -10069,15 +12308,17 @@ function renderAdvancedGraphPreview() {
 
 function renderGraphMinimap(layout = graphCanvasLayout()) {
   if (!graphMinimap) return;
+  graphMinimap.hidden = true;
+  graphMinimap.innerHTML = "";
+}
+
+function graphMinimapHtml(layout = graphCanvasLayout()) {
   const nodes = graphBuilder.nodes || [];
   if (document.querySelector("#builder-mode")?.value !== "graph") {
-    graphMinimap.innerHTML = "";
-    graphMinimap.hidden = true;
-    return;
+    return "";
   }
-  graphMinimap.hidden = false;
-  const minimapWidth = 240;
-  const minimapHeight = 118;
+  const minimapWidth = 168;
+  const minimapHeight = 92;
   const scale = Math.min(
     (minimapWidth - 16) / Math.max(layout.width, 1),
     (minimapHeight - 16) / Math.max(layout.height, 1)
@@ -10092,29 +12333,29 @@ function renderGraphMinimap(layout = graphCanvasLayout()) {
       <button
         type="button"
         class="graph-minimap-node ${node.id === graphBuilder.entry ? "entry" : ""}"
-        data-minimap-node="${escapeHtml(node.id || "")}"
+        data-graph-minimap-node="${escapeHtml(node.id || "")}"
         style="left:${left}px; top:${top}px; width:${width}px; height:${height}px;"
         title="${escapeHtml(node.id || "node")}"
         aria-label="Focus graph node ${escapeHtml(node.id || "node")}"
       ></button>
     `;
   }).join("");
-  graphMinimap.innerHTML = `
+  return `
     <div class="graph-minimap-copy">
       <strong>Canvas map</strong>
-      <span>${escapeHtml(graphReachabilitySummary())} &middot; ${nodes.length} node${nodes.length === 1 ? "" : "s"} &middot; ${graphSnapEnabled ? `${graphSnapSize}px snap` : "free drag"}</span>
+      <span>${escapeHtml(graphReachabilitySummary())} &middot; ${nodes.length} node${nodes.length === 1 ? "" : "s"}</span>
     </div>
     <div class="graph-minimap-stage" style="width:${minimapWidth}px; height:${minimapHeight}px;">
       ${miniNodes || '<span class="graph-minimap-empty">No nodes</span>'}
     </div>
   `;
-  graphMinimap.querySelectorAll("[data-minimap-node]").forEach((button) => {
-    button.addEventListener("click", () => focusGraphNode(button.dataset.minimapNode));
-  });
 }
 
 function focusGraphNode(nodeId) {
   if (!nodeId) return;
+  selectedGraphNodeId = nodeId;
+  renderRuleGraph();
+  renderGraphNodeEditor();
   const canvasNode = ruleGraph?.querySelector(`[data-graph-node="${cssEscape(nodeId)}"]`);
   const editorNode = graphNodeEditor?.querySelector(`[data-node-id="${cssEscape(nodeId)}"]`);
   canvasNode?.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
@@ -10193,18 +12434,25 @@ function graphEdgeSvg(width, height) {
   const lines = [];
   for (const node of graphBuilder.nodes || []) {
     const from = normalizedGraphNodeLayout(node);
-    const targets = graphNodeEdges(node);
-    targets.forEach((target) => {
-      const targetNode = nodes.get(target);
+    const targets = graphNodeEdgesDetailed(node);
+    targets.forEach((edge, edgeIndex) => {
+      const targetNode = nodes.get(edge.target);
       if (!targetNode) return;
       const to = normalizedGraphNodeLayout(targetNode);
+      const startX = from.x + layout.nodeWidth;
+      const startY = from.y + layout.nodeHeight / 2;
+      const endX = to.x;
+      const endY = to.y + layout.nodeHeight / 2;
+      const labelX = startX + (endX - startX) / 2;
+      const labelY = startY + (endY - startY) / 2 - 8 - edgeIndex * 10;
       lines.push(`
         <line
-          x1="${from.x + layout.nodeWidth}"
-          y1="${from.y + layout.nodeHeight / 2}"
-          x2="${to.x}"
-          y2="${to.y + layout.nodeHeight / 2}"
+          x1="${startX}"
+          y1="${startY}"
+          x2="${endX}"
+          y2="${endY}"
         ></line>
+        <text x="${labelX}" y="${labelY}">${escapeHtml(edge.label)}</text>
       `);
     });
   }
@@ -10253,23 +12501,66 @@ function renderGraphBuilder() {
   document.querySelector("#graph-entry").value = graphBuilder.entry || "";
   if (graphSnapEnabledInput) graphSnapEnabledInput.checked = graphSnapEnabled;
   if (graphSnapSizeInput) graphSnapSizeInput.value = String(normalizedGraphSnapSize());
+  if (!selectedGraphNodeId && graphBuilder.nodes?.length) selectedGraphNodeId = graphBuilder.entry || graphBuilder.nodes[0].id || "";
   renderFrequencyCapHelperOptions();
-  graphNodeEditor.innerHTML = (graphBuilder.nodes || []).map((node, index) => graphNodeEditorCard(node, index)).join("");
+  renderGraphNodeEditor();
+  renderRuleGraph();
+}
+
+function renderGraphNodeEditor() {
+  if (!graphNodeEditor) return;
+  const nodes = graphBuilder.nodes || [];
+  if (selectedGraphNodeId && !nodes.some((node) => node.id === selectedGraphNodeId)) selectedGraphNodeId = "";
+  const selectedIndex = nodes.findIndex((node) => node.id === selectedGraphNodeId);
+  graphNodeEditor.innerHTML = selectedIndex >= 0
+    ? graphNodeEditorCard(nodes[selectedIndex], selectedIndex)
+    : graphSettingsEditorCard(nodes);
   graphNodeEditor.querySelectorAll("[data-graph-field]").forEach((input) => {
     input.addEventListener("input", () => updateGraphNodeField(Number(input.dataset.nodeIndex), input.dataset.graphField, input.value));
     input.addEventListener("change", () => {
-      if (["table", "message_id", "type"].includes(input.dataset.graphField)) renderGraphBuilder();
+      if (["id", "table", "message_id", "type"].includes(input.dataset.graphField)) renderGraphBuilder();
       syncJsonFromBuilder();
     });
   });
-  graphNodeEditor.querySelectorAll("[data-remove-graph-node]").forEach((button) => {
-    button.addEventListener("click", () => {
-      graphBuilder.nodes.splice(Number(button.dataset.removeGraphNode), 1);
+  graphNodeEditor.querySelectorAll("[data-graph-variant-field]").forEach((input) => {
+    input.addEventListener("input", () => {
+      updateGraphVariantField(Number(input.dataset.nodeIndex), Number(input.dataset.variantIndex), input.dataset.graphVariantField, input.value);
+    });
+    input.addEventListener("change", () => {
+      updateGraphVariantField(Number(input.dataset.nodeIndex), Number(input.dataset.variantIndex), input.dataset.graphVariantField, input.value);
       renderGraphBuilder();
       syncJsonFromBuilder();
     });
   });
-  renderRuleGraph();
+  graphNodeEditor.querySelectorAll("[data-graph-variant-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      updateGraphVariantAction(Number(button.dataset.nodeIndex), Number(button.dataset.variantIndex || 0), button.dataset.graphVariantAction);
+    });
+  });
+  graphNodeEditor.querySelectorAll("[data-remove-graph-node]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const removed = graphBuilder.nodes[Number(button.dataset.removeGraphNode)]?.id || "";
+      graphBuilder.nodes.splice(Number(button.dataset.removeGraphNode), 1);
+      if (selectedGraphNodeId === removed) selectedGraphNodeId = "";
+      renderGraphBuilder();
+      syncJsonFromBuilder();
+    });
+  });
+}
+
+function graphSettingsEditorCard(nodes = []) {
+  return `
+    <section class="graph-edit-card graph-settings-card">
+      <div class="graph-edit-head compact">
+        <div>
+          <strong>Graph settings</strong>
+          <span>${escapeHtml(nodes.length)} node${nodes.length === 1 ? "" : "s"} &middot; ${escapeHtml(graphReachabilitySummary())}</span>
+        </div>
+      </div>
+      <p class="status-line">Select a node on the canvas to edit its behavior. Use graph settings for entry, layout, snap, and frequency-cap helpers.</p>
+      ${graphReadinessPanel()}
+    </section>
+  `;
 }
 
 function renderFrequencyCapHelperOptions() {
@@ -10328,18 +12619,99 @@ function graphNodeEditorCard(node, index) {
             ${graphNodeTypes().map((type) => `<option value="${type}"${node.type === type ? " selected" : ""}>${graphNodeTypeLabel(type)}</option>`).join("")}
           </select>
         </label>
-        <label>
-          Next
-          <input data-node-index="${index}" data-graph-field="next" value="${escapeHtml(node.next || "")}" />
-        </label>
+        ${graphRouteField(index, "next", "Default route", node.next || "")}
         <button type="button" data-remove-graph-node="${index}">Remove</button>
       </div>
-      <div class="graph-edge-line">${escapeHtml(graphNodeEdges(node).length ? `Edges: ${graphNodeEdges(node).join(", ")}` : "Terminal or incomplete node")}</div>
+      <div class="graph-edge-line">${escapeHtml(graphNodeEdgeSummary(node))}</div>
+      ${graphReadinessPanel([node.id])}
       <div class="graph-edit-fields">
         ${graphNodeSpecificFields(node, index)}
       </div>
     </section>
   `;
+}
+
+function graphReadinessPanel(nodeIds = null) {
+  const scopedIds = Array.isArray(nodeIds) ? new Set(nodeIds) : null;
+  const checks = graphReadinessChecks(graphBuilder)
+    .filter((check) => !scopedIds || !check.node_id || scopedIds.has(check.node_id));
+  const visibleChecks = checks.length
+    ? checks
+    : [readinessCheck(true, scopedIds ? "Node ready" : "Graph ready", scopedIds ? "No obvious issues detected for this node." : "Routes, entry, and split variants look ready.")];
+  return `
+    <div class="graph-readiness-panel">
+      <div class="readiness-list compact">
+        ${visibleChecks.slice(0, 8).map((check) => `
+          <div class="readiness-item ${escapeHtml(check.level)}">
+            <span>${check.level === "ok" ? "OK" : check.level === "error" ? "!" : "!"}</span>
+            <div>
+              <em>${escapeHtml(check.title)}</em>
+              <small>${escapeHtml(check.detail)}</small>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function graphReadinessChecks(graph = {}) {
+  const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+  const checks = [];
+  const ids = new Set();
+  const duplicateIds = new Set();
+  if (!graph.entry) checks.push(readinessCheck(false, "Entry node", "Choose a graph entry node.", "error"));
+  if (!nodes.length) checks.push(readinessCheck(false, "Nodes", "Add at least one graph node.", "error"));
+  for (const node of nodes) {
+    if (!node.id) {
+      checks.push(readinessCheck(false, "Node ID", "Every node needs an ID.", "error"));
+      continue;
+    }
+    if (ids.has(node.id)) duplicateIds.add(node.id);
+    ids.add(node.id);
+  }
+  for (const id of duplicateIds) checks.push({ ...readinessCheck(false, "Duplicate node ID", `${id} is used by more than one node.`, "error"), node_id: id });
+  if (graph.entry && nodes.length && !ids.has(graph.entry)) checks.push(readinessCheck(false, "Entry route", `${graph.entry} does not match a node ID.`, "error"));
+  for (const node of nodes) {
+    if (!node?.id) continue;
+    const type = node.type || "input";
+    if (!["output", "fallback", "error"].includes(type) && !graphNodeEdgesDetailed(node).length) {
+      checks.push({ ...readinessCheck(false, "No route", `${node.id} does not route anywhere.`, "error"), node_id: node.id });
+    }
+    for (const edge of graphNodeEdgesDetailed(node)) {
+      if (!ids.has(edge.target)) checks.push({ ...readinessCheck(false, "Missing target", `${node.id} ${edge.label} routes to missing node ${edge.target}.`, "error"), node_id: node.id });
+    }
+    if (type === "experiment_split") checks.push(...graphExperimentSplitReadinessChecks(node));
+  }
+  return checks;
+}
+
+function graphExperimentSplitReadinessChecks(node) {
+  const variants = Array.isArray(node.variants) ? normalizedGraphNodeVariants(node) : [];
+  const checks = [];
+  const keys = new Set();
+  let weightTotal = 0;
+  if (variants.length < 2) {
+    checks.push({ ...readinessCheck(false, "Variants", `${node.id} needs at least control and one treatment.`, "error"), node_id: node.id });
+  }
+  for (const variant of variants) {
+    if (!variant.key) checks.push({ ...readinessCheck(false, "Variant key", `${node.id} has a variant without a key.`, "error"), node_id: node.id });
+    if (keys.has(variant.key)) checks.push({ ...readinessCheck(false, "Duplicate variant", `${node.id} repeats variant key ${variant.key}.`, "error"), node_id: node.id });
+    keys.add(variant.key);
+    if (Number(variant.weight) < 0 || !Number.isFinite(Number(variant.weight))) {
+      checks.push({ ...readinessCheck(false, "Variant weight", `${variant.key || "Variant"} has an invalid weight.`, "error"), node_id: node.id });
+    }
+    weightTotal += Math.max(0, Number(variant.weight || 0));
+    if (!variant.route) checks.push({ ...readinessCheck(false, "Variant route", `${variant.key || "Variant"} needs a route.`, "error"), node_id: node.id });
+  }
+  if (weightTotal <= 0) checks.push({ ...readinessCheck(false, "Allocation", `${node.id} needs positive variant weight.`, "error"), node_id: node.id });
+  if (weightTotal > 0 && Math.round(weightTotal) !== 100) {
+    checks.push({ ...readinessCheck(false, "Allocation total", `${node.id} variant weights total ${formatNumber(weightTotal)}%. Runtime normalizes this, but 100% is easier to review.`, "warn"), node_id: node.id });
+  }
+  if (!checks.some((check) => check.level === "error")) {
+    checks.push({ ...readinessCheck(true, "Experiment split", `${variants.length} variants configured; ${formatNumber(weightTotal)}% total weight.`, "warn"), node_id: node.id });
+  }
+  return checks;
 }
 
 function graphNodeSpecificFields(node, index) {
@@ -10349,6 +12721,7 @@ function graphNodeSpecificFields(node, index) {
       <input data-node-index="${index}" data-graph-field="${name}" value="${escapeHtml(formatOutputValue(value))}" ${attrs} />
     </label>
   `;
+  const route = (name, label, value = node[name] ?? "") => graphRouteField(index, name, label, value);
   const lookupTableList = graphDatalist(`graph-lookup-tables-${index}`, cachedLookupTables.map((item) => item.id));
   const lookupColumnList = graphDatalist(`graph-lookup-columns-${index}`, lookupColumns(lookupTableById(node.table)));
   const lookupExpressionList = graphDatalist(`graph-lookup-expressions-${index}`, graphLookupExpressionSuggestions(node));
@@ -10359,8 +12732,8 @@ function graphNodeSpecificFields(node, index) {
   if (node.type === "condition") {
     return [
       field("expression", "Expression"),
-      field("true", "True route"),
-      field("false", "False route")
+      route("true", "True route"),
+      route("false", "False route")
     ].join("");
   }
   if (node.type === "score") {
@@ -10388,12 +12761,29 @@ function graphNodeSpecificFields(node, index) {
       field("decision_key", "Decision key", node.decision_key || "", `list="graph-decisions-${index}"`),
       field("message_id", "Message ID", node.message_id, `list="graph-messages-${index}"`),
       field("surface", "Surface", node.surface, `list="graph-surfaces-${index}"`),
-      field("capped", "Capped route"),
+      route("capped", "Capped route"),
       field("output_key", "Store count as"),
       eventList,
       ruleList,
       messageList,
       surfaceList
+    ].join("");
+  }
+  if (node.type === "experiment_split") {
+    return [
+      field("experiment_key", "Experiment key", node.experiment_key || node.id),
+      graphSelectField(index, "mode", "Mode", node.mode || "fixed", [
+        ["fixed", "A/B or multivariant"],
+        ["bandit", "Bandit-ready weighted split"]
+      ]),
+      graphSelectField(index, "unit", "Assignment unit", node.unit || "profile", [
+        ["profile", "Profile"],
+        ["session", "Session"],
+        ["identifier", "Identifier"]
+      ]),
+      field("output_key", "Store variant as", node.output_key || "variant_key"),
+      route("fallback", "Fallback route"),
+      graphExperimentVariantsEditor(node, index)
     ].join("");
   }
   if (["output", "fallback", "error"].includes(node.type)) {
@@ -10407,9 +12797,140 @@ function graphNodeSpecificFields(node, index) {
   ].join("");
 }
 
+function graphSelectField(index, name, label, value, options) {
+  const selectedValue = String(value || "");
+  return `
+    <label>
+      ${label}
+      <select data-node-index="${index}" data-graph-field="${name}">
+        ${options.map(([optionValue, optionLabel]) => `<option value="${escapeHtml(optionValue)}"${optionValue === selectedValue ? " selected" : ""}>${escapeHtml(optionLabel)}</option>`).join("")}
+      </select>
+    </label>
+  `;
+}
+
+function graphExperimentVariantsEditor(node, index) {
+  const variants = normalizedGraphNodeVariants(node);
+  return `
+    <div class="graph-experiment-variants">
+      <div class="graph-experiment-variants-head">
+        <strong>Variants</strong>
+        <span>Weights are normalized automatically. Connect each route from the canvas ports or here.</span>
+      </div>
+      <div class="graph-experiment-variant-grid" role="group" aria-label="Experiment variants">
+        ${variants.map((variant, variantIndex) => `
+          <div class="graph-experiment-variant-row">
+            <label>
+              Key
+              <input data-node-index="${index}" data-variant-index="${variantIndex}" data-graph-variant-field="key" value="${escapeHtml(variant.key)}" />
+            </label>
+            <label>
+              Weight
+              <input type="number" min="0" step="1" data-node-index="${index}" data-variant-index="${variantIndex}" data-graph-variant-field="weight" value="${escapeHtml(variant.weight)}" />
+            </label>
+            ${graphVariantRouteField(index, variantIndex, variant.route || "")}
+            <button type="button" data-node-index="${index}" data-variant-index="${variantIndex}" data-graph-variant-action="remove">Remove</button>
+          </div>
+        `).join("")}
+      </div>
+      <button type="button" class="secondary" data-node-index="${index}" data-graph-variant-action="add">Add variant</button>
+    </div>
+  `;
+}
+
+function graphVariantRouteField(index, variantIndex, value = "") {
+  const normalized = String(value || "");
+  const options = graphRouteOptions(normalized);
+  return `
+    <label>
+      Route
+      <select data-node-index="${index}" data-variant-index="${variantIndex}" data-graph-variant-field="route">
+        <option value=""${normalized ? "" : " selected"}>No route</option>
+        ${options.map((option) => `<option value="${escapeHtml(option)}"${option === normalized ? " selected" : ""}>${escapeHtml(option)}</option>`).join("")}
+      </select>
+    </label>
+  `;
+}
+
+function graphRouteField(index, name, label, value = "") {
+  const normalized = String(value || "");
+  const options = graphRouteOptions(normalized);
+  return `
+    <label>
+      ${label}
+      <select data-node-index="${index}" data-graph-field="${name}">
+        <option value=""${normalized ? "" : " selected"}>No route</option>
+        ${options.map((option) => `<option value="${escapeHtml(option)}"${option === normalized ? " selected" : ""}>${escapeHtml(option)}</option>`).join("")}
+      </select>
+    </label>
+  `;
+}
+
+function graphRouteOptions(currentValue = "") {
+  return [...new Set([
+    ...(graphBuilder.nodes || []).map((node) => node.id).filter(Boolean),
+    currentValue
+  ].filter(Boolean).map(String))];
+}
+
+function graphConnectableRoutes(node = {}) {
+  if (["output", "fallback", "error"].includes(node.type)) return [];
+  if (node.type === "condition") {
+    return [
+      { field: "true", label: "true" },
+      { field: "false", label: "false" }
+    ];
+  }
+  if (node.type === "frequency_cap") {
+    return [
+      { field: "next", label: "next" },
+      { field: "capped", label: "capped" }
+    ];
+  }
+  if (node.type === "experiment_split") {
+    return [
+      ...normalizedGraphNodeVariants(node).map((variant) => ({
+        field: `variant:${variant.key}`,
+        label: variant.key
+      })),
+      { field: "fallback", label: "fallback" }
+    ];
+  }
+  return [{ field: "next", label: "next" }];
+}
+
+function connectGraphNodes(sourceId, routeField, targetId) {
+  if (!sourceId || !routeField || !targetId || sourceId === targetId) return;
+  const source = (graphBuilder.nodes || []).find((node) => node.id === sourceId);
+  if (!source) return;
+  if (routeField.startsWith("variant:")) {
+    const variantKey = routeField.slice("variant:".length);
+    const variants = ensureGraphNodeVariants(source);
+    const variant = variants.find((item) => item.key === variantKey);
+    if (variant) variant.route = targetId;
+    return;
+  }
+  source[routeField] = targetId;
+}
+
+function graphRouteTarget(node, routeField) {
+  if (!node || !routeField) return "";
+  if (routeField.startsWith("variant:")) {
+    const variantKey = routeField.slice("variant:".length);
+    return normalizedGraphNodeVariants(node).find((variant) => variant.key === variantKey)?.route || "";
+  }
+  return node[routeField] || "";
+}
+
+function graphNodeEdgeSummary(node) {
+  const edges = graphNodeEdgesDetailed(node);
+  return edges.length ? `Routes: ${edges.map((edge) => `${edge.label} -> ${edge.target}`).join(", ")}` : "Terminal or incomplete node";
+}
+
 function updateGraphNodeField(index, field, rawValue) {
   const node = graphBuilder.nodes[index];
   if (!node) return;
+  const previousId = node.id;
   if (field === "id" && graphBuilder.entry === node.id) graphBuilder.entry = rawValue.trim();
   if (["rules", "outputs", "defaults"].includes(field)) {
     node[field] = parseJsonSafe(rawValue, field === "rules" ? [] : {});
@@ -10420,9 +12941,64 @@ function updateGraphNodeField(index, field, rawValue) {
   } else {
     node[field] = field === "id" ? rawValue.trim() : rawValue;
   }
+  if (field === "id" && selectedGraphNodeId === previousId) selectedGraphNodeId = node.id || "";
   applyGraphNodeHelpers(node, field);
   if (field === "type") Object.assign(node, graphNodeDefaults(node.type, node.id));
   renderRuleGraph();
+}
+
+function updateGraphVariantField(nodeIndex, variantIndex, field, rawValue) {
+  const node = graphBuilder.nodes[nodeIndex];
+  if (!node) return;
+  const variants = ensureGraphNodeVariants(node);
+  const variant = variants[variantIndex];
+  if (!variant) return;
+  if (field === "weight") variant.weight = Math.max(0, Number(rawValue || 0));
+  else if (field === "key") variant.key = slug(rawValue || `variant_${variantIndex + 1}`) || `variant_${variantIndex + 1}`;
+  else if (rawValue === "") delete variant[field];
+  else variant[field] = rawValue;
+  renderRuleGraph();
+}
+
+function updateGraphVariantAction(nodeIndex, variantIndex, action) {
+  const node = graphBuilder.nodes[nodeIndex];
+  if (!node) return;
+  const variants = ensureGraphNodeVariants(node);
+  if (action === "add") {
+    variants.push({ key: uniqueGraphVariantKey(node), weight: 0, route: "" });
+  } else if (action === "remove" && variants.length > 2) {
+    variants.splice(variantIndex, 1);
+  }
+  renderGraphBuilder();
+  syncJsonFromBuilder();
+}
+
+function ensureGraphNodeVariants(node) {
+  node.variants = normalizedGraphNodeVariants(node);
+  return node.variants;
+}
+
+function normalizedGraphNodeVariants(node = {}) {
+  const source = Array.isArray(node.variants) && node.variants.length
+    ? node.variants
+    : [
+      { key: "control", weight: 50, route: "" },
+      { key: "variant_a", weight: 50, route: "" }
+    ];
+  return source.map((variant, index) => ({
+    key: slug(variant.key || variant.id || variant.name || `variant_${index + 1}`) || `variant_${index + 1}`,
+    weight: Number.isFinite(Number(variant.weight)) ? Number(variant.weight) : 0,
+    route: variant.route || variant.next || ""
+  }));
+}
+
+function uniqueGraphVariantKey(node) {
+  const keys = new Set(normalizedGraphNodeVariants(node).map((variant) => variant.key));
+  for (let index = 1; index < 100; index += 1) {
+    const key = `variant_${index}`;
+    if (!keys.has(key)) return key;
+  }
+  return `variant_${Date.now()}`;
 }
 
 function applyGraphNodeHelpers(node, field) {
@@ -10460,12 +13036,96 @@ function graphSurfaceSuggestions() {
   ];
 }
 
-function addGraphNode() {
-  const type = document.querySelector("#graph-new-node-type").value;
+function addGraphNode(type = "condition") {
   const id = uniqueGraphNodeId(type);
-  graphBuilder.nodes.push(graphNodeDefaults(type, id));
+  const node = graphNodeDefaults(type, id);
+  const layout = graphCanvasLayout();
+  node.layout = {
+    x: snapGraphCoordinate(Math.min(layout.width - layout.nodeWidth - 24, Math.max(24, (ruleGraph?.querySelector(".graph-canvas-shell")?.scrollLeft || 0) + 80))),
+    y: snapGraphCoordinate(Math.min(layout.height - layout.nodeHeight - 24, Math.max(24, (ruleGraph?.querySelector(".graph-canvas-shell")?.scrollTop || 0) + 80)))
+  };
+  graphBuilder.nodes.push(node);
+  if (!graphBuilder.entry) graphBuilder.entry = id;
+  selectedGraphNodeId = id;
   renderGraphBuilder();
   syncJsonFromBuilder();
+}
+
+function openGraphNodePicker() {
+  if (!graphNodePicker) return;
+  renderGraphNodePicker();
+  graphNodePicker.hidden = false;
+  graphNodePickerSearch?.focus();
+}
+
+function closeGraphNodePicker() {
+  if (!graphNodePicker) return;
+  graphNodePicker.hidden = true;
+  if (graphNodePickerSearch) graphNodePickerSearch.value = "";
+}
+
+function renderGraphNodePicker() {
+  if (!graphNodePickerList) return;
+  const query = String(graphNodePickerSearch?.value || "").trim().toLowerCase();
+  const groups = graphNodePickerCatalog()
+    .map((group) => ({
+      ...group,
+      nodes: group.nodes.filter((node) => [node.type, node.label, node.description, group.label].join(" ").toLowerCase().includes(query))
+    }))
+    .filter((group) => group.nodes.length);
+  graphNodePickerList.innerHTML = groups.map((group) => `
+    <section class="graph-node-picker-group">
+      <h4>${escapeHtml(group.label)}</h4>
+      <div>
+        ${group.nodes.map((node) => `
+          <button type="button" data-node-picker-type="${escapeHtml(node.type)}">
+            <span>${escapeHtml(node.icon)}</span>
+            <strong>${escapeHtml(node.label)}</strong>
+            <em>${escapeHtml(node.description)}</em>
+          </button>
+        `).join("")}
+      </div>
+    </section>
+  `).join("") || '<div class="status-line">No matching nodes.</div>';
+  graphNodePickerList.querySelectorAll("[data-node-picker-type]").forEach((button) => {
+    button.addEventListener("click", () => {
+      addGraphNode(button.dataset.nodePickerType || "condition");
+      closeGraphNodePicker();
+    });
+  });
+}
+
+function graphNodePickerCatalog() {
+  return [
+    {
+      label: "Logic",
+      nodes: [
+        { type: "condition", label: "Condition split", icon: "?", description: "Route a profile by an expression such as attribute or context checks." },
+        { type: "score", label: "Score", icon: "+", description: "Calculate a reusable score from weighted rules." },
+        { type: "lookup", label: "Reference lookup", icon: "L", description: "Read a value from Reference Data and store it as context." }
+      ]
+    },
+    {
+      label: "Eligibility",
+      nodes: [
+        { type: "frequency_cap", label: "Frequency cap", icon: "F", description: "Suppress or route profiles after recent client events." }
+      ]
+    },
+    {
+      label: "Experimentation",
+      nodes: [
+        { type: "experiment_split", label: "Experiment split", icon: "A/B", description: "Assign profiles to A/B, multivariant, or bandit-ready weighted variants." }
+      ]
+    },
+    {
+      label: "Decision output",
+      nodes: [
+        { type: "output", label: "Output", icon: "O", description: "Return an eligible, deferred, or suppressed decision payload." },
+        { type: "fallback", label: "Fallback", icon: "!", description: "Terminal fallback result for incomplete or failed routing." },
+        { type: "error", label: "Error", icon: "X", description: "Explicit terminal error result for guarded graph paths." }
+      ]
+    }
+  ];
 }
 
 function starterGraphBuilder() {
@@ -10510,11 +13170,25 @@ function graphNodeDefaults(type, id) {
       capped: ""
     };
   }
+  if (type === "experiment_split") {
+    return {
+      ...base,
+      experiment_key: id,
+      mode: "fixed",
+      unit: "profile",
+      output_key: "variant_key",
+      variants: [
+        { key: "control", weight: 50, route: "" },
+        { key: "variant_a", weight: 50, route: "" }
+      ],
+      fallback: ""
+    };
+  }
   return { ...base, result: type === "fallback" ? "deferred" : "eligible", outputs: {} };
 }
 
 function graphNodeTypes() {
-  return ["input", "condition", "score", "lookup", "frequency_cap", "output", "fallback", "error"];
+  return ["input", "condition", "score", "lookup", "frequency_cap", "experiment_split", "output", "fallback", "error"];
 }
 
 function graphNodeTypeLabel(type) {
@@ -10524,10 +13198,15 @@ function graphNodeTypeLabel(type) {
     score: "Score",
     lookup: "Reference lookup",
     frequency_cap: "Frequency cap",
+    experiment_split: "Experiment split",
     output: "Output",
     fallback: "Fallback",
     error: "Error"
   }[type] || type;
+}
+
+function graphNodeTypeClass(type = "") {
+  return String(type || "node").replace(/[^a-z0-9_-]/gi, "_").toLowerCase();
 }
 
 function uniqueGraphNodeId(type) {
@@ -10541,9 +13220,30 @@ function uniqueGraphNodeId(type) {
 }
 
 function graphNodeEdges(node) {
-  return ["next", "true", "false", "capped", "fallback"]
-    .map((field) => node[field])
-    .filter(Boolean);
+  return graphNodeEdgesDetailed(node).map((edge) => edge.target);
+}
+
+function graphNodeEdgesDetailed(node) {
+  const variantEdges = node.type === "experiment_split"
+    ? normalizedGraphNodeVariants(node).map((variant) => ({ label: variant.key, target: variant.route }))
+    : [];
+  return [
+    ...variantEdges,
+    ...["next", "true", "false", "capped", "fallback"]
+    .map((field) => ({ label: graphEdgeLabel(field), target: node[field] }))
+  ]
+    .filter((edge) => edge.target)
+    .filter((edge, index, array) => array.findIndex((item) => item.target === edge.target && item.label === edge.label) === index);
+}
+
+function graphEdgeLabel(field) {
+  return {
+    next: "next",
+    true: "true",
+    false: "false",
+    capped: "capped",
+    fallback: "fallback"
+  }[field] || field;
 }
 
 function graphNodeSummary(node) {
@@ -10551,6 +13251,7 @@ function graphNodeSummary(node) {
   if (node.type === "score") return `${(node.rules || []).length} scoring rule${(node.rules || []).length === 1 ? "" : "s"}`;
   if (node.type === "lookup") return [node.table, node.column].filter(Boolean).join(" / ") || "Reference lookup";
   if (node.type === "frequency_cap") return `Max ${node.max || 0} in ${node.window_days || 0} days`;
+  if (node.type === "experiment_split") return `${normalizedGraphNodeVariants(node).length} variants / ${node.mode || "fixed"}`;
   if (["output", "fallback", "error"].includes(node.type)) return node.result || "deferred";
   return "Defaults and routing";
 }
@@ -10847,6 +13548,7 @@ function syncBuilderFromJson() {
         entry: draft.graph.entry || "input",
         nodes: (draft.graph.nodes || []).map((node) => ({ ...node }))
       };
+      selectedGraphNodeId = graphBuilder.entry || graphBuilder.nodes[0]?.id || "";
       renderBuilderMode();
     } else {
       document.querySelector("#builder-mode").value = "branches";
@@ -10942,20 +13644,8 @@ function validateDraft(draft) {
 
 function validateGraphDraft(graph) {
   if (!graph || typeof graph !== "object" || Array.isArray(graph)) throw new Error("Graph must be a JSON object");
-  if (!graph.entry) throw new Error("Graph needs an entry node");
-  if (!Array.isArray(graph.nodes) || graph.nodes.length === 0) throw new Error("Graph needs at least one node");
-  const ids = new Set();
-  graph.nodes.forEach((node) => {
-    if (!node.id) throw new Error("Every graph node needs an ID");
-    if (ids.has(node.id)) throw new Error(`Duplicate graph node ID: ${node.id}`);
-    ids.add(node.id);
-  });
-  if (!ids.has(graph.entry)) throw new Error(`Graph entry node does not exist: ${graph.entry}`);
-  graph.nodes.forEach((node) => {
-    graphNodeEdges(node).forEach((target) => {
-      if (!ids.has(target)) throw new Error(`Graph node ${node.id} routes to missing node: ${target}`);
-    });
-  });
+  const errors = graphReadinessChecks(graph).filter((check) => check.level === "error");
+  if (errors.length) throw new Error(errors[0].detail || errors[0].title || "Graph has validation errors");
 }
 
 function validateConditionGroup(group, label, depth) {
@@ -11738,6 +14428,66 @@ function renderEvaluateRuleOptions() {
   else if (cachedRuleSets[0]) select.value = cachedRuleSets[0].decision_key;
 }
 
+function currentEvaluateRequestKind() {
+  return evalRequestKind?.value === "surface" ? "surface" : "decision";
+}
+
+function isSurfaceEvaluateMode() {
+  return currentEvaluateRequestKind() === "surface";
+}
+
+function isSurfaceEvaluationResponse(body) {
+  return Boolean(body && typeof body === "object" && "surface" in body && Array.isArray(body.candidates));
+}
+
+function inferredEvaluateRequestKind(rule = selectedEvaluateRule(), request = readEvaluateInputSafe()) {
+  if (request?.surface) return "surface";
+  return rule?.type === "inapp_message" ? "surface" : "decision";
+}
+
+function syncEvaluateRequestKind(rule = selectedEvaluateRule(), request = readEvaluateInputSafe()) {
+  if (!evalRequestKind) return;
+  evalRequestKind.value = inferredEvaluateRequestKind(rule, request);
+  updateEvaluateRequestModeUi(rule, request);
+}
+
+function updateEvaluateRequestModeUi(rule = selectedEvaluateRule(), request = readEvaluateInputSafe()) {
+  const isSurface = currentEvaluateRequestKind() === "surface";
+  const surfaceValue = request?.surface || request?.context?.surface || rule?.surface || "homepage_hero";
+  if (evalSurfaceInput && !evalSurfaceInput.value.trim()) evalSurfaceInput.value = surfaceValue;
+  if (evalSurfaceInput) {
+    evalSurfaceInput.disabled = !isSurface;
+    evalSurfaceInput.placeholder = rule?.surface || "homepage_hero";
+  }
+  if (evalLimitInput) {
+    evalLimitInput.disabled = !isSurface;
+    evalLimitInput.value = String(Math.min(Math.max(Number(request?.limit || evalLimitInput.value || 20), 1), 50));
+  }
+  const evalMode = document.querySelector("#eval-mode");
+  if (evalMode) {
+    evalMode.disabled = isSurface;
+    if (isSurface) evalMode.value = "published";
+  }
+  if (evalCompareButton) evalCompareButton.hidden = isSurface;
+}
+
+function syncEvaluatePayloadFromControls() {
+  const body = readEvaluateInputSafe();
+  body.decision_key = document.querySelector("#eval-rule-key").value || body.decision_key;
+  body.profile_key = document.querySelector("#eval-profile-key").value.trim() || body.profile_key;
+  if (isSurfaceEvaluateMode()) {
+    body.surface = evalSurfaceInput?.value.trim() || selectedEvaluateRule()?.surface || body.surface || "";
+    const limit = Number(evalLimitInput?.value || body.limit || 20);
+    body.limit = Math.min(Math.max(Number.isFinite(limit) ? limit : 20, 1), 50);
+    body.context = body.context && typeof body.context === "object" && !Array.isArray(body.context) ? body.context : {};
+    body.context.surface = body.surface;
+  } else {
+    delete body.limit;
+    if ("surface" in body) delete body.surface;
+  }
+  evalInput.value = JSON.stringify(body, null, 2);
+}
+
 function loadEvaluatePreset() {
   const preset = document.querySelector("#eval-preset")?.value || "nbo_green";
   const request = preset === "rule_default"
@@ -11746,6 +14496,9 @@ function loadEvaluatePreset() {
       ? experimentEvaluatePreset(selectedEvaluateRule(), { holdout: true })
       : evaluatePreset(preset);
   document.querySelector("#eval-rule-key").value = request.decision_key;
+  syncEvaluateRequestKind(selectedEvaluateRule(), request);
+  if (request.surface && evalSurfaceInput) evalSurfaceInput.value = request.surface;
+  if (request.limit && evalLimitInput) evalLimitInput.value = String(request.limit);
   document.querySelector("#eval-profile-key").value = request.profile_key;
   evalInput.value = JSON.stringify(request, null, 2);
   renderEvaluateProfileBuilder(request);
@@ -11759,6 +14512,10 @@ function loadEvaluatePresetForSelectedRule() {
   const request = evaluatePresetForRule(rule);
   const currentProfileKey = document.querySelector("#eval-profile-key").value.trim() || previous.profile_key || "";
   if (currentProfileKey && !currentProfileKey.startsWith("preset-")) request.profile_key = currentProfileKey;
+  if (previous.surface && !request.surface && rule.type === "inapp_message") request.surface = previous.surface;
+  syncEvaluateRequestKind(rule, request);
+  if (evalSurfaceInput) evalSurfaceInput.value = request.surface || rule.surface || previous.surface || "homepage_hero";
+  if (evalLimitInput) evalLimitInput.value = String(request.limit || previous.limit || 20);
   document.querySelector("#eval-profile-key").value = request.profile_key;
   syncEvaluatePresetSelect(rule);
   evalInput.value = JSON.stringify(request, null, 2);
@@ -11864,6 +14621,9 @@ function loadSavedEvaluateProfile() {
   if (cachedRuleSets.some((ruleSet) => ruleSet.decision_key === request.decision_key)) {
     document.querySelector("#eval-rule-key").value = request.decision_key;
   }
+  syncEvaluateRequestKind(selectedEvaluateRule(), request);
+  if (evalSurfaceInput) evalSurfaceInput.value = request.surface || request.context?.surface || selectedEvaluateRule()?.surface || "homepage_hero";
+  if (evalLimitInput) evalLimitInput.value = String(request.limit || 20);
   document.querySelector("#eval-profile-key").value = request.profile_key || "";
   syncEvaluatePresetSelect(selectedEvaluateRule());
   evalInput.value = JSON.stringify(request, null, 2);
@@ -11968,6 +14728,14 @@ function syncEvaluatePayloadFromBuilder() {
   body.attributes = readEvaluateBuilderObject("attribute");
   body.context = readEvaluateBuilderObject("context");
   body.segments = readEvaluateBuilderObject("segment");
+  if (isSurfaceEvaluateMode()) {
+    body.surface = evalSurfaceInput?.value.trim() || body.surface || selectedEvaluateRule()?.surface || "";
+    body.limit = Math.min(Math.max(Number(evalLimitInput?.value || body.limit || 20), 1), 50);
+    body.context.surface = body.surface;
+  } else {
+    delete body.limit;
+    if ("surface" in body) delete body.surface;
+  }
   evalInput.value = JSON.stringify(body, null, 2);
   renderEvaluateValidation(body, "Profile builder applied to payload.");
 }
@@ -12017,6 +14785,16 @@ function readEvaluateInput() {
   const body = JSON.parse(evalInput.value || "{}");
   body.decision_key = document.querySelector("#eval-rule-key").value || body.decision_key;
   body.profile_key = document.querySelector("#eval-profile-key").value.trim() || body.profile_key;
+  if (isSurfaceEvaluateMode()) {
+    body.surface = evalSurfaceInput?.value.trim() || body.surface || selectedEvaluateRule()?.surface || "";
+    const limit = Number(evalLimitInput?.value || body.limit || 20);
+    body.limit = Math.min(Math.max(Number.isFinite(limit) ? limit : 20, 1), 50);
+    body.context = body.context && typeof body.context === "object" && !Array.isArray(body.context) ? body.context : {};
+    body.context.surface = body.surface;
+  } else {
+    delete body.limit;
+    if ("surface" in body) delete body.surface;
+  }
   return body;
 }
 
@@ -12033,6 +14811,7 @@ function renderEvaluateValidation(request = null, notice = "") {
   let body = request;
   const errors = [];
   const warnings = [];
+  const requestKind = currentEvaluateRequestKind();
   if (!body) {
     try {
       body = readEvaluateInput();
@@ -12043,6 +14822,7 @@ function renderEvaluateValidation(request = null, notice = "") {
   if (body) {
     if (!body.decision_key) errors.push("decision_key is required");
     if (!body.profile_key) errors.push("profile_key is required");
+    if (requestKind === "surface" && !body.surface) errors.push("surface is required for client surface evaluation");
     if (!Array.isArray(body.identifiers)) errors.push("identifiers must be an array");
     if (!body.attributes || typeof body.attributes !== "object" || Array.isArray(body.attributes)) warnings.push("attributes should be an object of Meiro attribute arrays");
     if (!body.context || typeof body.context !== "object" || Array.isArray(body.context)) warnings.push("context should be an object");
@@ -12053,7 +14833,11 @@ function renderEvaluateValidation(request = null, notice = "") {
       if (missing.length) warnings.push(`schema fields not present in payload: ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? "…" : ""}`);
     }
     const mode = document.querySelector("#eval-mode").value;
-    if (mode === "draft" && selected?.status === "archived") warnings.push("selected rule is archived; draft tests may not reflect a published route");
+    if (requestKind === "surface") {
+      if (selected?.type !== "inapp_message") warnings.push("client surface mode is mainly for published in-app messages on a shared surface");
+      if (!selected?.surface && !body.surface) warnings.push("choose a surface that matches published in-app messages");
+    }
+    if (requestKind === "decision" && mode === "draft" && selected?.status === "archived") warnings.push("selected rule is archived; draft tests may not reflect a published route");
   }
   const className = errors.length ? "error" : warnings.length ? "warning" : "ok";
   const items = errors.length ? errors : warnings.length ? warnings : [notice || "Request shape looks ready."];
@@ -12066,6 +14850,22 @@ function renderEvaluateValidation(request = null, notice = "") {
 }
 
 function formatDecisionOutput(body) {
+  if (isSurfaceEvaluationResponse(body)) {
+    return JSON.stringify({
+      summary: {
+        surface: body.surface,
+        profile_key: body.profile_key,
+        selected: body.selected?.decision_key || null,
+        selected_result: body.selected?.result || null,
+        candidate_count: Array.isArray(body.candidates) ? body.candidates.length : 0,
+        no_candidate_reason: body.diagnostics?.no_candidate_reason || "",
+        matched_rules: body.selected?.matched_rules || [],
+        trace: body.selected?.trace || [],
+        diagnostics: body.diagnostics || {}
+      },
+      response: body
+    }, null, 2);
+  }
   return JSON.stringify({
     summary: {
       result: body.result,
@@ -12084,6 +14884,11 @@ function formatDecisionOutput(body) {
 
 function renderEvaluateModeLabels() {
   const mode = document.querySelector("#eval-mode").value;
+  if (isSurfaceEvaluateMode()) {
+    evalEndpointLabel.textContent = "/v1/client/surface";
+    evalAuditLabel.textContent = "No, client surface response";
+    return;
+  }
   evalEndpointLabel.textContent = mode === "draft" ? "/v1/rule-sets/:key/test" : "/v1/evaluate";
   evalAuditLabel.textContent = mode === "draft" ? "No, draft test" : "Yes, published mode";
 }
@@ -12091,15 +14896,17 @@ function renderEvaluateModeLabels() {
 function evaluateModeLabel(mode) {
   if (mode === "draft") return "Draft";
   if (mode === "compare") return "Compare";
+  if (mode === "surface") return "Client surface";
   return "Published";
 }
 
 function renderEvaluationSummary(body, mode, error) {
   if (!evalSummary) return;
+  const effectiveMode = isSurfaceEvaluationResponse(body) || (!body && isSurfaceEvaluateMode()) ? "surface" : mode;
   if (error) {
     evalSummary.innerHTML = [
       statusItem("Status", "Error"),
-      statusItem("Mode", evaluateModeLabel(mode)),
+      statusItem("Mode", evaluateModeLabel(effectiveMode)),
       statusItem("Result", "-"),
       statusItem("Matched", "-")
     ].join("");
@@ -12108,9 +14915,18 @@ function renderEvaluationSummary(body, mode, error) {
   if (!body) {
     evalSummary.innerHTML = [
       statusItem("Status", "Ready"),
-      statusItem("Mode", evaluateModeLabel(mode)),
+      statusItem("Mode", evaluateModeLabel(effectiveMode)),
       statusItem("Result", "-"),
       statusItem("Matched", "-")
+    ].join("");
+    return;
+  }
+  if (isSurfaceEvaluationResponse(body)) {
+    evalSummary.innerHTML = [
+      statusItem("Status", body.selected ? "OK" : body.candidates?.length ? "Review" : "Empty"),
+      statusItem("Mode", evaluateModeLabel("surface")),
+      statusItem("Result", body.selected?.result || "not_selected"),
+      statusItem("Matched", body.selected?.decision_key || body.diagnostics?.no_candidate_reason || "none")
     ].join("");
     return;
   }
@@ -12126,10 +14942,19 @@ function renderEvaluationOutputSummary(body, error = null) {
   if (!evalOutputSummary) return;
   if (error) {
     evalOutputSummary.innerHTML = `<div class="eval-empty-state">Evaluation failed. Review the response panel for details.</div>`;
+    renderEvaluationRuntimeSummary(null, error);
     return;
   }
   if (!body) {
-    evalOutputSummary.innerHTML = `<div class="eval-empty-state">Run an evaluation to inspect outputs, matched rules, and response warnings.</div>`;
+    evalOutputSummary.innerHTML = `<div class="eval-empty-state">${isSurfaceEvaluateMode()
+      ? "Run a client surface evaluation to inspect candidate messages, selected payloads, and suppression diagnostics."
+      : "Run an evaluation to inspect outputs, matched rules, and response warnings."}</div>`;
+    renderEvaluationRuntimeSummary(null);
+    return;
+  }
+  if (isSurfaceEvaluationResponse(body)) {
+    renderSurfaceEvaluationOutputSummary(body);
+    renderEvaluationRuntimeSummary(body);
     return;
   }
   const outputEntries = Object.entries(body.outputs || {});
@@ -12158,6 +14983,275 @@ function renderEvaluationOutputSummary(body, error = null) {
       ? `<div class="eval-output-card warning"><span>Errors</span><strong>${escapeHtml(errors.join(", "))}</strong></div>`
       : ""}
     ${enrichment}
+  `;
+  renderEvaluationRuntimeSummary(body);
+}
+
+function renderSurfaceEvaluationOutputSummary(body = {}) {
+  const selected = body.selected || null;
+  const candidates = Array.isArray(body.candidates) ? body.candidates : [];
+  const diagnostics = body.diagnostics || {};
+  const selectedOutputs = Object.entries(selected?.outputs || {}).slice(0, 8);
+  const enrichment = renderProfileEnrichmentCard(selected?.profile_cache || candidates[0]?.profile_cache || null);
+  evalOutputSummary.innerHTML = `
+    <div class="eval-output-card primary">
+      <span>Selected</span>
+      <strong>${escapeHtml(selected?.decision_key || "No eligible message")}</strong>
+      <small>${escapeHtml(selected?.result || diagnostics.no_candidate_reason || body.surface || "surface")}</small>
+    </div>
+    <div class="eval-output-card">
+      <span>Surface</span>
+      <strong>${escapeHtml(body.surface || "-")}</strong>
+      <small>${escapeHtml(`${formatNumber(candidates.length)} candidates evaluated`)}</small>
+    </div>
+    <div class="eval-output-card">
+      <span>Priority</span>
+      <strong>${escapeHtml(selected?.priority != null ? String(selected.priority) : "-")}</strong>
+      <small>${escapeHtml(selected?.surface || "published selection")}</small>
+    </div>
+    <div class="eval-output-card ${selected ? "" : "warning"}">
+      <span>Selection reason</span>
+      <strong>${escapeHtml(selected ? "Highest eligible candidate" : diagnostics.no_candidate_reason || "No surface candidate selected")}</strong>
+      <small>${escapeHtml(candidates.length ? "Review candidate availability below." : "No published surface candidates matched.")}</small>
+    </div>
+    ${selectedOutputs.map(([key, value]) => `
+      <div class="eval-output-card">
+        <span>${escapeHtml(key)}</span>
+        <strong>${escapeHtml(formatDecisionValue(value))}</strong>
+      </div>
+    `).join("")}
+    ${candidates.slice(0, 8).map((candidate) => `
+      <div class="eval-output-card ${candidate.result === "eligible" ? "" : "warning"}">
+        <span>${escapeHtml(candidate.decision_key || "candidate")}</span>
+        <strong>${escapeHtml(candidate.result || "-")}</strong>
+        <small>${escapeHtml(surfaceCandidateDetail(candidate))}</small>
+      </div>
+    `).join("")}
+    ${!candidates.length
+      ? `<div class="eval-output-card warning"><span>Diagnostics</span><strong>${escapeHtml(diagnostics.no_candidate_reason || "No candidates available")}</strong></div>`
+      : ""}
+    ${enrichment}
+  `;
+}
+
+function surfaceCandidateDetail(candidate = {}) {
+  const bits = [];
+  if (candidate.priority != null) bits.push(`priority ${candidate.priority}`);
+  if (candidate.message?.name) bits.push(candidate.message.name);
+  if (candidate.message_id) bits.push(candidate.message_id);
+  if (candidate.message?.availability?.reason) bits.push(candidate.message.availability.reason.replace(/_/g, " "));
+  if (candidate.errors?.length) bits.push(candidate.errors[0]);
+  return bits.join(" · ") || "Candidate evaluated";
+}
+
+function renderEvaluationRuntimeSummary(body = null, error = null) {
+  if (!evalRuntimeSummary) return;
+  if (error) {
+    evalRuntimeSummary.innerHTML = `<div class="eval-empty-state">Runtime diagnostics unavailable because the evaluation failed.</div>`;
+    return;
+  }
+  if (!body) {
+    evalRuntimeSummary.innerHTML = `<div class="eval-empty-state">${isSurfaceEvaluateMode()
+      ? "Run a client surface evaluation to inspect selected message runtime, profile enrichment, and no-candidate reasons."
+      : "Run an evaluation to inspect app/mobile rendering contract, suppression reasons, and enrichment readiness."}</div>`;
+    return;
+  }
+  const request = readEvaluateInputSafe();
+  const runtime = isSurfaceEvaluationResponse(body)
+    ? surfaceEvaluationRuntimeProfile(body, request)
+    : evaluationRuntimeProfile(body, request);
+  const issues = evaluationRuntimeIssues(runtime);
+  evalRuntimeSummary.innerHTML = evaluationRuntimeCardHtml(runtime, issues);
+}
+
+function evaluationRuntimeCardHtml(runtime = {}, issues = evaluationRuntimeIssues(runtime)) {
+  return `
+    <div class="eval-runtime-card ${escapeHtml(runtime.level)}">
+      <div class="eval-runtime-head">
+        <div>
+          <strong>Runtime Diagnostics</strong>
+          <span>${escapeHtml(runtime.summary)}</span>
+        </div>
+        <span>${escapeHtml(runtime.level === "warning" ? "Review" : "Ready")}</span>
+      </div>
+      <div class="eval-runtime-grid">
+        ${evaluationRuntimeMetric("Platform", messageDeliveryLabel(runtime.platform || "web"))}
+        ${evaluationRuntimeMetric("Application", runtime.application || "Not set")}
+        ${evaluationRuntimeMetric("Placement", runtime.placement || runtime.surface || "Not set")}
+        ${evaluationRuntimeMetric("Template", runtime.templateType ? messageDeliveryLabel(runtime.templateType) : "None")}
+        ${evaluationRuntimeMetric("Enrichment", runtime.enrichmentSource || "Not used")}
+        ${evaluationRuntimeMetric("Suppression", runtime.suppressionReason || "None")}
+      </div>
+      <div class="eval-runtime-list">
+        ${issues.map((item) => `
+          <div class="eval-runtime-item ${escapeHtml(item.level)}">
+            <strong>${escapeHtml(item.title)}</strong>
+            <span>${escapeHtml(item.detail)}</span>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function surfaceEvaluationRuntimeProfile(body = {}, request = {}) {
+  if (body.selected) return evaluationRuntimeProfile(body.selected, request);
+  const candidate = (Array.isArray(body.candidates) ? body.candidates : []).find((item) => item?.message?.rendering) || body.candidates?.[0];
+  if (!candidate) {
+    return {
+      hasMessage: false,
+      platform: request.context?.platform || "web",
+      application: request.context?.application || request.context?.app_id || "",
+      placement: request.context?.placement || body.surface || "",
+      surface: body.surface || "",
+      templateType: "",
+      enrichmentSource: "No profile enrichment available",
+      missingRequired: [],
+      suppressionReason: body.diagnostics?.no_candidate_reason || "",
+      availability: {},
+      level: "warning",
+      summary: "No surface candidate was selected for this request."
+    };
+  }
+  const renderingFallback = candidate.message?.rendering || {};
+  return {
+    ...(candidate.message?.rendering ? messageRuntimeProfile({
+      templateType: candidate.message.rendering.template_type,
+      placement: candidate.message.rendering.placement || body.surface,
+      surface: candidate.message.rendering.surface || body.surface,
+      application: candidate.message.rendering.application?.key || candidate.message.rendering.application?.id || "",
+      targetDevices: candidate.message.rendering.platform_hints?.target_devices || candidate.delivery?.targeting?.devices || "any",
+      triggerType: candidate.delivery?.trigger?.type || request.context?.trigger || "page_load",
+      previewDevice: request.context?.device_type || request.context?.platform || "desktop",
+      content: {}
+    }) : {}),
+    platform: renderingFallback.platform_hints?.platform || request.context?.platform || "web",
+    application: renderingFallback.application?.key || renderingFallback.application?.id || request.context?.application || request.context?.app_id || "",
+    placement: renderingFallback.placement || request.context?.placement || body.surface || "",
+    surface: renderingFallback.surface || body.surface || "",
+    templateType: renderingFallback.template_type || "",
+    hasMessage: Boolean(candidate.message),
+    surfaceCandidate: true,
+    enrichmentSource: profileEnrichmentStatusLabel(candidate.profile_cache?.status || ""),
+    missingRequired: candidate.profile_cache?.diagnostics?.missing_required_attributes || [],
+    suppressionReason: candidate.message?.availability?.reason || candidate.errors?.[0] || body.diagnostics?.no_candidate_reason || "",
+    availability: candidate.message?.availability || {},
+    level: candidate.result === "eligible" ? "ok" : "warning",
+    summary: candidate.result === "eligible"
+      ? "DEE resolved a candidate contract for this surface."
+      : `Surface candidate was not selected because ${candidate.message?.availability?.reason || body.diagnostics?.no_candidate_reason || "it was not eligible"}.`
+  };
+}
+
+function evaluationRuntimeProfile(body = {}, request = {}) {
+  const message = body.outputs?.message && typeof body.outputs.message === "object" ? body.outputs.message : null;
+  const rendering = message?.rendering && typeof message.rendering === "object" ? message.rendering : null;
+  const availability = message?.availability && typeof message.availability === "object" ? message.availability : {};
+  const delivery = body.delivery?.message && typeof body.delivery.message === "object" ? body.delivery.message : {};
+  const profileDiagnostics = body.profile_cache?.diagnostics || {};
+  const content = message?.content && typeof message.content === "object" ? message.content : {};
+  const runtime = rendering || messageRuntimeProfile({
+    templateType: content.template_type || body.outputs?.template || "banner",
+    placement: content.placement || request.context?.placement || request.context?.surface || "",
+    surface: message?.surface || request.context?.surface || request.surface || "",
+    application: request.context?.application || request.context?.app_id || "",
+    targetDevices: delivery.targeting?.devices || "any",
+    triggerType: delivery.trigger?.type || request.context?.trigger || "page_load",
+    previewDevice: request.context?.device_type || request.context?.platform || "desktop",
+    content
+  });
+  return {
+    ...runtime,
+    result: body.result || "",
+    decisionKey: body.decision_key || "",
+    enrichmentSource: profileDiagnostics.source || profileEnrichmentStatusLabel(body.profile_cache?.status || ""),
+    missingRequired: Array.isArray(profileDiagnostics.missing_required_attributes) ? profileDiagnostics.missing_required_attributes : [],
+    suppressionReason: body.outputs?.suppression_reason || availability.reason || "",
+    availability,
+    hasMessage: Boolean(message),
+    level: evaluationRuntimeLevel({ ...runtime, body, message, availability, profileDiagnostics }),
+    summary: evaluationRuntimeSummary({ ...runtime, body, message, availability, profileDiagnostics })
+  };
+}
+
+function evaluationRuntimeLevel(context = {}) {
+  if (context.suppressionReason) return "warning";
+  if (context.platform === "mobile" && !context.application) return "warning";
+  if (context.platform === "mobile" && context.templateType === "html_fragment") return "warning";
+  if (Array.isArray(context.missingRequired) && context.missingRequired.length) return "warning";
+  return "ok";
+}
+
+function evaluationRuntimeSummary(context = {}) {
+  if (!context.hasMessage) return "This response does not include a resolved in-app message payload.";
+  if (context.suppressionReason) return `Message delivery was suppressed by ${context.suppressionReason.replace(/_/g, " ")}.`;
+  if (context.platform === "mobile") return "Resolved message payload looks usable for a native or hybrid app client.";
+  return "Resolved message payload looks aligned with web SDK delivery.";
+}
+
+function evaluationRuntimeIssues(runtime = {}) {
+  const items = [];
+  if (!runtime.hasMessage) {
+    items.push({
+      level: "info",
+      title: "No message payload",
+      detail: runtime.surfaceCandidate
+        ? "DEE evaluated this surface candidate, but it did not resolve into a deliverable message payload."
+        : "This rule returned regular decision outputs rather than a resolved in-app message contract."
+    });
+    return items;
+  }
+  if (runtime.suppressionReason) {
+    items.push({
+      level: "warn",
+      title: "Suppressed",
+      detail: runtime.availability?.message || `DEE returned a suppression reason of ${runtime.suppressionReason}.`
+    });
+  }
+  if (runtime.platform === "mobile" && !runtime.application) {
+    items.push({
+      level: "warn",
+      title: "Application missing",
+      detail: "For app delivery, include an application identifier in context or message metadata so runtime ownership stays explicit."
+    });
+  }
+  if (runtime.platform === "mobile" && !runtime.placement) {
+    items.push({
+      level: "warn",
+      title: "Placement missing",
+      detail: "Native app teams need a concrete placement such as home.hero or inbox.top to render this consistently."
+    });
+  }
+  if (runtime.platform === "mobile" && runtime.templateType === "html_fragment") {
+    items.push({
+      level: "warn",
+      title: "HTML fragment on mobile",
+      detail: "Structured templates are a safer fit for native app renderers than sanitized HTML fragments."
+    });
+  }
+  if (runtime.missingRequired?.length) {
+    items.push({
+      level: "warn",
+      title: "Missing required fields",
+      detail: runtime.missingRequired.slice(0, 4).join(", ") + (runtime.missingRequired.length > 4 ? "..." : "")
+    });
+  }
+  if (!items.length) {
+    items.push({
+      level: "ok",
+      title: "Portable contract",
+      detail: "DEE returned a resolved message payload with delivery and enrichment context that client teams can implement against."
+    });
+  }
+  return items.slice(0, 4);
+}
+
+function evaluationRuntimeMetric(label, value) {
+  return `
+    <div class="eval-runtime-metric">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(String(value))}</strong>
+    </div>
   `;
 }
 
@@ -12249,6 +15343,45 @@ function formatDecisionValue(value) {
 }
 
 function renderEvaluationTrace(body) {
+  if (isSurfaceEvaluationResponse(body)) {
+    const candidates = Array.isArray(body.candidates) ? body.candidates : [];
+    const selectedTrace = Array.isArray(body.selected?.trace) ? body.selected.trace : [];
+    if (selectedTrace.length) {
+      evalTrace.innerHTML = `
+        <div class="trace-card">
+          <div class="trace-card-header">
+            <strong>${escapeHtml(`Selected candidate path · ${body.selected?.decision_key || body.surface}`)}</strong>
+            <span class="trace-badge">${escapeHtml(`${selectedTrace.length} checks`)}</span>
+          </div>
+          <div class="trace-path">
+            ${selectedTrace.map(traceStepHtml).join("")}
+          </div>
+        </div>
+      `;
+      return;
+    }
+    if (!candidates.length) {
+      evalTrace.innerHTML = "";
+      return;
+    }
+    evalTrace.innerHTML = `
+      <div class="trace-card">
+        <div class="trace-card-header">
+          <strong>Surface candidates</strong>
+          <span class="trace-badge">${escapeHtml(`${candidates.length} evaluated`)}</span>
+        </div>
+        <div class="trace-path">
+          ${candidates.map((candidate) => `
+            <div class="trace-step">
+              <strong>${escapeHtml(candidate.decision_key || "candidate")}</strong>
+              <span>${escapeHtml(surfaceCandidateDetail(candidate))}</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+    return;
+  }
   const trace = Array.isArray(body.trace) ? body.trace : [];
   if (!trace.length) {
     evalTrace.innerHTML = "";
@@ -12421,6 +15554,8 @@ function inAppEvaluatePreset(rule) {
   return {
     decision_key: rule.decision_key,
     profile_key: `preset-${rule.decision_key}`,
+    surface: rule.surface || "homepage_hero",
+    limit: 20,
     identifiers: [{ typeId: "email", value: "user@example.com" }],
     attributes: sampleAttributesFromSchema(rule.input_schema),
     segments: {},

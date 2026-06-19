@@ -412,7 +412,8 @@ export class Store {
         variant_key: event.variant_key || "",
         message_id: event.message_id || "",
         surface: event.surface || "",
-        object_key: event.variant_key || event.message_id || ""
+        object_key: event.variant_key || event.message_id || "",
+        graph_experiments: eventGraphExperiments(event)
       });
     }
     return [...campaigns.values()]
@@ -1380,6 +1381,7 @@ export class Store {
       by_variant: this.assignmentGroup(decisionKey, since, "variant_key"),
       by_strategy: this.assignmentGroup(decisionKey, since, "strategy"),
       by_reason: this.assignmentGroup(decisionKey, since, "reason"),
+      by_graph_node: graphExperimentAssignmentGroup(recent),
       trend: assignmentTrend(trendRows, start, windowHours),
       recent: recent.slice(0, 12)
     };
@@ -1755,6 +1757,20 @@ export class Store {
       .get(id, Number(requestedVersion));
     if (!row) notFound(`Message version not found: ${requestedVersion}`);
     return rowToMessageVersion(row);
+  }
+
+  restoreMessageVersion(id, requestedVersion, author) {
+    const current = this.getMessage(id);
+    if (!current) notFound(`Message not found: ${id}`);
+    const version = this.getMessageVersion(id, requestedVersion);
+    return this.upsertMessage(id, {
+      name: version.name,
+      surface: version.surface,
+      status: version.status,
+      content_schema: structuredClone(version.content_schema || {}),
+      default_content: structuredClone(version.default_content || {}),
+      metadata: structuredClone(version.metadata || {})
+    }, author);
   }
 
   listEvaluationProfiles(params = {}) {
@@ -3778,6 +3794,46 @@ function rowToExperimentAssignment(row) {
     bucket: row.bucket == null ? null : Number(row.bucket),
     assignment: parse(row.assignment_json || "{}")
   };
+}
+
+function eventGraphExperiments(event = {}) {
+  return [event.graph_experiments, event.event?.graph_experiments, event.event_payload?.graph_experiments]
+    .find((items) => Array.isArray(items)) || [];
+}
+
+function graphExperimentAssignmentGroup(assignments = []) {
+  const groups = new Map();
+  for (const assignment of assignments) {
+    const graph = assignment.assignment?.graph;
+    const nodeId = graph?.node_id || assignment.assignment?.graph_node_id || "";
+    if (!nodeId) continue;
+    const key = graph?.experiment_key || assignment.assignment?.experiment_key || nodeId;
+    const groupKey = `${key}::${nodeId}`;
+    const group = groups.get(groupKey) || {
+      key,
+      graph_node_id: nodeId,
+      mode: graph?.mode || assignment.assignment?.mode || "",
+      strategy: assignment.strategy || "",
+      count: 0,
+      variants: new Map(),
+      last_assigned_at: ""
+    };
+    group.count += 1;
+    if (assignment.assigned_at && (!group.last_assigned_at || assignment.assigned_at > group.last_assigned_at)) {
+      group.last_assigned_at = assignment.assigned_at;
+    }
+    const variantKey = assignment.variant_key || "(empty)";
+    group.variants.set(variantKey, (group.variants.get(variantKey) || 0) + 1);
+    groups.set(groupKey, group);
+  }
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      variants: [...group.variants.entries()]
+        .map(([key, count]) => ({ key, count }))
+        .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key))
+    }))
+    .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key));
 }
 
 function assignmentTrend(rows = [], start, windowHours) {
