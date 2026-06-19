@@ -52,9 +52,11 @@
           </div>
         </header>
         <div class="overview-workbench">
-          <div id="overview-alerts" class="overview-alerts"></div>
           <div id="metric-cards" class="metric-grid overview-kpi-strip"></div>
-          <div id="overview-live-assets" class="overview-live-assets"></div>
+          <div class="overview-summary-grid">
+            <div id="overview-alerts" class="overview-alerts"></div>
+            <div id="overview-live-assets" class="overview-live-assets"></div>
+          </div>
           <div class="overview-performance-grid">
             <div class="editor overview-card overview-rule-card">
               <div class="overview-card-head">
@@ -84,16 +86,16 @@
               </div>
             </div>
           </div>
-          <div class="editor overview-card overview-anomaly-card">
+          <div id="overview-rule-detail-panel" class="editor overview-card overview-rule-detail-card">
             <div class="overview-card-head">
               <div>
-                <div class="editor-title">Baseline & Alert History</div>
-                <p>Selected window compared with the previous matching window.</p>
+                <div class="editor-title">Rule Detail</div>
+                <p>Recent decisions, fallback rate, and matched branch frequency for the selected decision.</p>
               </div>
             </div>
-            <div id="overview-anomaly-history" class="overview-anomaly-history"></div>
+            <div id="metrics-rule-detail" class="rule-detail-panel"></div>
           </div>
-          <div class="overview-support-grid">
+          <div class="overview-insight-grid">
             <div class="editor overview-card overview-trend-card">
               <div class="overview-card-head">
                 <div>
@@ -112,6 +114,15 @@
               </div>
               <div id="metrics-schema-health" class="status-panel overview-status-panel"></div>
             </div>
+            <div class="editor overview-card overview-anomaly-card">
+              <div class="overview-card-head">
+                <div>
+                  <div class="editor-title">Baseline & Alert History</div>
+                  <p>Selected window compared with the previous matching window.</p>
+                </div>
+              </div>
+              <div id="overview-anomaly-history" class="overview-anomaly-history"></div>
+            </div>
           </div>
           <div class="editor overview-card overview-event-card">
             <div class="overview-card-head">
@@ -122,62 +133,59 @@
             </div>
             <div id="metrics-client-events" class="rule-detail-panel"></div>
           </div>
-          <div class="editor overview-card overview-client-traffic-card">
-            <div class="overview-card-head">
-              <div>
-                <div class="editor-title">Client API Traffic</div>
-                <p>Website calls by endpoint, token, origin, environment, and app.</p>
+          <div class="overview-delivery-grid">
+            <div class="editor overview-card overview-client-traffic-card">
+              <div class="overview-card-head">
+                <div>
+                  <div class="editor-title">Client API Traffic</div>
+                  <p>Website calls by endpoint, token, origin, environment, and app.</p>
+                </div>
               </div>
+              <div id="metrics-client-traffic" class="client-traffic-panel"></div>
             </div>
-            <div id="metrics-client-traffic" class="client-traffic-panel"></div>
-          </div>
-          <div class="editor overview-card overview-precompute-card">
-            <div class="overview-card-head">
-              <div>
-                <div class="editor-title">In-App Precompute</div>
-                <p>Meiro Pipes segment runs evaluated for website message eligibility.</p>
+            <div class="editor overview-card overview-precompute-card">
+              <div class="overview-card-head">
+                <div>
+                  <div class="editor-title">In-App Precompute</div>
+                  <p>Meiro Pipes segment runs evaluated for website message eligibility.</p>
+                </div>
               </div>
-            </div>
-            <div id="metrics-precompute" class="precompute-panel"></div>
-          </div>
-          <div class="editor overview-card overview-campaign-card">
-            <div class="overview-card-head">
-              <div>
-                <div class="editor-title">Campaign Rollups</div>
-                <p>Ownership, utilization, and feedback grouped by campaign.</p>
-              </div>
-            </div>
-            <div id="overview-campaign-rollups" class="campaign-rollup-list"></div>
-          </div>
-          <div id="overview-campaign-detail-panel" class="editor overview-card overview-campaign-detail-card">
-            <div class="overview-card-head">
-              <div>
-                <div class="editor-title">Campaign Detail</div>
-                <p>Experiments, rules, messages, surfaces, recent events, and review status.</p>
-              </div>
-            </div>
-            <div id="overview-campaign-detail" class="campaign-detail-panel">
-              <div class="status-line">Select a campaign in Campaign Rollups to inspect its assets.</div>
+              <div id="metrics-precompute" class="precompute-panel"></div>
             </div>
           </div>
-          <div class="editor overview-card overview-change-card">
-            <div class="overview-card-head">
-              <div>
-                <div class="editor-title">Recent Changes</div>
-                <p>Rules, experiments, messages, and reference data updates.</p>
+          <div class="overview-campaign-grid">
+            <div class="editor overview-card overview-campaign-card">
+              <div class="overview-card-head">
+                <div>
+                  <div class="editor-title">Campaign Rollups</div>
+                  <p>Ownership, utilization, and feedback grouped by campaign.</p>
+                </div>
+              </div>
+              <div id="overview-campaign-rollups" class="campaign-rollup-list"></div>
+            </div>
+            <div id="overview-campaign-detail-panel" class="editor overview-card overview-campaign-detail-card">
+              <div class="overview-card-head">
+                <div>
+                  <div class="editor-title">Campaign Detail</div>
+                  <p>Experiments, rules, messages, surfaces, recent events, and review status.</p>
+                </div>
+              </div>
+              <div id="overview-campaign-detail" class="campaign-detail-panel">
+                <div class="status-line">Select a campaign in Campaign Rollups to inspect its assets.</div>
               </div>
             </div>
-            <div id="overview-change-log" class="change-log-list"></div>
           </div>
-          <div id="overview-service-footer" class="overview-service-footer"></div>
-          <div id="overview-rule-detail-panel" class="editor overview-card overview-rule-detail-card">
-            <div class="overview-card-head">
-              <div>
-                <div class="editor-title">Rule Detail</div>
-                <p>Recent decisions, fallback rate, and matched branch frequency.</p>
+          <div class="overview-bottom-grid">
+            <div class="editor overview-card overview-change-card">
+              <div class="overview-card-head">
+                <div>
+                  <div class="editor-title">Recent Changes</div>
+                  <p>Rules, experiments, messages, and reference data updates.</p>
+                </div>
               </div>
+              <div id="overview-change-log" class="change-log-list"></div>
             </div>
-            <div id="metrics-rule-detail" class="rule-detail-panel"></div>
+            <div id="overview-service-footer" class="overview-service-footer"></div>
           </div>
         </div>
       </section>

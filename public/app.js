@@ -1364,17 +1364,18 @@ function renderOverviewLiveAssets(metrics = {}) {
   overviewLiveAssets.innerHTML = `
     <div class="live-assets-badge">${escapeHtml(formatNumber(live))}</div>
     <div>
-      <span>Live Assets</span>
-      <strong>${escapeHtml(formatNumber(rules.total || live))} rules and experiments tracked</strong>
-      <small>${escapeHtml(formatNumber(drafts))} drafts waiting · ${escapeHtml(formatNumber(precompute.profile_count || 0))} precomputed profiles</small>
+      <span>Live assets</span>
+      <strong>${escapeHtml(formatNumber(rules.total || live))} rules, experiments, and message routes tracked</strong>
+      <small>${escapeHtml(formatNumber(live))} published now · ${escapeHtml(formatNumber(drafts))} drafts waiting</small>
     </div>
-    <div class="live-assets-divider"></div>
     <div>
-      <span>Cache quality</span>
-      <strong>${escapeHtml(formatPercent(cache.hit_rate || 0))} client hit rate</strong>
-      <small>${escapeHtml(formatNumber(cache.entries || 0))} active entries</small>
+      <div>
+        <span>Cache quality</span>
+        <strong>${escapeHtml(formatPercent(cache.hit_rate || 0))} client hit rate</strong>
+        <small>${escapeHtml(formatNumber(cache.entries || 0))} active decision cache entries · ${escapeHtml(formatNumber(precompute.profile_count || 0))} precomputed profiles</small>
+      </div>
+      ${drafts ? `<button type="button" data-view="rules">Review drafts</button>` : `<span class="live-assets-ready">No drafts waiting</span>`}
     </div>
-    ${drafts ? `<button type="button" data-view="rules">Review drafts</button>` : `<span class="live-assets-ready">No drafts waiting</span>`}
   `;
   overviewLiveAssets.querySelector("[data-view='rules']")?.addEventListener("click", () => switchView("rules"));
 }
@@ -1520,11 +1521,12 @@ function campaignRollupItem(item) {
     `${formatNumber(feedback.impression || 0)} imp`,
     `${formatNumber(feedback.conversion || 0)} conv`
   ].join(" · ");
+  const decisionSummary = summarizeCompactList(item.decision_keys || [], 3);
   return `
     <div class="campaign-rollup-item">
       <div>
         <button type="button" class="campaign-detail-link" data-campaign-detail="${escapeHtml(item.campaign || "Unassigned")}">${escapeHtml(item.campaign || "Unassigned")}</button>
-        <small>${escapeHtml((item.decision_keys || []).join(", ") || "No decisions linked")}</small>
+        <small title="${escapeHtml((item.decision_keys || []).join(", ") || "No decisions linked")}">${escapeHtml(decisionSummary || "No decisions linked")}</small>
       </div>
       <span>${escapeHtml(assetSummary)}</span>
       <strong>${escapeHtml(formatNumber(item.requests || 0))}</strong>
@@ -4546,12 +4548,24 @@ function readinessItem(label, value, detail, ok) {
     <div class="readiness-item ${ok ? "ok" : "warn"}">
       <span>${escapeHtml(ok ? "OK" : "!")}</span>
       <div>
-        <strong>${escapeHtml(label)}</strong>
-        <em>${escapeHtml(value)}</em>
+        <div class="readiness-item-head">
+          <strong>${escapeHtml(label)}</strong>
+          <em>${escapeHtml(value)}</em>
+        </div>
         <small>${escapeHtml(detail)}</small>
       </div>
     </div>
   `;
+}
+
+function summarizeCompactList(items = [], visibleCount = 3) {
+  const clean = items
+    .flatMap((item) => String(item || "").split(","))
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!clean.length) return "";
+  if (clean.length <= visibleCount) return clean.join(", ");
+  return `${clean.slice(0, visibleCount).join(", ")} +${clean.length - visibleCount} more`;
 }
 
 function renderRuleUsage(items) {
