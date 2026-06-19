@@ -9440,10 +9440,10 @@ header {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
-  border: 1px dashed var(--line-strong);
+  border: 1px dashed rgba(148, 163, 184, 0.7);
   border-radius: 8px;
-  padding: 10px 12px;
-  background: var(--panel-soft);
+  padding: 9px 10px;
+  background: #fbfcfe;
 }
 
 .message-image-dropzone.dragging {
@@ -9570,6 +9570,10 @@ header {
   overflow: visible;
 }
 
+.message-detail-panel.editor {
+  padding: 14px;
+}
+
 .message-detail-panel[hidden] {
   display: none;
 }
@@ -9580,13 +9584,13 @@ header {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
-  padding: 0 0 14px;
+  padding: 0 0 12px;
   border-bottom: 1px solid var(--line);
 }
 
 .message-detail-footer {
   justify-content: flex-end;
-  padding: 14px 0 0;
+  padding: 12px 0 0;
   border-top: 1px solid var(--line);
   border-bottom: 0;
 }
@@ -9599,10 +9603,10 @@ header {
 
 .message-editor-pane {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   min-height: 0;
   overflow: visible;
-  padding: 14px 0;
+  padding: 12px 0;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -9611,10 +9615,10 @@ header {
 .message-form-pane,
 .message-preview-pane,
 .message-subpanel-card {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .message-form-pane,
@@ -9627,12 +9631,12 @@ header {
 
 .message-advanced-card {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   align-content: start;
-  padding: 12px;
-  border: 1px dashed rgba(148, 163, 184, 0.45);
-  border-radius: 8px;
-  background: var(--panel-soft);
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
 }
 
 .message-advanced-head {
@@ -9679,8 +9683,9 @@ header {
 .message-workspace-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding-bottom: 2px;
+  gap: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
 }
 
 .message-workspace-tabs button {
@@ -9727,9 +9732,13 @@ header {
 
 .message-editor-section {
   display: grid;
-  gap: 14px;
-  padding: 16px;
+  gap: 12px;
+  padding: 14px 0;
   border-bottom: 1px solid var(--line);
+}
+
+.message-editor-section:first-child {
+  padding-top: 4px;
 }
 
 .message-editor-section:last-child {
@@ -9745,9 +9754,11 @@ header {
 }
 
 .message-advanced-card .message-subpanel-card {
-  border-style: solid;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   border-color: var(--line);
   background: #ffffff;
+  overflow: hidden;
 }
 
 .message-subtabs {
@@ -9825,12 +9836,15 @@ header {
 }
 
 .message-preview-pane {
-  display: block;
+  display: grid;
   gap: 0;
   position: sticky;
   top: 14px;
   max-height: calc(100vh - 120px);
   overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
 }
 
 .message-preview-head {
@@ -9838,7 +9852,9 @@ header {
   justify-content: space-between;
   gap: 14px;
   align-items: center;
-  padding: 20px;
+  padding: 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-soft);
 }
 
 .message-device-switch {
@@ -9870,14 +9886,14 @@ header {
   align-content: start;
   justify-items: center;
   min-height: 0;
-  padding: 0 20px 20px;
+  padding: 14px;
   overflow: visible;
 }
 
 .message-preview-pane .compact-status-panel {
   grid-template-columns: 1fr 1fr;
   gap: 0;
-  margin: 0 20px 20px;
+  margin: 0 14px 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
@@ -9897,7 +9913,7 @@ header {
 .message-preview-health {
   display: grid;
   gap: 8px;
-  margin: 0 20px 20px;
+  margin: 0 14px 14px;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -9992,7 +10008,7 @@ header {
   display: grid;
   gap: 10px;
   min-width: 0;
-  margin: 0 20px 20px;
+  margin: 0 14px 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
@@ -10003,7 +10019,7 @@ header {
   display: grid;
   gap: 10px;
   min-width: 0;
-  margin: 0 20px 12px;
+  margin: 0 14px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
@@ -10120,7 +10136,7 @@ header {
   display: grid;
   gap: 10px;
   min-width: 0;
-  margin: 0 20px 12px;
+  margin: 0 14px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
@@ -10768,12 +10784,12 @@ header {
 
 .message-survey-builder {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 14px;
-  background: var(--panel-soft);
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(59, 130, 246, 0.04);
 }
 
 .message-survey-builder[hidden] {
@@ -10828,11 +10844,11 @@ header {
 
 .message-survey-question {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  padding: 12px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 8px;
+  padding: 10px;
   background: #ffffff;
 }
 
@@ -11291,11 +11307,11 @@ header {
 
 .message-asset-panel {
   display: grid;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f8fafc;
+  gap: 8px;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
 }
 
 .message-asset-panel-head,
@@ -11339,15 +11355,16 @@ header {
 
 .message-asset-row {
   grid-template-columns: 52px minmax(0, 1fr) auto;
-  padding: 8px;
+  padding: 7px 0;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #ffffff;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: transparent;
 }
 
 .message-asset-row.selected {
-  border-color: rgba(0, 145, 125, 0.55);
-  box-shadow: 0 0 0 2px rgba(0, 145, 125, 0.12);
+  border-color: rgba(0, 145, 125, 0.45);
+  box-shadow: inset 3px 0 0 rgba(0, 145, 125, 0.65);
 }
 
 .message-asset-thumb {
@@ -11364,10 +11381,10 @@ header {
 .message-personalization-panel {
   display: grid;
   gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #ffffff;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
 }
 
 .message-personalization-head {
