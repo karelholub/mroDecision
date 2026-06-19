@@ -8100,7 +8100,9 @@ header {
 
 .eval-panel-head {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
+  align-items: end;
 }
 
 .eval-panel-head p {
@@ -8111,9 +8113,10 @@ header {
 }
 
 .eval-meta-strip {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .eval-meta-card,
@@ -8142,6 +8145,11 @@ header {
   color: var(--ink);
   font-size: 13px;
   font-weight: 800;
+}
+
+.eval-meta-card {
+  min-width: 142px;
+  padding: 10px 12px;
 }
 
 .eval-setup-band-head,
@@ -8206,10 +8214,16 @@ header {
   padding: 12px;
 }
 
+.eval-setup-shell {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .eval-setup-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 8px 10px;
+  gap: 8px;
   align-items: end;
 }
 
@@ -8240,8 +8254,8 @@ header {
 
 .eval-setup-grid label > input,
 .eval-setup-grid label > select {
-  min-height: 38px;
-  padding: 7px 11px;
+  min-height: 36px;
+  padding: 6px 10px;
   font-size: 13px;
 }
 
@@ -8249,12 +8263,13 @@ header {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
 }
 
 .eval-setup-actions button {
-  min-height: 34px;
-  padding: 6px 10px;
-  font-size: 13px;
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 12px;
 }
 
 .eval-payload-panel[hidden] {
@@ -8450,22 +8465,24 @@ header {
 
 .eval-profile-builder .builder-section-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
+  align-items: start;
 }
 
 .eval-profile-builder .builder-section-head .actions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
 }
 
 .eval-profile-builder .builder-section-head .actions button {
-  min-width: 0;
+  min-width: 112px;
   padding-inline: 8px;
-  min-height: 34px;
+  min-height: 32px;
   white-space: nowrap;
+  font-size: 12px;
 }
 
 .builder-section-head {
@@ -8494,9 +8511,17 @@ header {
 
 .eval-builder-columns {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
   gap: 12px;
   align-items: start;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.eval-builder-group {
+  display: grid;
+  gap: 8px;
+  min-width: 280px;
 }
 
 .eval-builder-columns h3 {
@@ -8509,7 +8534,7 @@ header {
 
 .eval-builder-list-head {
   display: grid;
-  grid-template-columns: minmax(120px, 0.9fr) minmax(104px, 0.8fr) 84px 28px;
+  grid-template-columns: minmax(110px, 0.95fr) minmax(92px, 0.75fr) 76px 68px;
   gap: 6px;
   align-items: center;
   margin-bottom: 6px;
@@ -8534,11 +8559,11 @@ header {
 
 .eval-builder-row {
   display: grid;
-  grid-template-columns: minmax(120px, 0.9fr) minmax(104px, 0.8fr) 84px 34px;
+  grid-template-columns: minmax(110px, 0.95fr) minmax(92px, 0.75fr) 76px 68px;
   gap: 6px;
   align-items: center;
   min-width: 0;
-  min-width: 342px;
+  min-width: 352px;
 }
 
 .eval-builder-row input,
@@ -8552,16 +8577,17 @@ header {
 
 .eval-builder-row button,
 .eval-builder-remove {
-  display: inline-grid;
-  place-items: center;
-  width: 34px;
-  min-width: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  min-width: 68px;
   min-height: 32px;
   padding: 0;
   overflow: visible;
   color: var(--muted);
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 800;
   line-height: 1;
   white-space: nowrap;
   border-radius: 8px;
@@ -8589,14 +8615,27 @@ header {
 }
 
 @media (max-width: 1500px) {
+  .eval-setup-shell {
+    grid-template-columns: 1fr;
+  }
+
   .eval-builder-columns {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(260px, 1fr));
   }
 }
 
 @media (max-width: 1180px) {
   .evaluate-workbench {
     grid-template-columns: 1fr;
+  }
+
+  .eval-panel-head {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .eval-meta-strip {
+    justify-content: flex-start;
   }
 
   .eval-setup-grid label:nth-child(1),
@@ -8628,7 +8667,6 @@ header {
     gap: 10px;
   }
 
-  .eval-meta-strip,
   .eval-setup-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -8641,16 +8679,12 @@ header {
     grid-column: span 1;
   }
 
-  .eval-builder-columns {
-    grid-template-columns: 1fr;
-  }
-
   .eval-profile-builder .builder-section-head .actions {
-    grid-template-columns: 1fr;
+    justify-content: flex-start;
   }
 
   .eval-builder-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 82px 34px;
+    grid-template-columns: minmax(100px, 1fr) minmax(90px, 0.85fr) 76px 68px;
   }
 }
 

@@ -1111,67 +1111,69 @@
                 </div>
               </div>
             </div>
-            <div class="eval-setup-band">
-              <div class="eval-setup-band-head">
-                <strong>Route</strong>
-                <span>Pick the exact decision path and preset to test.</span>
+            <div class="eval-setup-shell">
+              <div class="eval-setup-band">
+                <div class="eval-setup-band-head">
+                  <strong>Route</strong>
+                  <span>Pick the exact decision path and preset to test.</span>
+                </div>
+                <div class="eval-setup-grid">
+                  <label class="eval-field-sm">
+                    Request type
+                    <select id="eval-request-kind">
+                      <option value="decision">Decision rule</option>
+                      <option value="surface">Client surface</option>
+                    </select>
+                  </label>
+                  <label class="eval-field-lg">
+                    Rule set
+                    <select id="eval-rule-key"></select>
+                  </label>
+                  <label class="eval-field-lg">
+                    Preset
+                    <select id="eval-preset">
+                      <option value="rule_default">Selected rule default</option>
+                      <option value="nbo_green">NBO green energy</option>
+                      <option value="nbo_credit">NBO credit suppression</option>
+                      <option value="nbo_retention">NBO retention</option>
+                      <option value="nbo_premium">NBO premium upsell</option>
+                      <option value="nbo_fallback">NBO fallback</option>
+                      <option value="loan">Loan eligibility</option>
+                      <option value="experiment_holdout">Experiment holdout</option>
+                    </select>
+                  </label>
+                  <label class="eval-field-sm">
+                    Version
+                    <select id="eval-mode">
+                      <option value="published">Published</option>
+                      <option value="draft">Current draft</option>
+                    </select>
+                  </label>
+                </div>
               </div>
-              <div class="eval-setup-grid">
-                <label class="eval-field-sm">
-                  Request type
-                  <select id="eval-request-kind">
-                    <option value="decision">Decision rule</option>
-                    <option value="surface">Client surface</option>
-                  </select>
-                </label>
-                <label class="eval-field-lg">
-                  Rule set
-                  <select id="eval-rule-key"></select>
-                </label>
-                <label class="eval-field-lg">
-                  Preset
-                  <select id="eval-preset">
-                    <option value="rule_default">Selected rule default</option>
-                    <option value="nbo_green">NBO green energy</option>
-                    <option value="nbo_credit">NBO credit suppression</option>
-                    <option value="nbo_retention">NBO retention</option>
-                    <option value="nbo_premium">NBO premium upsell</option>
-                    <option value="nbo_fallback">NBO fallback</option>
-                    <option value="loan">Loan eligibility</option>
-                    <option value="experiment_holdout">Experiment holdout</option>
-                  </select>
-                </label>
-                <label class="eval-field-sm">
-                  Version
-                  <select id="eval-mode">
-                    <option value="published">Published</option>
-                    <option value="draft">Current draft</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-            <div class="eval-setup-band">
-              <div class="eval-setup-band-head">
-                <strong>Subject</strong>
-                <span>Set the profile, surface, and reusable payload to run.</span>
-              </div>
-              <div class="eval-setup-grid">
-                <label class="eval-field-lg">
-                  Profile key
-                  <input id="eval-profile-key" value="demo-profile" />
-                </label>
-                <label class="eval-field-lg">
-                  Surface
-                  <input id="eval-surface" value="homepage_hero" placeholder="homepage_hero" />
-                </label>
-                <label class="eval-field-xs">
-                  Candidate limit
-                  <input id="eval-limit" type="number" min="1" max="50" value="20" />
-                </label>
-                <label class="eval-field-md">
-                  Saved profile
-                  <select id="eval-saved-profile"></select>
-                </label>
+              <div class="eval-setup-band">
+                <div class="eval-setup-band-head">
+                  <strong>Subject</strong>
+                  <span>Set the profile, surface, and reusable payload to run.</span>
+                </div>
+                <div class="eval-setup-grid">
+                  <label class="eval-field-lg">
+                    Profile key
+                    <input id="eval-profile-key" value="demo-profile" />
+                  </label>
+                  <label class="eval-field-lg">
+                    Surface
+                    <input id="eval-surface" value="homepage_hero" placeholder="homepage_hero" />
+                  </label>
+                  <label class="eval-field-xs">
+                    Candidate limit
+                    <input id="eval-limit" type="number" min="1" max="50" value="20" />
+                  </label>
+                  <label class="eval-field-md">
+                    Saved profile
+                    <select id="eval-saved-profile"></select>
+                  </label>
+                </div>
               </div>
             </div>
             <div class="actions left eval-setup-actions">
@@ -1204,7 +1206,7 @@
                 </div>
               </div>
               <div class="eval-builder-columns">
-                <div>
+                <section class="eval-builder-group">
                   <h3>Attributes</h3>
                   <div class="eval-builder-list-head">
                     <span>Field</span>
@@ -1213,8 +1215,8 @@
                     <span></span>
                   </div>
                   <div id="eval-attribute-builder" class="eval-builder-list"></div>
-                </div>
-                <div>
+                </section>
+                <section class="eval-builder-group">
                   <h3>Context</h3>
                   <div class="eval-builder-list-head">
                     <span>Field</span>
@@ -1223,8 +1225,8 @@
                     <span></span>
                   </div>
                   <div id="eval-context-builder" class="eval-builder-list"></div>
-                </div>
-                <div>
+                </section>
+                <section class="eval-builder-group">
                   <h3>Segments</h3>
                   <div class="eval-builder-list-head">
                     <span>Field</span>
@@ -1233,7 +1235,7 @@
                     <span></span>
                   </div>
                   <div id="eval-segment-builder" class="eval-builder-list"></div>
-                </div>
+                </section>
               </div>
               <div class="actions left">
                 <button type="button" id="sync-eval-builder">Apply Builder To Payload</button>
